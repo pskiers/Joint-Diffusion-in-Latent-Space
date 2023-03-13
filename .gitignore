@@ -1,3 +1,9 @@
+# Repo specific
+.vscode/
+data/
+taming/
+lightning_logs/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
