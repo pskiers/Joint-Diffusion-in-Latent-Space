@@ -36,21 +36,22 @@ if __name__ == "__main__":
     test_dl = torch.utils.data.DataLoader(test_ds, batch_size=8, shuffle=False, num_workers=0)
 
 
-    i = 31
-    files = listdir(f"lightning_logs/version_{i}/checkpoints")
-    config.model.params["ckpt_path"] = f"lightning_logs/version_{i}/checkpoints/{files[0]}"
+    # i = 31
+    # files = listdir(f"lightning_logs/version_{i}/checkpoints")
+    # config.model.params["ckpt_path"] = f"lightning_logs/version_{i}/checkpoints/{files[0]}"
 
     model = AutoencoderKL(**config.model.get("params", dict()))
     model.learning_rate = config.model.base_learning_rate
 
-    nowname = now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    nowname = "Autoencoder_" + now
     logdir = path.join("logs", nowname)
     ckptdir = path.join(logdir, "checkpoints")
     cfgdir = path.join(logdir, "configs")
 
     trainer_kwargs = dict()
 
-    trainer_kwargs["logger"] = pl.loggers.TestTubeLogger(name="testtube", save_dir=logdir)
+    trainer_kwargs["logger"] = pl.loggers.WandbLogger(name=nowname, id=nowname)
 
     # modelcheckpoint - use TrainResult/EvalResult(checkpoint_on=metric) to
     # specify which metric is used to determine best models
@@ -73,7 +74,7 @@ if __name__ == "__main__":
     trainer_kwargs["callbacks"] = [
         pl.callbacks.ModelCheckpoint(**default_modelckpt_cfg["params"]),
         SetupCallback(resume=False, now=now, logdir=logdir, ckptdir=ckptdir, cfgdir=cfgdir, config=config, lightning_config=lightning_config),
-        ImageLogger(batch_frequency=750, max_images=4, clamp=True),
+        ImageLogger(batch_frequency=2, max_images=8, clamp=True, increase_log_steps=False),
         CUDACallback()
     ]
 
@@ -84,11 +85,3 @@ if __name__ == "__main__":
         trainer.fit(model=model, train_dataloaders=train_dl, val_dataloaders=valid_dl)
     except KeyboardInterrupt:
         pass
-
-    for img, _ in test_dl:
-        dec, posterior = model(img.transpose(1, 3))
-        imgs = torch.concat([img.transpose(1, 3), dec.detach()], dim=0)
-        grid = tv.utils.make_grid(imgs)
-        plt.imshow(grid.permute(1, 2, 0))
-        plt.show()
-        break

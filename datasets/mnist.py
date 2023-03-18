@@ -12,4 +12,4 @@ class AdjustedMNIST(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         img, label = self.dataset[index]
-        return torch.concat([img, img, img], dim=0).transpose(0, 2), label
+        return torch.concat([img, img, img], dim=0).permute(1, 2, 0), label

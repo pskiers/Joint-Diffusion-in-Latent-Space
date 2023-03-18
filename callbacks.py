@@ -12,17 +12,19 @@ from pytorch_lightning.callbacks import Callback
 from pytorch_lightning.utilities.distributed import rank_zero_only
 from pytorch_lightning.utilities import rank_zero_info
 from omegaconf import OmegaConf
+import wandb
 
 
 class ImageLogger(Callback):
     def __init__(self, batch_frequency, max_images, clamp=True, increase_log_steps=True,
                  rescale=True, disabled=False, log_on_batch_idx=False, log_first_step=False,
-                 log_images_kwargs=None):
+                 log_images_kwargs=None, log_locally=False):
         super().__init__()
         self.rescale = rescale
         self.batch_freq = batch_frequency
         self.max_images = max_images
         self.logger_log_images = {
+            pl.loggers.WandbLogger: self._wandb,
             pl.loggers.TestTubeLogger: self._testtube,
         }
         self.log_steps = [2 ** n for n in range(int(np.log2(self.batch_freq)) + 1)]
@@ -33,6 +35,16 @@ class ImageLogger(Callback):
         self.log_on_batch_idx = log_on_batch_idx
         self.log_images_kwargs = log_images_kwargs if log_images_kwargs else {}
         self.log_first_step = log_first_step
+        self.log_locally = log_locally
+
+    @rank_zero_only
+    def _wandb(self, pl_module, images, batch_idx, split):
+        for k in images:
+            grid = torchvision.utils.make_grid(images[k])
+            grid = (grid + 1.0) / 2.0  # -1,1 -> 0,1; c,h,w
+
+            tag = f"images/{split}/{k}"
+            pl_module.logger.experiment.log({tag: wandb.Image(grid)})
 
     @rank_zero_only
     def _testtube(self, pl_module, images, batch_idx, split):
@@ -88,8 +100,9 @@ class ImageLogger(Callback):
                     if self.clamp:
                         images[k] = torch.clamp(images[k], -1., 1.)
 
-            self.log_local(pl_module.logger.save_dir, split, images,
-                           pl_module.global_step, pl_module.current_epoch, batch_idx)
+            if self.log_locally:
+                self.log_local(pl_module.logger.save_dir, split, images,
+                            pl_module.global_step, pl_module.current_epoch, batch_idx)
 
             logger_log_images = self.logger_log_images.get(logger, lambda *args, **kwargs: None)
             logger_log_images(pl_module, images, pl_module.global_step, split)

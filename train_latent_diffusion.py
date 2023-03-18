@@ -39,19 +39,19 @@ if __name__ == "__main__":
     model = LatentDiffusion(**config.model.get("params", dict()))
     model.learning_rate = config.model.base_learning_rate
 
-    nowname = now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    nowname = "LatentDiffusion_" + now
     logdir = path.join("logs", nowname)
     ckptdir = path.join(logdir, "checkpoints")
     cfgdir = path.join(logdir, "configs")
 
     trainer_kwargs = dict()
 
-    trainer_kwargs["logger"] = pl.loggers.TestTubeLogger(name="testtube", save_dir=logdir)
+    trainer_kwargs["logger"] = pl.loggers.WandbLogger(name=nowname, id=nowname)
 
     # modelcheckpoint - use TrainResult/EvalResult(checkpoint_on=metric) to
     # specify which metric is used to determine best models
     default_modelckpt_cfg = {
-        "target": "pytorch_lightning.callbacks.ModelCheckpoint",
         "params": {
             "dirpath": ckptdir,
             "filename": "{epoch:06}",
@@ -69,7 +69,7 @@ if __name__ == "__main__":
     trainer_kwargs["callbacks"] = [
         pl.callbacks.ModelCheckpoint(**default_modelckpt_cfg["params"]),
         SetupCallback(resume=False, now=now, logdir=logdir, ckptdir=ckptdir, cfgdir=cfgdir, config=config, lightning_config=lightning_config),
-        ImageLogger(batch_frequency=750, max_images=4, clamp=True, increase_log_steps=False),
+        ImageLogger(batch_frequency=2, max_images=8, clamp=True, increase_log_steps=False, log_images_kwargs={"inpaint": False}),
         CUDACallback()
     ]
 
@@ -78,8 +78,8 @@ if __name__ == "__main__":
 
     trainer.fit(model=model, train_dataloaders=train_dl, val_dataloaders=valid_dl)
 
-    imgs = model.sample(None, batch_size=8)
-    imgs = model.decode_first_stage(imgs)
-    grid = tv.utils.make_grid(imgs)
-    plt.imshow(grid.permute(2, 1, 0))
-    plt.show()
+    # imgs = model.sample(None, batch_size=8)
+    # imgs = model.decode_first_stage(imgs)
+    # grid = tv.utils.make_grid(imgs)
+    # plt.imshow(grid.permute(2, 1, 0))
+    # plt.show()

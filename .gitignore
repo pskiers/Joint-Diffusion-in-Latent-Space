@@ -4,6 +4,7 @@ data/
 taming/
 lightning_logs/
 logs/
+wandb/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

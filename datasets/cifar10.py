@@ -12,4 +12,4 @@ class AdjustedCIFAR10(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         img, label = self.dataset[index]
-        return img.transpose(0, 2), label
+        return img.permute(1, 2, 0), label
