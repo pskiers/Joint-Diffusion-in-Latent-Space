@@ -43,28 +43,16 @@ class FIDScoreLogger(Callback):
                 pl_module.eval()
 
             metric = FID()
-            resizer = torchvision.transforms.Resize(299)
+            resizer = torchvision.transforms.Resize(128)
 
             real_img_dl = trainer.val_dataloaders[0]
+            batch_size = self.metrics_batch_size if real_img_dl.batch_size <= self.metrics_batch_size else real_img_dl.batch_size
+            img_key = pl_module.first_stage_key if hasattr(pl_module, "first_stage_key") else 0
 
             generated = 0
+
             for batch in real_img_dl:
-
-                img_key = pl_module.first_stage_key if hasattr(pl_module, "first_stage_key") else 0
-                batch_size = self.metrics_batch_size if real_img_dl.batch_size <= self.metrics_batch_size else real_img_dl.batch_size
-
-                with torch.no_grad():
-                    with pl_module.ema_scope("Plotting"):
-                        samples, _ = pl_module.sample_log(cond=None, batch_size=batch_size, ddim=True, ddim_steps=200, eta=1)
-                    x_samples = pl_module.decode_first_stage(samples)
-
-                real_imgs = batch[img_key][:batch_size].permute(0, 3, 1, 2)
-                real_imgs, x_samples = real_imgs.to(pl_module.device), x_samples.to(pl_module.device)
-
-                if real_imgs.shape[2] < 128:
-                    real_imgs, x_samples = resizer(real_imgs), resizer(x_samples)
-
-                metric.update([x_samples, real_imgs])
+                self._update_fid(pl_module, metric, resizer, batch_size, img_key, batch)
 
                 generated += batch_size
                 if generated >= self.samples_amount:
@@ -78,6 +66,20 @@ class FIDScoreLogger(Callback):
 
             if is_train:
                 pl_module.train()
+
+    def _update_fid(self, pl_module, metric, resizer, batch_size, img_key, batch):
+        with torch.no_grad():
+            with pl_module.ema_scope("Plotting"):
+                samples, _ = pl_module.sample_log(cond=None, batch_size=batch_size, ddim=True, ddim_steps=200, eta=1)
+            x_samples = pl_module.decode_first_stage(samples)
+
+        real_imgs = batch[img_key][:batch_size].permute(0, 3, 1, 2)
+        real_imgs, x_samples = real_imgs.to(pl_module.device), x_samples.to(pl_module.device)
+
+        if real_imgs.shape[2] < 128:
+            real_imgs, x_samples = resizer(real_imgs), resizer(x_samples)
+
+        metric.update([x_samples, real_imgs])
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
         if pl_module.global_step > 0:

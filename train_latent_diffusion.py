@@ -70,7 +70,7 @@ if __name__ == "__main__":
         pl.callbacks.ModelCheckpoint(**default_modelckpt_cfg["params"]),
         SetupCallback(resume=False, now=now, logdir=logdir, ckptdir=ckptdir, cfgdir=cfgdir, config=config, lightning_config=lightning_config),
         ImageLogger(batch_frequency=750, max_images=8, clamp=True, increase_log_steps=False, log_images_kwargs={"inpaint": False}),
-        FIDScoreLogger(batch_frequency=6000, samples_amount=3200, metrics_batch_size=32),
+        FIDScoreLogger(batch_frequency=3000, samples_amount=3200, metrics_batch_size=256),
         CUDACallback()
     ]
 
