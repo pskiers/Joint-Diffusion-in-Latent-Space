@@ -1,5 +1,5 @@
 """
-Copied from ldm repo, because python imports
+Most of them copied from ldm repo, because python imports
 """
 import os
 import numpy as np
@@ -13,6 +13,79 @@ from pytorch_lightning.utilities.distributed import rank_zero_only
 from pytorch_lightning.utilities import rank_zero_info
 from omegaconf import OmegaConf
 import wandb
+from ignite.metrics import FID
+from ignite.engine import Engine
+
+
+class FIDScoreLogger(Callback):
+    def __init__(self, batch_frequency, samples_amount, metrics_batch_size) -> None:
+        super().__init__()
+        self.batch_freq = batch_frequency
+        self.samples_amount = samples_amount
+        self.logger_log_fid = {
+            pl.loggers.WandbLogger: self._wandb,
+        }
+        self.metrics_batch_size = metrics_batch_size
+
+    def _wandb(self, pl_module, score):
+        pl_module.logger.experiment.log({"valid/FID": score})
+
+    def log_fid(self, pl_module, batch_idx, trainer):
+        if (pl_module.global_step % self.batch_freq == 0 and
+            hasattr(pl_module, "sample_log") and
+            callable(pl_module.sample_log) and
+            self.samples_amount > 0):
+
+            logger = type(pl_module.logger)
+
+            is_train = pl_module.training
+            if is_train:
+                pl_module.eval()
+
+            metric = FID()
+            resizer = torchvision.transforms.Resize(299)
+
+            real_img_dl = trainer.val_dataloaders[0]
+
+            generated = 0
+            for batch in real_img_dl:
+
+                img_key = pl_module.first_stage_key if hasattr(pl_module, "first_stage_key") else 0
+                batch_size = self.metrics_batch_size if real_img_dl.batch_size <= self.metrics_batch_size else real_img_dl.batch_size
+
+                with torch.no_grad():
+                    with pl_module.ema_scope("Plotting"):
+                        samples, _ = pl_module.sample_log(cond=None, batch_size=batch_size, ddim=True, ddim_steps=200, eta=1)
+                    x_samples = pl_module.decode_first_stage(samples)
+
+                real_imgs = batch[img_key][:batch_size].permute(0, 3, 1, 2)
+                real_imgs, x_samples = real_imgs.to(pl_module.device), x_samples.to(pl_module.device)
+
+                if real_imgs.shape[2] < 128:
+                    real_imgs, x_samples = resizer(real_imgs), resizer(x_samples)
+
+                metric.update([x_samples, real_imgs])
+
+                generated += batch_size
+                if generated >= self.samples_amount:
+                    break
+
+            score = metric.compute()
+            metric.reset()
+
+            logger_log_images = self.logger_log_fid.get(logger, lambda *args, **kwargs: None)
+            logger_log_images(pl_module, score)
+
+            if is_train:
+                pl_module.train()
+
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
+        if pl_module.global_step > 0:
+            self.log_fid(pl_module, batch_idx, trainer)
+
+    def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
+        if pl_module.global_step > 0:
+            self.log_fid(pl_module, batch_idx, trainer)
 
 
 class ImageLogger(Callback):

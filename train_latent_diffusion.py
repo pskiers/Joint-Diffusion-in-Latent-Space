@@ -10,7 +10,7 @@ from os import listdir, path
 import datetime
 from datasets.mnist import AdjustedMNIST
 from datasets.cifar10 import AdjustedCIFAR10
-from callbacks import ImageLogger, CUDACallback, SetupCallback
+from callbacks import ImageLogger, CUDACallback, SetupCallback, FIDScoreLogger
 
 
 if __name__ == "__main__":
@@ -69,7 +69,8 @@ if __name__ == "__main__":
     trainer_kwargs["callbacks"] = [
         pl.callbacks.ModelCheckpoint(**default_modelckpt_cfg["params"]),
         SetupCallback(resume=False, now=now, logdir=logdir, ckptdir=ckptdir, cfgdir=cfgdir, config=config, lightning_config=lightning_config),
-        ImageLogger(batch_frequency=2, max_images=8, clamp=True, increase_log_steps=False, log_images_kwargs={"inpaint": False}),
+        ImageLogger(batch_frequency=750, max_images=8, clamp=True, increase_log_steps=False, log_images_kwargs={"inpaint": False}),
+        FIDScoreLogger(batch_frequency=6000, samples_amount=3200, metrics_batch_size=32),
         CUDACallback()
     ]
 

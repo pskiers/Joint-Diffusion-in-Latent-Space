@@ -30,7 +30,7 @@ model:
       params:
         embed_dim: 4
         monitor: "val/rec_loss"
-        ckpt_path: "lightning_logs/version_31/checkpoints/epoch=11-step=3755.ckpt"
+        ckpt_path: "logs/Autoencoder_2023-03-19T01-04-05/checkpoints/last.ckpt"
         ddconfig:
           double_z: True
           z_channels: 4

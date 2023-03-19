@@ -36,9 +36,8 @@ if __name__ == "__main__":
     test_dl = torch.utils.data.DataLoader(test_ds, batch_size=8, shuffle=False, num_workers=0)
 
 
-    # i = 31
-    # files = listdir(f"lightning_logs/version_{i}/checkpoints")
-    # config.model.params["ckpt_path"] = f"lightning_logs/version_{i}/checkpoints/{files[0]}"
+    # files = listdir(f"logs/Autoencoder_2023-03-18T21-40-57/checkpoints")
+    config.model.params["ckpt_path"] = f"logs/Autoencoder_2023-03-18T21-40-57/checkpoints/last.ckpt"
 
     model = AutoencoderKL(**config.model.get("params", dict()))
     model.learning_rate = config.model.base_learning_rate
@@ -74,7 +73,7 @@ if __name__ == "__main__":
     trainer_kwargs["callbacks"] = [
         pl.callbacks.ModelCheckpoint(**default_modelckpt_cfg["params"]),
         SetupCallback(resume=False, now=now, logdir=logdir, ckptdir=ckptdir, cfgdir=cfgdir, config=config, lightning_config=lightning_config),
-        ImageLogger(batch_frequency=2, max_images=8, clamp=True, increase_log_steps=False),
+        ImageLogger(batch_frequency=750, max_images=8, clamp=True, increase_log_steps=False),
         CUDACallback()
     ]
 
