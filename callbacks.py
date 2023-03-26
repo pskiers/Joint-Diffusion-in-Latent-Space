@@ -13,22 +13,65 @@ from pytorch_lightning.utilities.distributed import rank_zero_only
 from pytorch_lightning.utilities import rank_zero_info
 from omegaconf import OmegaConf
 import wandb
-from ignite.metrics import FID
-from ignite.engine import Engine
+from pytorch_fid.inception import InceptionV3
+from pytorch_fid.fid_score import calculate_frechet_distance, adaptive_avg_pool2d
+from tqdm import tqdm
 
 
 class FIDScoreLogger(Callback):
-    def __init__(self, batch_frequency, samples_amount, metrics_batch_size) -> None:
+    def __init__(self, device, batch_frequency, samples_amount, metrics_batch_size, dims=2048) -> None:
         super().__init__()
         self.batch_freq = batch_frequency
         self.samples_amount = samples_amount
         self.logger_log_fid = {
             pl.loggers.WandbLogger: self._wandb,
         }
+        self.device = device
+        self.dims = dims
         self.metrics_batch_size = metrics_batch_size
+        self.test_mu = None
+        self.test_sigma = None
+
+        block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[dims]
+        self.activation_model = InceptionV3([block_idx]).to(device)
+
+
+    def get_activations(self, dataloader, img_key):
+        self.activation_model.eval()
+
+        pred_arr = np.empty((len(dataloader) * dataloader.batch_size, self.dims))
+
+        start_idx = 0
+
+        for batch in tqdm(dataloader):
+            batch = batch[img_key].permute(0, 3, 1, 2)
+            batch = batch.to(self.device)
+
+            with torch.no_grad():
+                pred = self.activation_model(batch)[0]
+
+            # If model output is not scalar, apply global spatial average pooling.
+            # This happens if you choose a dimensionality not equal 2048.
+            if pred.size(2) != 1 or pred.size(3) != 1:
+                pred = adaptive_avg_pool2d(pred, output_size=(1, 1))
+
+            pred = pred.squeeze(3).squeeze(2).cpu().numpy()
+
+            pred_arr[start_idx:start_idx + pred.shape[0]] = pred
+
+            start_idx = start_idx + pred.shape[0]
+
+        return pred_arr
+
+    def get_model_statistics(self, dataloader, img_key):
+        if self.test_mu is None or self.test_sigma is None:
+            act = self.get_activations(dataloader, img_key)
+            self.test_mu = np.mean(act, axis=0)
+            self.test_sigma = np.cov(act, rowvar=False)
+        return self.test_mu, self.test_sigma
 
     def _wandb(self, pl_module, score):
-        pl_module.logger.experiment.log({"valid/FID": score})
+        pl_module.logger.experiment.log({"val/FID": score})
 
     def log_fid(self, pl_module, batch_idx, trainer):
         if (pl_module.global_step % self.batch_freq == 0 and
@@ -42,24 +85,13 @@ class FIDScoreLogger(Callback):
             if is_train:
                 pl_module.eval()
 
-            metric = FID()
-            resizer = torchvision.transforms.Resize(128)
-
             real_img_dl = trainer.val_dataloaders[0]
-            batch_size = self.metrics_batch_size if real_img_dl.batch_size <= self.metrics_batch_size else real_img_dl.batch_size
             img_key = pl_module.first_stage_key if hasattr(pl_module, "first_stage_key") else 0
 
-            generated = 0
+            m1, s1 = self.get_model_statistics(real_img_dl, img_key)
+            m2, s2 = self.get_samples_statistics(pl_module)
 
-            for batch in real_img_dl:
-                self._update_fid(pl_module, metric, resizer, batch_size, img_key, batch)
-
-                generated += batch_size
-                if generated >= self.samples_amount:
-                    break
-
-            score = metric.compute()
-            metric.reset()
+            score = calculate_frechet_distance(m1, s1, m2, s2)
 
             logger_log_images = self.logger_log_fid.get(logger, lambda *args, **kwargs: None)
             logger_log_images(pl_module, score)
@@ -67,19 +99,34 @@ class FIDScoreLogger(Callback):
             if is_train:
                 pl_module.train()
 
-    def _update_fid(self, pl_module, metric, resizer, batch_size, img_key, batch):
-        with torch.no_grad():
-            with pl_module.ema_scope("Plotting"):
-                samples, _ = pl_module.sample_log(cond=None, batch_size=batch_size, ddim=True, ddim_steps=200, eta=1)
-            x_samples = pl_module.decode_first_stage(samples)
+    def get_samples_statistics(self, samples_generator):
+        pred_arr = np.empty((int(self.samples_amount / self.metrics_batch_size) * self.metrics_batch_size, self.dims))
 
-        real_imgs = batch[img_key][:batch_size].permute(0, 3, 1, 2)
-        real_imgs, x_samples = real_imgs.to(pl_module.device), x_samples.to(pl_module.device)
+        start_idx = 0
 
-        if real_imgs.shape[2] < 128:
-            real_imgs, x_samples = resizer(real_imgs), resizer(x_samples)
+        for _ in tqdm(range(int(self.samples_amount / self.metrics_batch_size))):
+            with torch.no_grad():
+                with samples_generator.ema_scope("Plotting"):
+                    samples, _ = samples_generator.sample_log(cond=None, batch_size=self.metrics_batch_size, ddim=True, ddim_steps=200, eta=1)
+                x_samples = samples_generator.decode_first_stage(samples)
+            x_samples = x_samples.to(self.device)
 
-        metric.update([x_samples, real_imgs])
+            with torch.no_grad():
+                pred = self.activation_model(x_samples)[0]
+
+                # If model output is not scalar, apply global spatial average pooling.
+                # This happens if you choose a dimensionality not equal 2048.
+            if pred.size(2) != 1 or pred.size(3) != 1:
+                pred = adaptive_avg_pool2d(pred, output_size=(1, 1))
+
+            pred = pred.squeeze(3).squeeze(2).cpu().numpy()
+
+            pred_arr[start_idx:start_idx + pred.shape[0]] = pred
+
+            start_idx = start_idx + pred.shape[0]
+        mu = np.mean(pred_arr, axis=0)
+        sigma = np.cov(pred_arr, rowvar=False)
+        return mu, sigma
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
         if pl_module.global_step > 0:

@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     # i = 23
     # files = listdir(f"lightning_logs/version_{i}/checkpoints")
-    # config.model.params["ckpt_path"] = f"lightning_logs/version_{i}/checkpoints/{files[0]}"
+    config.model.params["ckpt_path"] = f"logs/LatentDiffusion_2023-03-22T01-07-16/checkpoints/last.ckpt"
 
     model = LatentDiffusion(**config.model.get("params", dict()))
     model.learning_rate = config.model.base_learning_rate
@@ -70,17 +70,21 @@ if __name__ == "__main__":
         pl.callbacks.ModelCheckpoint(**default_modelckpt_cfg["params"]),
         SetupCallback(resume=False, now=now, logdir=logdir, ckptdir=ckptdir, cfgdir=cfgdir, config=config, lightning_config=lightning_config),
         ImageLogger(batch_frequency=750, max_images=8, clamp=True, increase_log_steps=False, log_images_kwargs={"inpaint": False}),
-        FIDScoreLogger(batch_frequency=3000, samples_amount=3200, metrics_batch_size=256),
+        FIDScoreLogger(batch_frequency=4500, samples_amount=10000, metrics_batch_size=256, device=model.device),
         CUDACallback()
     ]
 
     trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
-    trainer.logdir = logdir  ###
+    trainer.logdir = logdir
 
     trainer.fit(model=model, train_dataloaders=train_dl, val_dataloaders=valid_dl)
 
-    # imgs = model.sample(None, batch_size=8)
-    # imgs = model.decode_first_stage(imgs)
-    # grid = tv.utils.make_grid(imgs)
-    # plt.imshow(grid.permute(2, 1, 0))
-    # plt.show()
+#     real_img, _ = test_ds[0]
+#     print(real_img.max(), real_img.min())
+
+#     imgs = model.sample(None, batch_size=8)
+#     imgs = model.decode_first_stage(imgs)
+#     print(imgs.max(), imgs.min())
+#     grid = tv.utils.make_grid(imgs)
+#     plt.imshow(grid.permute(1, 2, 0))
+#     plt.show()
