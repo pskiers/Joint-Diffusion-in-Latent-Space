@@ -105,21 +105,7 @@ class FIDScoreLogger(Callback):
         start_idx = 0
 
         for _ in tqdm(range(int(self.samples_amount / self.metrics_batch_size))):
-            with torch.no_grad():
-                with samples_generator.ema_scope("Plotting"):
-                    samples, _ = samples_generator.sample_log(cond=None, batch_size=self.metrics_batch_size, ddim=True, ddim_steps=200, eta=1)
-                x_samples = samples_generator.decode_first_stage(samples)
-            x_samples = x_samples.to(self.device)
-
-            with torch.no_grad():
-                pred = self.activation_model(x_samples)[0]
-
-                # If model output is not scalar, apply global spatial average pooling.
-                # This happens if you choose a dimensionality not equal 2048.
-            if pred.size(2) != 1 or pred.size(3) != 1:
-                pred = adaptive_avg_pool2d(pred, output_size=(1, 1))
-
-            pred = pred.squeeze(3).squeeze(2).cpu().numpy()
+            pred = self.get_samples_activations(samples_generator)
 
             pred_arr[start_idx:start_idx + pred.shape[0]] = pred
 
@@ -127,6 +113,24 @@ class FIDScoreLogger(Callback):
         mu = np.mean(pred_arr, axis=0)
         sigma = np.cov(pred_arr, rowvar=False)
         return mu, sigma
+
+    def get_samples_activations(self, samples_generator):
+        with torch.no_grad():
+            with samples_generator.ema_scope("Plotting"):
+                samples, _ = samples_generator.sample_log(cond=None, batch_size=self.metrics_batch_size, ddim=True, ddim_steps=200, eta=1)
+            x_samples = samples_generator.decode_first_stage(samples)
+        x_samples = x_samples.to(self.device)
+
+        with torch.no_grad():
+            pred = self.activation_model(x_samples)[0]
+
+                # If model output is not scalar, apply global spatial average pooling.
+                # This happens if you choose a dimensionality not equal 2048.
+        if pred.size(2) != 1 or pred.size(3) != 1:
+            pred = adaptive_avg_pool2d(pred, output_size=(1, 1))
+
+        pred = pred.squeeze(3).squeeze(2).cpu().numpy()
+        return pred
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
         if pl_module.global_step > 0:

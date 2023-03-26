@@ -28,13 +28,13 @@ if __name__ == "__main__":
     test_ds = AdjustedCIFAR10(train=False)
     train_ds, validation_ds = torch.utils.data.random_split(train_ds, [len(train_ds)-len(test_ds), len(test_ds)])
 
-    train_dl = torch.utils.data.DataLoader(train_ds, batch_size=256, shuffle=True, num_workers=0, drop_last=True)
-    valid_dl = torch.utils.data.DataLoader(validation_ds, batch_size=256, shuffle=False, num_workers=0)
+    train_dl = torch.utils.data.DataLoader(train_ds, batch_size=128, shuffle=True, num_workers=0, drop_last=True)
+    valid_dl = torch.utils.data.DataLoader(validation_ds, batch_size=128, shuffle=False, num_workers=0)
     test_dl = torch.utils.data.DataLoader(test_ds, batch_size=4, shuffle=False, num_workers=0)
 
     # i = 23
     # files = listdir(f"lightning_logs/version_{i}/checkpoints")
-    config.model.params["ckpt_path"] = f"logs/LatentDiffusion_2023-03-22T01-07-16/checkpoints/last.ckpt"
+    # config.model.params["ckpt_path"] = f"logs/LatentDiffusion_2023-03-22T01-07-16/checkpoints/last.ckpt"
 
     model = LatentDiffusion(**config.model.get("params", dict()))
     model.learning_rate = config.model.base_learning_rate
@@ -69,8 +69,8 @@ if __name__ == "__main__":
     trainer_kwargs["callbacks"] = [
         pl.callbacks.ModelCheckpoint(**default_modelckpt_cfg["params"]),
         SetupCallback(resume=False, now=now, logdir=logdir, ckptdir=ckptdir, cfgdir=cfgdir, config=config, lightning_config=lightning_config),
-        ImageLogger(batch_frequency=750, max_images=8, clamp=True, increase_log_steps=False, log_images_kwargs={"inpaint": False}),
-        FIDScoreLogger(batch_frequency=4500, samples_amount=10000, metrics_batch_size=256, device=model.device),
+        ImageLogger(batch_frequency=2000, max_images=8, clamp=True, increase_log_steps=False, log_images_kwargs={"inpaint": False}),
+        FIDScoreLogger(batch_frequency=7500, samples_amount=5000, metrics_batch_size=96, device=model.device),
         CUDACallback()
     ]
 
