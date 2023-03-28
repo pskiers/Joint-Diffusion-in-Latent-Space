@@ -11,10 +11,10 @@ model:
     image_size: 8
     channels: 8
     monitor: val/loss
-    ckpt_path: lightning_logs/version_23/checkpoints/epoch=6-step=1364.ckpt
 
     unet_config:
-      target: ldm.modules.diffusionmodules.openaimodel.UNetModel
+      ckpt_path: lightning_logs/version_23/checkpoints/epoch=6-step=1364.ckpt
+      target: models.AdjustedUNet
       params:
         image_size: 8
         in_channels: 8

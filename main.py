@@ -32,7 +32,12 @@ if __name__ == "__main__":
     model = LatentDiffusion(**config.model.get("params", dict()))
     model.learning_rate = config.model.base_learning_rate
 
-    classifier_model = ClassifierOnLatentDiffusion(model, 10)
+    classifier_model = ClassifierOnLatentDiffusion(
+        trained_diffusion=model,
+        num_classes=10,
+        in_features=8192,
+        hidden_layer=2048
+    )
 
 
     model = LatentDiffusion(**config.model.get("params", dict()))
