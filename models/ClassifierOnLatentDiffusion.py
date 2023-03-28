@@ -39,7 +39,7 @@ class ClassifierOnLatentDiffusion(pl.LightningModule):
         return self.mlp(z)
 
     def training_step(self, batch, batch_idx):
-        imgs, labels = batch[0]
+        imgs, labels = batch
         imgs = imgs.transpose(1, 3)
         preds = self(imgs)
 
