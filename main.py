@@ -4,13 +4,14 @@ from omegaconf import OmegaConf
 import argparse
 import torch
 import pytorch_lightning as pl
-from os import listdir
 from models.ClassifierOnLatentDiffusion import ClassifierOnLatentDiffusion
 from datasets.mnist import AdjustedMNIST
-
+from os import listdir, path
+import datetime
+from callbacks import ImageLogger, CUDACallback, SetupCallback, FIDScoreLogger
 
 if __name__ == "__main__":
-    config = OmegaConf.load("configs/mnist-ldm-autoencoder_mnist.yaml")
+    config = OmegaConf.load("configs/mnist-simple-classifier-ldm_mnist.yaml")
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
@@ -28,51 +29,49 @@ if __name__ == "__main__":
     valid_dl = torch.utils.data.DataLoader(validation_ds, batch_size=256, shuffle=False, num_workers=0)
     test_dl = torch.utils.data.DataLoader(test_ds, batch_size=4, shuffle=False, num_workers=0)
 
-    trainer = pl.Trainer.from_argparse_args(trainer_opt)
+    model = LatentDiffusion(**config.model.get("params", dict()))
+    model.learning_rate = config.model.base_learning_rate
 
-    i = 23
-    files = listdir(f"lightning_logs/version_{i}/checkpoints")
-    config.model.params["ckpt_path"] = f"lightning_logs/version_{i}/checkpoints/{files[0]}"
+    classifier_model = ClassifierOnLatentDiffusion(model, 10)
+
 
     model = LatentDiffusion(**config.model.get("params", dict()))
     model.learning_rate = config.model.base_learning_rate
 
-    classifier_model = ClassifierOnLatentDiffusion(model, 10, torch.device("cuda"))
+    now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    nowname = "ClassifierOnLatentDiffusion_" + now
+    logdir = path.join("logs", nowname)
+    ckptdir = path.join(logdir, "checkpoints")
+    cfgdir = path.join(logdir, "configs")
 
-    device = torch.device("cuda")
-    criterion = torch.nn.functional.cross_entropy
-    optim = torch.optim.Adam(classifier_model.parameters(), lr=0.001)
-    epochs = 100
+    trainer_kwargs = dict()
 
-    for epoch in range(epochs):
-        train_accuracies = []
-        train_losses = []
-        valid_accuracies = []
-        valid_losses = []
+    trainer_kwargs["logger"] = pl.loggers.WandbLogger(name=nowname, id=nowname)
 
-        for imgs, labels in train_dl:
-            imgs, labels = imgs.transpose(1, 3).to(device), labels.to(device)
-            preds = classifier_model(imgs)
+    # modelcheckpoint - use TrainResult/EvalResult(checkpoint_on=metric) to
+    # specify which metric is used to determine best models
+    default_modelckpt_cfg = {
+        "params": {
+            "dirpath": ckptdir,
+            "filename": "{epoch:06}",
+            "verbose": True,
+            "save_last": True,
+        }
+    }
+    if hasattr(model, "monitor"):
+        print(f"Monitoring {model.monitor} as checkpoint metric.")
+        default_modelckpt_cfg["params"]["monitor"] = model.monitor
+        default_modelckpt_cfg["params"]["save_top_k"] = 1
 
-            loss = criterion(preds, labels)
+    trainer_kwargs["checkpoint_callback"] = True
 
-            optim.zero_grad()
-            loss.backward()
-            optim.step()
+    trainer_kwargs["callbacks"] = [
+        pl.callbacks.ModelCheckpoint(**default_modelckpt_cfg["params"]),
+        SetupCallback(resume=False, now=now, logdir=logdir, ckptdir=ckptdir, cfgdir=cfgdir, config=config, lightning_config=lightning_config),
+        CUDACallback()
+    ]
 
-            train_losses.append(loss.item())
-            train_accuracies.append(torch.sum(torch.argmax(preds, dim=1) == labels) / len(labels))
+    trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
+    trainer.logdir = logdir
 
-        for imgs, labels in valid_dl:
-            imgs, labels = imgs.transpose(1, 3).to(device), labels.to(device)
-
-            with torch.no_grad():
-                preds = classifier_model(imgs)
-
-            loss = criterion(preds, labels)
-
-            valid_losses.append(loss.item())
-            valid_accuracies.append(torch.sum(torch.argmax(preds, dim=1) == labels) / len(labels))
-
-        print(f"Epoch {epoch}\t Train loss: {sum(train_losses)/len(train_losses)}\t Train acc: {sum(train_accuracies)/len(train_accuracies)}\t Validation loss: {sum(valid_losses)/len(valid_losses)}\t Validation acc: {sum(valid_accuracies)/len(valid_accuracies)}")
-
+    trainer.fit(classifier_model, train_dataloaders=[train_dl], val_dataloaders=[valid_dl])
