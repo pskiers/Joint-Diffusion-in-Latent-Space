@@ -39,10 +39,6 @@ if __name__ == "__main__":
         hidden_layer=2048
     )
 
-
-    model = LatentDiffusion(**config.model.get("params", dict()))
-    model.learning_rate = config.model.base_learning_rate
-
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     nowname = "ClassifierOnLatentDiffusion_" + now
     logdir = path.join("logs", nowname)
@@ -79,4 +75,4 @@ if __name__ == "__main__":
     trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
     trainer.logdir = logdir
 
-    trainer.fit(classifier_model, train_dataloaders=[train_dl], val_dataloaders=[valid_dl])
+    trainer.fit(classifier_model, train_dataloaders=train_dl, val_dataloaders=valid_dl)
