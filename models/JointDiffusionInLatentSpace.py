@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from ldm.models.diffusion.ddpm import LatentDiffusion
-from ldm.util import default
+
 
 class JointDiffusionInLatentSpace(LatentDiffusion):
     def __init__(
@@ -45,15 +45,15 @@ class JointDiffusionInLatentSpace(LatentDiffusion):
             nn.Linear(classifier_hidden, self.num_classes)
         )
 
-    def shared_step(self, batch, **kwargs):
-        x, c, classes = self.get_input(batch, self.first_stage_key)
-        loss = self(x, c, classes)
-        return loss
+        self.batch_classes = None
+        self.batch_class_predictions = None
+        # Attributes that will store img labels and labels predictions
+        # This is really ugly but since we are unable to change the parent classes and we don't want to copy-paste
+        # code (especially that we'd have to copy a lot), this solution seems to be marginally better.
 
     def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False, cond_key=None, return_original_cond=False, bs=None):
-        ldm_input = super().get_input(batch, k, return_first_stage_outputs, force_c_encode, cond_key, return_original_cond, bs)
-        classes = batch[self.classification_key]
-        return *ldm_input, classes
+        self.batch_classes = batch[self.classification_key]
+        return super().get_input(batch, k, return_first_stage_outputs, force_c_encode, cond_key, return_original_cond, bs)
 
     def apply_model(self, x_noisy, t, cond, return_ids=False):
         if isinstance(cond, dict):
@@ -71,50 +71,21 @@ class JointDiffusionInLatentSpace(LatentDiffusion):
         x_recon, representations = self.model(x_noisy, t, **cond)
         representations = [torch.flatten(z_i, start_dim=1) for z_i in representations]
         representations = torch.concat(representations, dim=1)
-        predictions = self.classifier(representations)
+        self.batch_class_predictions = self.classifier(representations)
 
         if isinstance(x_recon, tuple) and not return_ids:
-            return x_recon[0], predictions
+            return x_recon[0]
         else:
-            return x_recon, predictions
+            return x_recon
 
-    def p_losses(self, x_start, cond, t, classes, noise=None):
-        noise = default(noise, lambda: torch.randn_like(x_start))
-        x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
-        model_output, predictions = self.apply_model(x_noisy, t, cond)
+    def p_losses(self, x_start, cond, t, noise=None):
+        loss, loss_dict = super().p_losses(x_start, cond, t, noise)
 
-        loss_dict = {}
         prefix = 'train' if self.training else 'val'
 
-        if self.parameterization == "x0":
-            target = x_start
-        elif self.parameterization == "eps":
-            target = noise
-        else:
-            raise NotImplementedError()
-
-        loss_simple = self.get_loss(model_output, target, mean=False).mean([1, 2, 3])
-        loss_dict.update({f'{prefix}/loss_simple': loss_simple.mean()})
-
-        t = t.cpu()
-        logvar_t = self.logvar[t].to(self.device)
-        loss = loss_simple / torch.exp(logvar_t) + logvar_t
-        # loss = loss_simple / torch.exp(self.logvar) + self.logvar
-        if self.learn_logvar:
-            loss_dict.update({f'{prefix}/loss_gamma': loss.mean()})
-            loss_dict.update({'logvar': self.logvar.data.mean()})
-
-        loss = self.l_simple_weight * loss.mean()
-
-        loss_vlb = self.get_loss(model_output, target, mean=False).mean(dim=(1, 2, 3))
-        loss_vlb = (self.lvlb_weights[t] * loss_vlb).mean()
-        loss_dict.update({f'{prefix}/loss_vlb': loss_vlb})
-        loss += (self.original_elbo_weight * loss_vlb)
-
-        loss_classification = nn.functional.cross_entropy(predictions, classes)
+        loss_classification = nn.functional.cross_entropy(self.batch_class_predictions, self.batch_classes)
         loss += loss_classification
         loss_dict.update({f'{prefix}/loss_classification': loss_classification})
         loss_dict.update({f'{prefix}/loss': loss})
 
         return loss, loss_dict
-
