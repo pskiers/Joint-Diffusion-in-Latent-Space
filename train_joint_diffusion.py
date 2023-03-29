@@ -1,11 +1,10 @@
 import tensorflow as tf
-from ldm.models.diffusion.ddpm import LatentDiffusion
 from omegaconf import OmegaConf
 import argparse
 import torch
 import pytorch_lightning as pl
 from models import JointDiffusionInLatentSpace
-from datasets.mnist import AdjustedMNIST
+from datasets import AdjustedMNIST
 from os import listdir, path
 import datetime
 from callbacks import ImageLogger, CUDACallback, SetupCallback, FIDScoreLogger

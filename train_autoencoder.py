@@ -8,8 +8,7 @@ import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 from os import listdir, path
 import datetime
-from datasets.mnist import AdjustedMNIST
-from datasets.cifar10 import AdjustedCIFAR10
+from datasets import AdjustedMNIST, AdjustedCIFAR10
 from callbacks import ImageLogger, CUDACallback, SetupCallback
 
 

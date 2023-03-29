@@ -2,7 +2,7 @@ import torch
 import torchvision as tv
 
 
-class AdjustedCIFAR10(torch.utils.data.Dataset):
+class AdjustedCelbA(torch.utils.data.Dataset):
     def __init__(self, train="train") -> None:
         super().__init__()
         self.dataset = tv.datasets.CelebA(root="./data", train=train, download=True, transform=tv.transforms.ToTensor())
