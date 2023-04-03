@@ -3,7 +3,7 @@ from omegaconf import OmegaConf
 import argparse
 import torch
 import pytorch_lightning as pl
-from models import JointDiffusionInLatentSpace
+from models import JointLatentDiffusionNoisyClassifier
 from datasets import AdjustedMNIST
 from os import listdir, path
 import datetime
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     valid_dl = torch.utils.data.DataLoader(validation_ds, batch_size=128, shuffle=False, num_workers=0)
     test_dl = torch.utils.data.DataLoader(test_ds, batch_size=4, shuffle=False, num_workers=0)
 
-    model = JointDiffusionInLatentSpace(**config.model.get("params", dict()))
+    model = JointLatentDiffusionNoisyClassifier(**config.model.get("params", dict()))
     model.learning_rate = config.model.base_learning_rate
 
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")

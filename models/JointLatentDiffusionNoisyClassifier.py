@@ -3,7 +3,7 @@ import torch.nn as nn
 from ldm.models.diffusion.ddpm import LatentDiffusion
 
 
-class JointDiffusionInLatentSpace(LatentDiffusion):
+class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
     def __init__(
             self,
             first_stage_config,
