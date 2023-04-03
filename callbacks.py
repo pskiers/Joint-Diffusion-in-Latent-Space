@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 
 class FIDScoreLogger(Callback):
-    def __init__(self, device, batch_frequency, samples_amount, metrics_batch_size, dims=2048) -> None:
+    def __init__(self, device, batch_frequency, samples_amount, metrics_batch_size, dims=2048, means_path=None, sigma_path=None) -> None:
         super().__init__()
         self.batch_freq = batch_frequency
         self.samples_amount = samples_amount
@@ -31,11 +31,15 @@ class FIDScoreLogger(Callback):
         self.metrics_batch_size = metrics_batch_size
         self.test_mu = None
         self.test_sigma = None
+        if means_path is not None and sigma_path is not None:
+            self.test_mu = np.load(means_path)
+            self.test_sigma = np.load(sigma_path)
 
         block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[dims]
         self.activation_model = InceptionV3([block_idx]).to(device)
 
 
+    @torch.no_grad()
     def get_activations(self, dataloader, img_key):
         self.activation_model.eval()
 
@@ -47,8 +51,8 @@ class FIDScoreLogger(Callback):
             batch = batch[img_key].permute(0, 3, 1, 2)
             batch = batch.to(self.device)
 
-            with torch.no_grad():
-                pred = self.activation_model(batch)[0]
+
+            pred = self.activation_model(batch)[0]
 
             # If model output is not scalar, apply global spatial average pooling.
             # This happens if you choose a dimensionality not equal 2048.
@@ -105,32 +109,30 @@ class FIDScoreLogger(Callback):
         start_idx = 0
 
         for _ in tqdm(range(int(self.samples_amount / self.metrics_batch_size))):
-            pred = self.get_samples_activations(samples_generator)
-
-            pred_arr[start_idx:start_idx + pred.shape[0]] = pred
-
-            start_idx = start_idx + pred.shape[0]
+            pred_arr, start_idx = self.get_samples_activations(samples_generator, pred_arr, start_idx)
         mu = np.mean(pred_arr, axis=0)
         sigma = np.cov(pred_arr, rowvar=False)
         return mu, sigma
 
-    def get_samples_activations(self, samples_generator):
-        with torch.no_grad():
-            with samples_generator.ema_scope("Plotting"):
-                samples, _ = samples_generator.sample_log(cond=None, batch_size=self.metrics_batch_size, ddim=True, ddim_steps=200, eta=1)
-            x_samples = samples_generator.decode_first_stage(samples)
+    @torch.no_grad()
+    def get_samples_activations(self, samples_generator, pred_arr, start_idx):
+        with samples_generator.ema_scope("Plotting"):
+            samples, _ = samples_generator.sample_log(cond=None, batch_size=self.metrics_batch_size, ddim=True, ddim_steps=200, eta=1)
+        x_samples = samples_generator.decode_first_stage(samples)
         x_samples = x_samples.to(self.device)
 
-        with torch.no_grad():
-            pred = self.activation_model(x_samples)[0]
-
+        pred = self.activation_model(x_samples)[0]
                 # If model output is not scalar, apply global spatial average pooling.
                 # This happens if you choose a dimensionality not equal 2048.
         if pred.size(2) != 1 or pred.size(3) != 1:
             pred = adaptive_avg_pool2d(pred, output_size=(1, 1))
 
-        pred = pred.squeeze(3).squeeze(2).cpu().numpy()
-        return pred
+        np_pred = pred.squeeze(3).squeeze(2).cpu().numpy()
+
+        pred_arr[start_idx:start_idx + pred.shape[0]] = np_pred
+
+        start_idx = start_idx + np_pred.shape[0]
+        return pred_arr, start_idx
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
         if pl_module.global_step > 0:

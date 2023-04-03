@@ -69,7 +69,7 @@ if __name__ == "__main__":
         pl.callbacks.ModelCheckpoint(**default_modelckpt_cfg["params"]),
         SetupCallback(resume=False, now=now, logdir=logdir, ckptdir=ckptdir, cfgdir=cfgdir, config=config, lightning_config=lightning_config),
         ImageLogger(batch_frequency=2000, max_images=8, clamp=True, increase_log_steps=False, log_images_kwargs={"inpaint": False}),
-        # FIDScoreLogger(batch_frequency=400, samples_amount=5000, metrics_batch_size=64, device=torch.device("cuda"), means_path="fid_saves/cifar10/cifar_means.npy", sigma_path="fid_saves/cifar10/cifar_sigmas.npy"),
+        FIDScoreLogger(batch_frequency=400, samples_amount=5000, metrics_batch_size=64, device=torch.device("cuda"), means_path="fid_saves/cifar10/cifar_means.npy", sigma_path="fid_saves/cifar10/cifar_sigmas.npy"),
         CUDACallback()
     ]
 

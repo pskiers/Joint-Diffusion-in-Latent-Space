@@ -8,12 +8,12 @@ import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 from os import listdir, path
 import datetime
-from datasets import AdjustedMNIST, AdjustedCIFAR10
+from datasets import AdjustedMNIST, AdjustedCIFAR10, AdjustedFashionMNIST
 from callbacks import ImageLogger, CUDACallback, SetupCallback
 
 
 if __name__ == "__main__":
-    config = OmegaConf.load("configs/autoencoder_cifar10.yaml")
+    config = OmegaConf.load("configs/autoencoder_fashionmnist.yaml")
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
@@ -26,17 +26,17 @@ if __name__ == "__main__":
 
     config.model.params["image_key"] = 0
 
-    train_ds = AdjustedCIFAR10(train=True)
-    test_ds = AdjustedCIFAR10(train=False)
+    train_ds = AdjustedFashionMNIST(train=True)
+    test_ds = AdjustedFashionMNIST(train=False)
     train_ds, validation_ds = torch.utils.data.random_split(train_ds, [len(train_ds)-len(test_ds), len(test_ds)])
 
-    train_dl = torch.utils.data.DataLoader(train_ds, batch_size=64, shuffle=True, num_workers=0, drop_last=True)
-    valid_dl = torch.utils.data.DataLoader(validation_ds, batch_size=64, shuffle=False, num_workers=0)
-    test_dl = torch.utils.data.DataLoader(test_ds, batch_size=8, shuffle=False, num_workers=0)
+    train_dl = torch.utils.data.DataLoader(train_ds, batch_size=96, shuffle=True, num_workers=0, drop_last=True)
+    valid_dl = torch.utils.data.DataLoader(validation_ds, batch_size=96, shuffle=False, num_workers=0)
+    test_dl = torch.utils.data.DataLoader(test_ds, batch_size=96, shuffle=False, num_workers=0)
 
 
     # files = listdir(f"logs/Autoencoder_2023-03-18T21-40-57/checkpoints")
-    config.model.params["ckpt_path"] = f"logs/Autoencoder_2023-03-18T21-40-57/checkpoints/last.ckpt"
+    # config.model.params["ckpt_path"] = f"logs/Autoencoder_2023-03-18T21-40-57/checkpoints/last.ckpt"
 
     model = AutoencoderKL(**config.model.get("params", dict()))
     model.learning_rate = config.model.base_learning_rate
