@@ -87,5 +87,7 @@ class JointDiffusionInLatentSpace(LatentDiffusion):
         loss += loss_classification
         loss_dict.update({f'{prefix}/loss_classification': loss_classification})
         loss_dict.update({f'{prefix}/loss': loss})
+        accuracy = (torch.argmax(self.batch_class_predictions) == self.batch_classes).sum() / len(self.batch_classes)
+        loss_dict.update({f'{prefix}/accuracy': accuracy})
 
         return loss, loss_dict
