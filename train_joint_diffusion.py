@@ -3,7 +3,7 @@ from omegaconf import OmegaConf
 import argparse
 import torch
 import pytorch_lightning as pl
-from models import JointLatentDiffusionNoisyClassifier
+from models import JointLatentDiffusionNoisyClassifier, JointLatentDiffusion
 from datasets import AdjustedMNIST
 from os import listdir, path
 import datetime
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     valid_dl = torch.utils.data.DataLoader(validation_ds, batch_size=128, shuffle=False, num_workers=0)
     test_dl = torch.utils.data.DataLoader(test_ds, batch_size=4, shuffle=False, num_workers=0)
 
-    model = JointLatentDiffusionNoisyClassifier(**config.model.get("params", dict()))
+    model = JointLatentDiffusion(**config.model.get("params", dict()))
     model.learning_rate = config.model.base_learning_rate
 
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
@@ -62,6 +62,7 @@ if __name__ == "__main__":
         pl.callbacks.ModelCheckpoint(**default_modelckpt_cfg["params"]),
         SetupCallback(resume=False, now=now, logdir=logdir, ckptdir=ckptdir, cfgdir=cfgdir, config=config, lightning_config=lightning_config),
         ImageLogger(batch_frequency=2000, max_images=8, clamp=True, increase_log_steps=False, log_images_kwargs={"inpaint": False}),
+        FIDScoreLogger(batch_frequency=10000, samples_amount=5000, metrics_batch_size=64, device=torch.device("cuda")),
         CUDACallback()
     ]
 

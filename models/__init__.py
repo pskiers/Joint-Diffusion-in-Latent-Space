@@ -1,3 +1,4 @@
 from .AdjustedUNet import AdjustedUNet
 from .ClassifierOnLatentDiffusion import ClassifierOnLatentDiffusion
 from .JointLatentDiffusionNoisyClassifier import JointLatentDiffusionNoisyClassifier
+from .JointLatentDiffusion import JointLatentDiffusion
