@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from ldm.models.diffusion.ddpm import LatentDiffusion
+from ldm.modules.diffusionmodules.util import noise_like
 
 
 class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
@@ -11,6 +12,7 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
             classifier_in_features,
             classifier_hidden,
             num_classes,
+            sample_grad_scale=0.4,
             classification_key=1,
             num_timesteps_cond=None,
             cond_stage_key="image",
@@ -44,9 +46,10 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
             nn.ReLU(),
             nn.Linear(classifier_hidden, self.num_classes)
         )
-
+        self.sample_grad_scale = sample_grad_scale
         self.batch_classes = None
         self.batch_class_predictions = None
+        self.sample_classes = None
         # Attributes that will store img labels and labels predictions
         # This is really ugly but since we are unable to change the parent classes and we don't want to copy-paste
         # code (especially that we'd have to copy a lot), this solution seems to be marginally better.
@@ -91,3 +94,22 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
         loss_dict.update({f'{prefix}/accuracy': accuracy})
 
         return loss, loss_dict
+
+    # @torch.no_grad()
+    # def p_sample(self, x, c, t, clip_denoised=False, repeat_noise=False,
+    #              return_codebook_ids=False, quantize_denoised=False, return_x0=False,
+    #              temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None):
+    #     with torch.set_grad_enabled(True):
+    #         x.requires_grad = True
+    #         _, representations = self.model(x, t, **c)
+    #         representations = [torch.flatten(z_i, start_dim=1) for z_i in representations]
+    #         representations = torch.concat(representations, dim=1)
+    #         class_predictions = self.classifier(representations)
+    #         loss = torch.log(torch.gather(class_predictions, 1, self.sample_classes.unsqueeze(dim=1)))
+    #         loss.backward()
+    #         x = x - self.sample_grad_scale * x.grad
+    #         self.optimizer_zero_grad()
+    #         x.requires_grad = False
+    #     return super().p_sample(x, c, t, clip_denoised=False, repeat_noise=False,
+    #              return_codebook_ids=False, quantize_denoised=False, return_x0=False,
+    #              temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None)
