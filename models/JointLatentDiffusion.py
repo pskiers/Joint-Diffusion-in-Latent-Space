@@ -61,7 +61,7 @@ class JointLatentDiffusion(JointLatentDiffusionNoisyClassifier):
             raise NotImplementedError("This feature is not available for this model")
 
         x_recon, _ = self.model(x_noisy, t, **cond)
-        _, representations = self.model(self.x_start, torch.ones_like(t), **cond)
+        _, representations = self.model(self.x_start, torch.ones(self.x_start.shape[0], device=self.device), **cond)
         representations = [torch.flatten(z_i, start_dim=1) for z_i in representations]
         representations = torch.concat(representations, dim=1)
         self.batch_class_predictions = self.classifier(representations)
