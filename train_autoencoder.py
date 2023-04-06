@@ -5,15 +5,14 @@ import argparse
 import torchvision as tv
 import torch
 import pytorch_lightning as pl
-import matplotlib.pyplot as plt
 from os import listdir, path
 import datetime
-from datasets import AdjustedMNIST, AdjustedCIFAR10, AdjustedFashionMNIST
+from datasets import AdjustedMNIST, AdjustedCIFAR10, AdjustedFashionMNIST, AdjustedSVHN
 from callbacks import ImageLogger, CUDACallback, SetupCallback
 
 
 if __name__ == "__main__":
-    config = OmegaConf.load("configs/autoencoder_fashionmnist.yaml")
+    config = OmegaConf.load("configs/autoencoder_shvm.yaml")
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
@@ -26,9 +25,9 @@ if __name__ == "__main__":
 
     config.model.params["image_key"] = 0
 
-    train_ds = AdjustedFashionMNIST(train=True)
-    test_ds = AdjustedFashionMNIST(train=False)
-    train_ds, validation_ds = torch.utils.data.random_split(train_ds, [len(train_ds)-len(test_ds), len(test_ds)])
+    train_ds = AdjustedSVHN(train="train")
+    test_ds = AdjustedSVHN(train="test")
+    train_ds, validation_ds = torch.utils.data.random_split(train_ds, [len(train_ds)-len(test_ds), len(test_ds)], generator=torch.Generator().manual_seed(42))
 
     train_dl = torch.utils.data.DataLoader(train_ds, batch_size=96, shuffle=True, num_workers=0, drop_last=True)
     valid_dl = torch.utils.data.DataLoader(validation_ds, batch_size=96, shuffle=False, num_workers=0)

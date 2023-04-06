@@ -4,7 +4,7 @@ import argparse
 import torch
 import pytorch_lightning as pl
 from models import JointLatentDiffusionNoisyClassifier, JointLatentDiffusion
-from datasets import AdjustedMNIST, AdjustedFashionMNIST
+from datasets import AdjustedMNIST, AdjustedFashionMNIST, AdjustedSVHN
 from os import listdir, path
 import datetime
 from callbacks import ImageLogger, CUDACallback, SetupCallback, FIDScoreLogger
@@ -20,15 +20,15 @@ if __name__ == "__main__":
     trainer_opt = argparse.Namespace(**trainer_config)
     lightning_config.trainer = trainer_config
 
-    train_ds = AdjustedFashionMNIST(train=True)
-    test_ds = AdjustedFashionMNIST(train=False)
-    train_ds, validation_ds = torch.utils.data.random_split(train_ds, [len(train_ds)-len(test_ds), len(test_ds)])
+    train_ds = AdjustedSVHN(train="train")
+    test_ds = AdjustedSVHN(train="test")
+    train_ds, validation_ds = torch.utils.data.random_split(train_ds, [len(train_ds)-len(test_ds), len(test_ds)], generator=torch.Generator().manual_seed(42))
 
     train_dl = torch.utils.data.DataLoader(train_ds, batch_size=128, shuffle=True, num_workers=0, drop_last=True)
     valid_dl = torch.utils.data.DataLoader(validation_ds, batch_size=128, shuffle=False, num_workers=0)
-    test_dl = torch.utils.data.DataLoader(test_ds, batch_size=4, shuffle=False, num_workers=0)
+    test_dl = torch.utils.data.DataLoader(test_ds, batch_size=128, shuffle=False, num_workers=0)
 
-    config.model.params["ckpt_path"] = f"logs/JointDiffusion_2023-04-04T14-28-21/checkpoints/last.ckpt"
+    config.model.params["ckpt_path"] = f"logs/JointDiffusion_2023-04-04T19-32-40/checkpoints/last.ckpt"
 
     model = JointLatentDiffusion(**config.model.get("params", dict()))
     model.learning_rate = config.model.base_learning_rate
@@ -64,7 +64,7 @@ if __name__ == "__main__":
         pl.callbacks.ModelCheckpoint(**default_modelckpt_cfg["params"]),
         SetupCallback(resume=False, now=now, logdir=logdir, ckptdir=ckptdir, cfgdir=cfgdir, config=config, lightning_config=lightning_config),
         ImageLogger(batch_frequency=2000, max_images=8, clamp=True, increase_log_steps=False, log_images_kwargs={"inpaint": False}),
-        FIDScoreLogger(batch_frequency=10000, samples_amount=5000, metrics_batch_size=96, device=torch.device("cuda")),
+        FIDScoreLogger(batch_frequency=10000, samples_amount=5000, metrics_batch_size=64, device=torch.device("cuda")),
         CUDACallback()
     ]
 
@@ -72,3 +72,27 @@ if __name__ == "__main__":
     trainer.logdir = logdir
 
     trainer.fit(model, train_dataloaders=train_dl, val_dataloaders=valid_dl)
+    # model.sample_classes=torch.tensor([0,1,2,3,4,5,6,7])
+    # model.sample(cond=None, batch_size=8, sample_classes=[0,1,2,3,4,5,6,7])
+
+
+    # import torch.nn as nn
+    # from tqdm import tqdm
+
+    # loss = []
+    # accuracy = []
+    # with torch.no_grad():
+    #     for imgs, labels in tqdm(train_dl):
+    #         imgs = imgs.permute(0, 3, 1, 2).to(model.device)
+    #         labels = labels.to(model.device)
+    #         imgs = model.encode_first_stage(imgs)
+    #         model.x_start = model.get_first_stage_encoding(imgs).detach()
+    #         model.apply_model(model.x_start, torch.ones_like(labels), None)
+    #         loss_classification = nn.functional.cross_entropy(
+    #             model.batch_class_predictions, labels)
+    #         loss.append(loss_classification)
+    #         accuracy.append(torch.sum(torch.argmax(
+    #             model.batch_class_predictions, dim=1) == labels) / len(labels))
+    #         if len(loss) > 10:
+    #             break
+    # print(f"loss = {sum(loss)/len(loss)}, acc = {sum(accuracy)/len(accuracy)}")
