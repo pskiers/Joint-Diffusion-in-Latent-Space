@@ -3,3 +3,4 @@ from .mnist import AdjustedMNIST
 from .cleba import AdjustedCelbA
 from .fashionMNIST import AdjustedFashionMNIST
 from .svhn import AdjustedSVHN
+from .gtsrb import GTSRB

@@ -90,10 +90,12 @@ class AdjustedUNet(UNetModel):
 
     def forward_output_blocks(self, x, context, emb, representations):
         h = representations.pop()
+        representations.insert(0, h)
         for module in self.output_blocks:
             last_hs = representations.pop()
             h = th.cat([h, last_hs], dim=1)
             h = module(h, emb, context)
+            representations.insert(0, last_hs)
         h = h.type(x.dtype)
         if self.predict_codebook_ids:
             return self.id_predictor(h)
@@ -121,5 +123,3 @@ class AdjustedUNet(UNetModel):
             assert y.shape == (x.shape[0],)
             emb = emb + self.label_emb(y)
         return emb
-
-
