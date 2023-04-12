@@ -6,25 +6,25 @@ from ldm.modules.diffusionmodules.util import noise_like
 
 class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
     def __init__(
-            self,
-            first_stage_config,
-            cond_stage_config,
-            classifier_in_features,
-            classifier_hidden,
-            num_classes,
-            sample_grad_scale=0.4,
-            classification_key=1,
-            num_timesteps_cond=None,
-            cond_stage_key="image",
-            cond_stage_trainable=False,
-            concat_mode=True,
-            cond_stage_forward=None,
-            conditioning_key=None,
-            scale_factor=1,
-            scale_by_std=False,
-            *args,
-            **kwargs
-        ):
+        self,
+        first_stage_config,
+        cond_stage_config,
+        classifier_in_features,
+        classifier_hidden,
+        num_classes,
+        sample_grad_scale=0.4,
+        classification_key=1,
+        num_timesteps_cond=None,
+        cond_stage_key="image",
+        cond_stage_trainable=False,
+        concat_mode=True,
+        cond_stage_forward=None,
+        conditioning_key=None,
+        scale_factor=1,
+        scale_by_std=False,
+        *args,
+        **kwargs
+    ):
         super().__init__(
             first_stage_config,
             cond_stage_config,
@@ -53,6 +53,10 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
         # Attributes that will store img labels and labels predictions
         # This is really ugly but since we are unable to change the parent classes and we don't want to copy-paste
         # code (especially that we'd have to copy a lot), this solution seems to be marginally better.
+        if kwargs.get("ckpt_path", None) is not None:
+            ignore_keys = kwargs.get("ignore_keys", [])
+            only_model = kwargs.get("load_only_unet", False)
+            self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
 
     def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False, cond_key=None, return_original_cond=False, bs=None):
         self.batch_classes = batch[self.classification_key]
@@ -69,10 +73,12 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
             cond = {key: cond}
 
         if hasattr(self, "split_input_params"):
-            raise NotImplementedError("This feature is not available for this model")
+            raise NotImplementedError(
+                "This feature is not available for this model")
 
         x_recon, representations = self.model(x_noisy, t, **cond)
-        representations = [torch.flatten(z_i, start_dim=1) for z_i in representations]
+        representations = [torch.flatten(z_i, start_dim=1)
+                           for z_i in representations]
         representations = torch.concat(representations, dim=1)
         self.batch_class_predictions = self.classifier(representations)
 
@@ -86,30 +92,126 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
 
         prefix = 'train' if self.training else 'val'
 
-        loss_classification = nn.functional.cross_entropy(self.batch_class_predictions, self.batch_classes)
+        loss_classification = nn.functional.cross_entropy(
+            self.batch_class_predictions, self.batch_classes)
         loss += loss_classification
-        loss_dict.update({f'{prefix}/loss_classification': loss_classification})
+        loss_dict.update(
+            {f'{prefix}/loss_classification': loss_classification})
         loss_dict.update({f'{prefix}/loss': loss})
-        accuracy = torch.sum(torch.argmax(self.batch_class_predictions, dim=1) == self.batch_classes) / len(self.batch_classes)
+        accuracy = torch.sum(torch.argmax(
+            self.batch_class_predictions, dim=1) == self.batch_classes) / len(self.batch_classes)
         loss_dict.update({f'{prefix}/accuracy': accuracy})
-
         return loss, loss_dict
+
+    # def log_images(
+    #         self,
+    #         batch,
+    #         N=8,
+    #         n_row=4,
+    #         sample=True,
+    #         ddim_steps=200,
+    #         ddim_eta=1,
+    #         return_keys=None,
+    #         quantize_denoised=True,
+    #         inpaint=True,
+    #         plot_denoise_rows=False,
+    #         plot_progressive_rows=True,
+    #         plot_diffusion_rows=True,
+    #         sample_classes=None,
+    #         **kwargs
+    #     ):
+    #     self.sample_classes = sample_classes
+    #     return super().log_images(
+    #         batch,
+    #         N,
+    #         n_row,
+    #         sample,
+    #         ddim_steps,
+    #         ddim_eta,
+    #         return_keys,
+    #         quantize_denoised,
+    #         inpaint,
+    #         plot_denoise_rows,
+    #         plot_progressive_rows,
+    #         plot_diffusion_rows,
+    #         **kwargs
+    #     )
 
     # @torch.no_grad()
     # def p_sample(self, x, c, t, clip_denoised=False, repeat_noise=False,
     #              return_codebook_ids=False, quantize_denoised=False, return_x0=False,
     #              temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None):
+    #     if isinstance(c, dict):
+    #         # hybrid case, c is exptected to be a dict
+    #         pass
+    #     else:
+    #         if not isinstance(c, list):
+    #             c = [c]
+    #         key = 'c_concat' if self.model.conditioning_key == 'concat' else 'c_crossattn'
+    #         c = {key: c}
     #     with torch.set_grad_enabled(True):
     #         x.requires_grad = True
     #         _, representations = self.model(x, t, **c)
     #         representations = [torch.flatten(z_i, start_dim=1) for z_i in representations]
     #         representations = torch.concat(representations, dim=1)
-    #         class_predictions = self.classifier(representations)
-    #         loss = torch.log(torch.gather(class_predictions, 1, self.sample_classes.unsqueeze(dim=1)))
+    #         class_predictions = torch.nn.functional.softmax(self.classifier(representations), dim=1)
+    #         loss = torch.log(torch.gather(class_predictions, 1,
+    #                          self.sample_classes.unsqueeze(dim=1))).sum()
     #         loss.backward()
-    #         x = x - self.sample_grad_scale * x.grad
-    #         self.optimizer_zero_grad()
-    #         x.requires_grad = False
+    #         x = x + self.sample_grad_scale * x.grad
+    #         x = x.detach()
     #     return super().p_sample(x, c, t, clip_denoised=False, repeat_noise=False,
-    #              return_codebook_ids=False, quantize_denoised=False, return_x0=False,
-    #              temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None)
+    #                             return_codebook_ids=False, quantize_denoised=False, return_x0=False,
+    #                             temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None)
+
+    # def p_mean_variance(self, x, c, t, clip_denoised: bool, return_codebook_ids=False, quantize_denoised=False,
+    #                     return_x0=False, score_corrector=None, corrector_kwargs=None):
+    #     t_in = t
+
+    #     emb = self.model.diffusion_model.get_timestep_embedding(x, t_in, None)
+
+    #     representations = self.model.diffusion_model.forward_input_blocks(x, None, emb)
+
+    #     with torch.set_grad_enabled(True):
+    #         for h in representations:
+    #             h.requires_grad = True
+    #         pooled_representations = self.model.diffusion_model.pool_representations(representations)
+    #         pooled_representations = [torch.flatten(z_i, start_dim=1) for z_i in pooled_representations]
+    #         pooled_representations = torch.concat(pooled_representations, dim=1)
+    #         class_predictions = torch.nn.functional.softmax(self.classifier(pooled_representations), dim=1)
+    #         # loss = torch.log(torch.gather(class_predictions, 1,
+    #                         #  self.sample_classes.unsqueeze(dim=1))).sum()
+    #         loss = nn.functional.cross_entropy(class_predictions, self.sample_classes)
+    #         loss.backward()
+    #         representations = [(h - 300 * h.grad).detach() for h in representations]
+
+    #     model_out = self.model.diffusion_model.forward_output_blocks(x, None, emb, representations)
+
+    #     if isinstance(model_out, tuple) and not return_codebook_ids:
+    #         model_out = model_out[0]
+
+    #     if score_corrector is not None:
+    #         assert self.parameterization == "eps"
+    #         model_out = score_corrector.modify_score(self, model_out, x, t, c, **corrector_kwargs)
+
+    #     if return_codebook_ids:
+    #         model_out, logits = model_out
+
+    #     if self.parameterization == "eps":
+    #         x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
+    #     elif self.parameterization == "x0":
+    #         x_recon = model_out
+    #     else:
+    #         raise NotImplementedError()
+
+    #     if clip_denoised:
+    #         x_recon.clamp_(-1., 1.)
+    #     if quantize_denoised:
+    #         x_recon, _, [_, _, indices] = self.first_stage_model.quantize(x_recon)
+    #     model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
+    #     if return_codebook_ids:
+    #         return model_mean, posterior_variance, posterior_log_variance, logits
+    #     elif return_x0:
+    #         return model_mean, posterior_variance, posterior_log_variance, x_recon
+    #     else:
+    #         return model_mean, posterior_variance, posterior_log_variance
