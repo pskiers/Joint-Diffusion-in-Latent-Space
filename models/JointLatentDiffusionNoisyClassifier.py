@@ -103,115 +103,86 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
         loss_dict.update({f'{prefix}/accuracy': accuracy})
         return loss, loss_dict
 
-    # def log_images(
-    #         self,
-    #         batch,
-    #         N=8,
-    #         n_row=4,
-    #         sample=True,
-    #         ddim_steps=200,
-    #         ddim_eta=1,
-    #         return_keys=None,
-    #         quantize_denoised=True,
-    #         inpaint=True,
-    #         plot_denoise_rows=False,
-    #         plot_progressive_rows=True,
-    #         plot_diffusion_rows=True,
-    #         sample_classes=None,
-    #         **kwargs
-    #     ):
-    #     self.sample_classes = sample_classes
-    #     return super().log_images(
-    #         batch,
-    #         N,
-    #         n_row,
-    #         sample,
-    #         ddim_steps,
-    #         ddim_eta,
-    #         return_keys,
-    #         quantize_denoised,
-    #         inpaint,
-    #         plot_denoise_rows,
-    #         plot_progressive_rows,
-    #         plot_diffusion_rows,
-    #         **kwargs
-    #     )
+    def log_images(
+            self,
+            batch,
+            N=8,
+            n_row=4,
+            sample=True,
+            ddim_steps=200,
+            ddim_eta=1,
+            return_keys=None,
+            quantize_denoised=True,
+            inpaint=True,
+            plot_denoise_rows=False,
+            plot_progressive_rows=True,
+            plot_diffusion_rows=True,
+            sample_classes=None,
+            **kwargs
+        ):
+        self.sample_classes = sample_classes
+        return super().log_images(
+            batch,
+            N,
+            n_row,
+            sample,
+            ddim_steps,
+            ddim_eta,
+            return_keys,
+            quantize_denoised,
+            inpaint,
+            plot_denoise_rows,
+            plot_progressive_rows,
+            plot_diffusion_rows,
+            **kwargs
+        )
 
-    # @torch.no_grad()
-    # def p_sample(self, x, c, t, clip_denoised=False, repeat_noise=False,
-    #              return_codebook_ids=False, quantize_denoised=False, return_x0=False,
-    #              temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None):
-    #     if isinstance(c, dict):
-    #         # hybrid case, c is exptected to be a dict
-    #         pass
-    #     else:
-    #         if not isinstance(c, list):
-    #             c = [c]
-    #         key = 'c_concat' if self.model.conditioning_key == 'concat' else 'c_crossattn'
-    #         c = {key: c}
-    #     with torch.set_grad_enabled(True):
-    #         x.requires_grad = True
-    #         _, representations = self.model(x, t, **c)
-    #         representations = [torch.flatten(z_i, start_dim=1) for z_i in representations]
-    #         representations = torch.concat(representations, dim=1)
-    #         class_predictions = torch.nn.functional.softmax(self.classifier(representations), dim=1)
-    #         loss = torch.log(torch.gather(class_predictions, 1,
-    #                          self.sample_classes.unsqueeze(dim=1))).sum()
-    #         loss.backward()
-    #         x = x + self.sample_grad_scale * x.grad
-    #         x = x.detach()
-    #     return super().p_sample(x, c, t, clip_denoised=False, repeat_noise=False,
-    #                             return_codebook_ids=False, quantize_denoised=False, return_x0=False,
-    #                             temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None)
+    def p_mean_variance(self, x, c, t, clip_denoised: bool, return_codebook_ids=False, quantize_denoised=False,
+                        return_x0=False, score_corrector=None, corrector_kwargs=None):
+        t_in = t
 
-    # def p_mean_variance(self, x, c, t, clip_denoised: bool, return_codebook_ids=False, quantize_denoised=False,
-    #                     return_x0=False, score_corrector=None, corrector_kwargs=None):
-    #     t_in = t
+        emb = self.model.diffusion_model.get_timestep_embedding(x, t_in, None)
 
-    #     emb = self.model.diffusion_model.get_timestep_embedding(x, t_in, None)
+        with torch.enable_grad():
+            representations = self.model.diffusion_model.forward_input_blocks(x, None, emb)
+            for h in representations:
+                h.retain_grad()
+            pooled_representations = self.model.diffusion_model.pool_representations(representations)
+            pooled_representations = [torch.flatten(z_i, start_dim=1) for z_i in pooled_representations]
+            pooled_representations = torch.concat(pooled_representations, dim=1)
+            class_predictions = self.classifier(pooled_representations)
+            # loss = -torch.log(torch.gather(class_predictions, 1, self.sample_classes.unsqueeze(dim=1))).sum()
+            loss = nn.functional.cross_entropy(class_predictions, self.sample_classes, reduction="sum")
+            loss.backward()
+            representations = [(h + self.sample_grad_scale * h.grad).detach() for h in representations]
 
-    #     representations = self.model.diffusion_model.forward_input_blocks(x, None, emb)
+        model_out = self.model.diffusion_model.forward_output_blocks(x, None, emb, representations)
 
-    #     with torch.set_grad_enabled(True):
-    #         for h in representations:
-    #             h.requires_grad = True
-    #         pooled_representations = self.model.diffusion_model.pool_representations(representations)
-    #         pooled_representations = [torch.flatten(z_i, start_dim=1) for z_i in pooled_representations]
-    #         pooled_representations = torch.concat(pooled_representations, dim=1)
-    #         class_predictions = torch.nn.functional.softmax(self.classifier(pooled_representations), dim=1)
-    #         # loss = torch.log(torch.gather(class_predictions, 1,
-    #                         #  self.sample_classes.unsqueeze(dim=1))).sum()
-    #         loss = nn.functional.cross_entropy(class_predictions, self.sample_classes)
-    #         loss.backward()
-    #         representations = [(h - 300 * h.grad).detach() for h in representations]
+        if isinstance(model_out, tuple) and not return_codebook_ids:
+            model_out = model_out[0]
 
-    #     model_out = self.model.diffusion_model.forward_output_blocks(x, None, emb, representations)
+        if score_corrector is not None:
+            assert self.parameterization == "eps"
+            model_out = score_corrector.modify_score(self, model_out, x, t, c, **corrector_kwargs)
 
-    #     if isinstance(model_out, tuple) and not return_codebook_ids:
-    #         model_out = model_out[0]
+        if return_codebook_ids:
+            model_out, logits = model_out
 
-    #     if score_corrector is not None:
-    #         assert self.parameterization == "eps"
-    #         model_out = score_corrector.modify_score(self, model_out, x, t, c, **corrector_kwargs)
+        if self.parameterization == "eps":
+            x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
+        elif self.parameterization == "x0":
+            x_recon = model_out
+        else:
+            raise NotImplementedError()
 
-    #     if return_codebook_ids:
-    #         model_out, logits = model_out
-
-    #     if self.parameterization == "eps":
-    #         x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
-    #     elif self.parameterization == "x0":
-    #         x_recon = model_out
-    #     else:
-    #         raise NotImplementedError()
-
-    #     if clip_denoised:
-    #         x_recon.clamp_(-1., 1.)
-    #     if quantize_denoised:
-    #         x_recon, _, [_, _, indices] = self.first_stage_model.quantize(x_recon)
-    #     model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
-    #     if return_codebook_ids:
-    #         return model_mean, posterior_variance, posterior_log_variance, logits
-    #     elif return_x0:
-    #         return model_mean, posterior_variance, posterior_log_variance, x_recon
-    #     else:
-    #         return model_mean, posterior_variance, posterior_log_variance
+        if clip_denoised:
+            x_recon.clamp_(-1., 1.)
+        if quantize_denoised:
+            x_recon, _, [_, _, indices] = self.first_stage_model.quantize(x_recon)
+        model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
+        if return_codebook_ids:
+            return model_mean, posterior_variance, posterior_log_variance, logits
+        elif return_x0:
+            return model_mean, posterior_variance, posterior_log_variance, x_recon
+        else:
+            return model_mean, posterior_variance, posterior_log_variance
