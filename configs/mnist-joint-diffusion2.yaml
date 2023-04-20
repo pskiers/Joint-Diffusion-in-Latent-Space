@@ -1,5 +1,5 @@
 model:
-  base_learning_rate: 5.0e-05
+  base_learning_rate: 2.0e-06
   target: ldm.models.diffusion.ddpm.LatentDiffusion
   params:
     linear_start: 0.0015
@@ -9,48 +9,48 @@ model:
     timesteps: 1000
     first_stage_key: 0
     image_size: 8
-    channels: 4
+    channels: 8
     monitor: val/loss
 
     unet_config:
       target: models.AdjustedUNet
       params:
+
         image_size: 8
-        in_channels: 4
-        out_channels: 4
+        in_channels: 8
+        out_channels: 8
         model_channels: 160
         attention_resolutions: [ 1, 2, 4 ]
         num_res_blocks: 2
         channel_mult: [ 1, 2, 3 ]
         num_head_channels: 32
-        pool_size: 4
+        pool_size: 2000
 
     first_stage_config:
       target: ldm.models.autoencoder.AutoencoderKL
       params:
-        embed_dim: 4
+        embed_dim: 8
         monitor: "val/rec_loss"
-        ckpt_path: "logs/Autoencoder_2023-04-15T23-50-00/checkpoints/last.ckpt"
+        ckpt_path: "logs/Autoencoder_2023-04-18T12-38-46/checkpoints/last.ckpt"
         ddconfig:
           double_z: True
-          z_channels: 4
+          z_channels: 8
           resolution: 32
           in_channels: 3
           out_ch: 3
-          ch: 128
-          ch_mult: [ 1,2,4 ]  # num_down = len(ch_mult)-1
+          ch: 32
+          ch_mult: [ 1,2,2 ]  # num_down = len(ch_mult)-1
           num_res_blocks: 1
-          attn_resolutions: []
+          attn_resolutions: [8]
           dropout: 0.0
         lossconfig:
           target: torch.nn.Identity
     cond_stage_config: __is_unconditional__
 
-    classifier_in_features: 4480
+    classifier_in_features: 3040
     classifier_hidden: 2048
     num_classes: 10
     classification_key: 1
-
 lightning:
   callbacks:
     image_logger:
