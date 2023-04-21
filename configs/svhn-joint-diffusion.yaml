@@ -46,6 +46,8 @@ model:
           target: torch.nn.Identity
     cond_stage_config: __is_unconditional__
 
+    sample_grad_scale: 60
+
     classifier_in_features: 4480
     classifier_hidden: 2048
     num_classes: 10
