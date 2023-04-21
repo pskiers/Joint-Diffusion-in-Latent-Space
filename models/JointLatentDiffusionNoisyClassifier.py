@@ -120,7 +120,7 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
             sample_classes=None,
             **kwargs
         ):
-        self.sample_classes = sample_classes
+        self.sample_classes = torch.tensor(sample_classes).to(self.device)
         return super().log_images(
             batch,
             N,
