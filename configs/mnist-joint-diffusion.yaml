@@ -51,6 +51,7 @@ model:
     classifier_in_features: 8192
     classifier_hidden: 2048
     num_classes: 10
+    dropout: 0.6
     classification_key: 1
 lightning:
   callbacks:

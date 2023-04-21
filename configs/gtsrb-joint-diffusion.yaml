@@ -49,6 +49,7 @@ model:
     sample_grad_scale: 60
     classifier_in_features: 4480
     classifier_hidden: 2048
+    dropout: 0.6
     num_classes: 43
     classification_key: 1
 

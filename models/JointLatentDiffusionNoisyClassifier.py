@@ -12,7 +12,8 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
         classifier_in_features,
         classifier_hidden,
         num_classes,
-        sample_grad_scale=0.4,
+        dropout=0,
+        sample_grad_scale=60,
         classification_key=1,
         num_timesteps_cond=None,
         cond_stage_key="image",
@@ -43,7 +44,8 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
         self.classification_key = classification_key
         self.classifier = nn.Sequential(
             nn.Linear(classifier_in_features, classifier_hidden),
-            nn.ReLU(),
+            nn.LeakyReLU(negative_slope=0.2),
+            nn.Dropout(p=dropout),
             nn.Linear(classifier_hidden, self.num_classes)
         )
         self.sample_grad_scale = sample_grad_scale
