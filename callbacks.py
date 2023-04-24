@@ -38,16 +38,22 @@ class FIDScoreLogger(Callback):
         block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[dims]
         self.activation_model = InceptionV3([block_idx]).to(device)
 
+    def on_train_start(self, trainer, pl_module):
+        if self.test_mu is None or self.test_sigma is None:
+            real_img_dl = trainer.train_dataloader
+            img_key = pl_module.first_stage_key if hasattr(pl_module, "first_stage_key") else 0
+
+            self.get_model_statistics(real_img_dl, img_key)
 
     @torch.no_grad()
     def get_activations(self, dataloader, img_key):
         self.activation_model.eval()
 
-        pred_arr = np.empty((len(dataloader) * dataloader.batch_size, self.dims))
+        pred_arr = np.empty((len(dataloader) * 128, self.dims))
 
         start_idx = 0
 
-        for batch in tqdm(dataloader):
+        for batch in tqdm(dataloader, desc="Calculating real FID score"):
             batch = batch[img_key].permute(0, 3, 1, 2)
             batch = batch.to(self.device)
 
@@ -77,6 +83,7 @@ class FIDScoreLogger(Callback):
     def _wandb(self, pl_module, score):
         pl_module.logger.experiment.log({"val/FID": score})
 
+    @torch.no_grad()
     def log_fid(self, pl_module, batch_idx, trainer):
         if (pl_module.global_step % self.batch_freq == 0 and
             hasattr(pl_module, "sample_log") and
@@ -89,10 +96,12 @@ class FIDScoreLogger(Callback):
             if is_train:
                 pl_module.eval()
 
-            real_img_dl = trainer.val_dataloaders[0]
+            real_img_dl = trainer.train_dataloader
             img_key = pl_module.first_stage_key if hasattr(pl_module, "first_stage_key") else 0
 
             m1, s1 = self.get_model_statistics(real_img_dl, img_key)
+            # np.save(file="svhn_mean", arr=m1)
+            # np.save(file="svhn_s", arr=s1)
             m2, s2 = self.get_samples_statistics(pl_module)
 
             score = calculate_frechet_distance(m1, s1, m2, s2)
@@ -108,7 +117,7 @@ class FIDScoreLogger(Callback):
 
         start_idx = 0
 
-        for _ in tqdm(range(int(self.samples_amount / self.metrics_batch_size))):
+        for _ in tqdm(range(int(self.samples_amount / self.metrics_batch_size)), desc="Computing FID Score"):
             pred_arr, start_idx = self.get_samples_activations(samples_generator, pred_arr, start_idx)
         mu = np.mean(pred_arr, axis=0)
         sigma = np.cov(pred_arr, rowvar=False)
