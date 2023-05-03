@@ -41,6 +41,7 @@ class JointLatentDiffusion(JointLatentDiffusionNoisyClassifier):
             **kwargs
         )
         self.x_start = None
+        self.gradient_guided_sampling = False
 
     def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False, cond_key=None, return_original_cond=False, bs=None):
         out = super().get_input(batch, k, return_first_stage_outputs, force_c_encode, cond_key, return_original_cond, bs)

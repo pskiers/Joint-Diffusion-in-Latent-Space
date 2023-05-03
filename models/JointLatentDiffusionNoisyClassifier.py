@@ -46,8 +46,10 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
             nn.Linear(classifier_in_features, classifier_hidden),
             nn.LeakyReLU(negative_slope=0.2),
             nn.Dropout(p=dropout),
+            nn.ReLU(),
             nn.Linear(classifier_hidden, self.num_classes)
         )
+        self.gradient_guided_sampling = True
         self.sample_grad_scale = sample_grad_scale
         self.batch_classes = None
         self.batch_class_predictions = None
@@ -140,6 +142,15 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
         )
 
     def p_mean_variance(self, x, c, t, clip_denoised: bool, return_codebook_ids=False, quantize_denoised=False,
+                        return_x0=False, score_corrector=None, corrector_kwargs=None):
+        if self.gradient_guided_sampling is True:
+            return self.grad_guided_p_mean_variance(x, c, t, clip_denoised, return_codebook_ids, quantize_denoised,
+                                                    return_x0, score_corrector, corrector_kwargs)
+        else:
+            return super().p_mean_variance(x, c, t, clip_denoised, return_codebook_ids, quantize_denoised,
+                                           return_x0, score_corrector, corrector_kwargs)
+
+    def grad_guided_p_mean_variance(self, x, c, t, clip_denoised: bool, return_codebook_ids=False, quantize_denoised=False,
                         return_x0=False, score_corrector=None, corrector_kwargs=None):
         t_in = t
 

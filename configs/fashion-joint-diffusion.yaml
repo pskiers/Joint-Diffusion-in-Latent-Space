@@ -30,7 +30,7 @@ model:
       params:
         embed_dim: 4
         monitor: "val/rec_loss"
-        ckpt_path: "logs/Autoencoder_2023-04-03T13-57-13/checkpoints/epoch=000035.ckpt"
+        ckpt_path: "logs/Autoencoder_2023-04-22T19-21-23/checkpoints/last.ckpt"
         ddconfig:
           double_z: True
           z_channels: 4
@@ -50,7 +50,7 @@ model:
     classifier_in_features: 4480
     classifier_hidden: 2048
     num_classes: 10
-    dropout: 0.6
+    dropout: 0.95
     classification_key: 1
 
 lightning:
