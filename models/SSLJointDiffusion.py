@@ -1,0 +1,96 @@
+import torch
+import torch.nn as nn
+from .JointLatentDiffusion import JointLatentDiffusion
+
+
+class SSLJointDiffusion(JointLatentDiffusion):
+    def __init__(
+            self,
+            first_stage_config,
+            cond_stage_config,
+            classifier_in_features,
+            classifier_hidden,
+            num_classes,
+            classification_key=1,
+            num_timesteps_cond=None,
+            cond_stage_key="image",
+            cond_stage_trainable=False,
+            concat_mode=True,
+            cond_stage_forward=None,
+            conditioning_key=None,
+            scale_factor=1,
+            scale_by_std=False,
+            *args,
+            **kwargs
+        ):
+        super().__init__(
+            first_stage_config,
+            cond_stage_config,
+            classifier_in_features,
+            classifier_hidden,
+            num_classes,
+            classification_key,
+            num_timesteps_cond,
+            cond_stage_key,
+            cond_stage_trainable,
+            concat_mode,
+            cond_stage_forward,
+            conditioning_key,
+            scale_factor,
+            scale_by_std,
+            *args,
+            **kwargs
+        )
+        self.supervised_batch_size = 256
+        self.supervised_imgs = None
+        self.supervised_labels = None
+
+    def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False, cond_key=None, return_original_cond=False, bs=None):
+        model_input = super().get_input(batch, k, return_first_stage_outputs, force_c_encode, cond_key, return_original_cond, bs)
+        sup_idx = (self.batch_classes >= 0).nonzero(as_tuple=True)
+        sup_labels = self.batch_classes[sup_idx]
+        sup_imgs = model_input[0][sup_idx]
+        if self.supervised_labels is not None:
+            self.supervised_labels = torch.cat([self.supervised_labels, sup_labels])
+        else:
+            self.supervised_labels = sup_labels
+        if self.supervised_imgs is not None:
+            self.supervised_imgs = torch.cat([self.supervised_imgs, sup_imgs])
+        else:
+            self.supervised_imgs = sup_imgs
+        self.batch_classes = None
+        return model_input
+
+    def p_losses(self, x_start, cond, t, noise=None):
+        loss, loss_dict = super().p_losses(x_start, cond, t, noise)
+        if len(self.supervised_imgs) > self.supervised_batch_size:
+            sup_imgs = self.supervised_imgs[:self.supervised_batch_size]
+            sup_labels = self.supervised_labels[:self.supervised_batch_size]
+
+            self.supervised_imgs = self.supervised_imgs[self.supervised_batch_size:]
+            self.supervised_labels = self.supervised_labels[self.supervised_batch_size:]
+
+            if isinstance(cond, dict):
+                # hybrid case, cond is exptected to be a dict
+                pass
+            else:
+                if not isinstance(cond, list):
+                    cond = [cond]
+                key = 'c_concat' if self.model.conditioning_key == 'concat' else 'c_crossattn'
+                cond = {key: cond}
+
+            _, representations = self.model(sup_imgs, torch.ones(sup_imgs.shape[0], device=self.device), **cond)
+            representations = [torch.flatten(z_i, start_dim=1) for z_i in representations]
+            representations = torch.concat(representations, dim=1)
+            preds = self.classifier(representations)
+
+            prefix = 'train' if self.training else 'val'
+
+            loss_classification = nn.functional.cross_entropy(preds, sup_labels)
+            loss += loss_classification
+            loss_dict.update(
+                {f'{prefix}/loss_classification': loss_classification})
+            loss_dict.update({f'{prefix}/loss': loss})
+            accuracy = torch.sum(torch.argmax(preds, dim=1) == sup_labels) / self.supervised_batch_size
+            loss_dict.update({f'{prefix}/accuracy': accuracy})
+        return loss, loss_dict

@@ -94,17 +94,18 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
     def p_losses(self, x_start, cond, t, noise=None):
         loss, loss_dict = super().p_losses(x_start, cond, t, noise)
 
-        prefix = 'train' if self.training else 'val'
+        if self.batch_classes is not None:
+            prefix = 'train' if self.training else 'val'
 
-        loss_classification = nn.functional.cross_entropy(
-            self.batch_class_predictions, self.batch_classes)
-        loss += loss_classification
-        loss_dict.update(
-            {f'{prefix}/loss_classification': loss_classification})
-        loss_dict.update({f'{prefix}/loss': loss})
-        accuracy = torch.sum(torch.argmax(
-            self.batch_class_predictions, dim=1) == self.batch_classes) / len(self.batch_classes)
-        loss_dict.update({f'{prefix}/accuracy': accuracy})
+            loss_classification = nn.functional.cross_entropy(
+                self.batch_class_predictions, self.batch_classes)
+            loss += loss_classification
+            loss_dict.update(
+                {f'{prefix}/loss_classification': loss_classification})
+            loss_dict.update({f'{prefix}/loss': loss})
+            accuracy = torch.sum(torch.argmax(
+                self.batch_class_predictions, dim=1) == self.batch_classes) / len(self.batch_classes)
+            loss_dict.update({f'{prefix}/accuracy': accuracy})
         return loss, loss_dict
 
     def log_images(
