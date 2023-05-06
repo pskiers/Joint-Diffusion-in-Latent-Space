@@ -47,23 +47,24 @@ class SSLJointDiffusion(JointLatentDiffusion):
 
     def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False, cond_key=None, return_original_cond=False, bs=None):
         model_input = super().get_input(batch, k, return_first_stage_outputs, force_c_encode, cond_key, return_original_cond, bs)
-        sup_idx = (self.batch_classes >= 0).nonzero(as_tuple=True)
-        sup_labels = self.batch_classes[sup_idx]
-        sup_imgs = model_input[0][sup_idx]
-        if self.supervised_labels is not None:
-            self.supervised_labels = torch.cat([self.supervised_labels, sup_labels])
-        else:
-            self.supervised_labels = sup_labels
-        if self.supervised_imgs is not None:
-            self.supervised_imgs = torch.cat([self.supervised_imgs, sup_imgs])
-        else:
-            self.supervised_imgs = sup_imgs
-        self.batch_classes = None
+        if self.training is True:
+            sup_idx = (self.batch_classes >= 0).nonzero(as_tuple=True)
+            sup_labels = self.batch_classes[sup_idx]
+            sup_imgs = model_input[0][sup_idx]
+            if self.supervised_labels is not None:
+                self.supervised_labels = torch.cat([self.supervised_labels, sup_labels])
+            else:
+                self.supervised_labels = sup_labels
+            if self.supervised_imgs is not None:
+                self.supervised_imgs = torch.cat([self.supervised_imgs, sup_imgs])
+            else:
+                self.supervised_imgs = sup_imgs
+            self.batch_classes = None
         return model_input
 
     def p_losses(self, x_start, cond, t, noise=None):
         loss, loss_dict = super().p_losses(x_start, cond, t, noise)
-        if len(self.supervised_imgs) > self.supervised_batch_size:
+        if self.supervised_imgs is not None and len(self.supervised_imgs) > self.supervised_batch_size:
             sup_imgs = self.supervised_imgs[:self.supervised_batch_size]
             sup_labels = self.supervised_labels[:self.supervised_batch_size]
 
