@@ -3,3 +3,4 @@ from .ClassifierOnLatentDiffusion import ClassifierOnLatentDiffusion
 from .JointLatentDiffusionNoisyClassifier import JointLatentDiffusionNoisyClassifier
 from .JointLatentDiffusion import JointLatentDiffusion
 from .SSLJointDiffusion import SSLJointDiffusion
+from .DiffMatch import DiffMatch
