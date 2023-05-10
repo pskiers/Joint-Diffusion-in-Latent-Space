@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
+import tensorflow as tf
 from einops import rearrange
 from .SSLJointDiffusion import SSLJointDiffusion
+from torchvision import transforms
 
 
 class DiffMatch(SSLJointDiffusion):
@@ -42,8 +44,10 @@ class DiffMatch(SSLJointDiffusion):
             *args,
             **kwargs
         )
-        self.min_confidence = 0.7
+        self.min_confidence = 0.95
         self.raw_imgs = None
+        self.strong_augmenter = torch.nn.Sequential(transforms.RandAugment(magnitude=10))
+        self.weak_augmenter = torch.nn.Sequential(transforms.RandomAffine(degrees=0, translate=(0.125, 0.125)))
 
     def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False, cond_key=None, return_original_cond=False, bs=None):
         self.raw_imgs = batch[k]
@@ -60,6 +64,9 @@ class DiffMatch(SSLJointDiffusion):
     def p_losses(self, x_start, cond, t, noise=None):
         loss, loss_dict = super().p_losses(x_start, cond, t, noise)
 
+        if not self.training:
+            return loss, loss_dict
+
         if isinstance(cond, dict):
             # hybrid case, cond is exptected to be a dict
             pass
@@ -69,21 +76,26 @@ class DiffMatch(SSLJointDiffusion):
             key = 'c_concat' if self.model.conditioning_key == 'concat' else 'c_crossattn'
             cond = {key: cond}
 
-        weakly_augmented = self.weakly_augment(self.raw_imgs)
-        encoder_posterior_weak = self.encode_first_stage(weakly_augmented)
-        z_weak = self.get_first_stage_encoding(encoder_posterior_weak).detach()
+        with torch.no_grad():
+            weakly_augmented = self.weak_augmenter(self.raw_imgs)
+            encoder_posterior_weak = self.encode_first_stage(weakly_augmented)
+            z_weak = self.get_first_stage_encoding(encoder_posterior_weak).detach()
 
-        _, weak_rep = self.model(z_weak, torch.ones(z_weak.shape[0], device=self.device), **cond)
-        weak_rep = [torch.flatten(z_i, start_dim=1) for z_i in weak_rep]
-        weak_rep = torch.concat(weak_rep, dim=1)
-        weak_preds = nn.functional.softmax(self.classifier(weak_rep), dim=1)
-        pseudo_labels = weak_preds.argmax(dim=1)
-        above_threshold_idx = (weak_preds.max(dim=1).values > self.min_confidence).nonzero(as_tuple=True)
-        pseudo_labels = pseudo_labels[above_threshold_idx]
+            _, weak_rep = self.model(z_weak, torch.ones(z_weak.shape[0], device=self.device), **cond)
+            weak_rep = [torch.flatten(z_i, start_dim=1) for z_i in weak_rep]
+            weak_rep = torch.concat(weak_rep, dim=1)
+            weak_preds = nn.functional.softmax(self.classifier(weak_rep), dim=1).detach()
+            pseudo_labels = weak_preds.argmax(dim=1)
+            above_threshold_idx ,= (weak_preds.max(dim=1).values > self.min_confidence).nonzero(as_tuple=True)
+            pseudo_labels = pseudo_labels[above_threshold_idx]
 
-        strongly_augmented = self.strongly_augment(self.raw_imgs[above_threshold_idx])
-        encoder_posterior_strong = self.encode_first_stage(strongly_augmented)
-        z_strong = self.get_first_stage_encoding(encoder_posterior_strong).detach()
+            if len(above_threshold_idx) == 0:
+                return loss, loss_dict
+
+            strongly_augmented = self.strong_augmenter((self.raw_imgs[above_threshold_idx] * 255).type(torch.uint8)) / 255
+            strongly_augmented = self.cutout(strongly_augmented, level=1)
+            encoder_posterior_strong = self.encode_first_stage(strongly_augmented)
+            z_strong = self.get_first_stage_encoding(encoder_posterior_strong).detach()
 
         _, strong_rep = self.model(z_strong, torch.ones(z_strong.shape[0], device=self.device), **cond)
         strong_rep = [torch.flatten(z_i, start_dim=1) for z_i in strong_rep]
@@ -100,10 +112,24 @@ class DiffMatch(SSLJointDiffusion):
 
         return loss, loss_dict
 
-    def weakly_augment(self, imgs):
-        # TODO
-        pass
+    def cutout(self, img_batch, level, fill=0.5):
 
-    def strongly_augment(self, imgs):
-        # TODO
-        pass
+        """
+        Apply cutout to torch tensor of shape (batch, height, width, channel) at the specified level.
+        """
+        size = 1 + int(level * min(img_batch.shape[1:3]) * 0.499)
+        batch, img_height, img_width = img_batch.shape[0:3]
+        height_loc = torch.randint(low=0, high=img_height, size=[batch])
+        width_loc = torch.randint(low=0, high=img_width, size=[batch])
+        x_uppers = (height_loc - size // 2)
+        x_uppers *= (x_uppers >= 0)
+        x_lowers = (height_loc + size // 2)
+        x_lowers -= (x_lowers >= img_height) * (x_lowers - img_height - 1)
+        y_uppers = (width_loc - size // 2)
+        y_uppers *= (y_uppers >= 0)
+        y_lowers = (width_loc + size // 2)
+        y_lowers -= (y_lowers >= img_width) * (y_lowers - img_width - 1)
+
+        for img, x_upper, x_lower, y_upper, y_lower in zip(img_batch, x_uppers, x_lowers, y_uppers, y_lowers):
+            img[x_upper:x_lower, y_upper:y_lower] = fill
+        return img_batch
