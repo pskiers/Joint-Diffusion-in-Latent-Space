@@ -104,7 +104,7 @@ class DiffMatch(SSLJointDiffusion):
         ssl_loss = nn.functional.cross_entropy(preds, pseudo_labels)
 
         prefix = 'train' if self.training else 'val'
-        loss += ssl_loss
+        loss += ssl_loss * len(preds) / len(weak_preds)
         loss_dict.update({f'{prefix}/loss_ssl_classification': ssl_loss})
         loss_dict.update({f'{prefix}/loss': loss})
         accuracy = torch.sum(torch.argmax(preds, dim=1) == pseudo_labels) / len(pseudo_labels)
@@ -139,5 +139,5 @@ class DiffMatch(SSLJointDiffusion):
         params = list(self.model.parameters())
         if self.learn_logvar:
             params = params + [self.logvar]
-        opt = torch.optim.SGD(params, lr=lr, nesterov=True)
+        opt = torch.optim.SGD(params, lr=lr, nesterov=True, momentum=0.9, weight_decay=0.0005)
         return opt
