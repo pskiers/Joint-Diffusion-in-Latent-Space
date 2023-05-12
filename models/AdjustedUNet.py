@@ -79,6 +79,24 @@ class AdjustedUNet(UNetModel):
 
         return output, pooled_representations
 
+    def just_representations(self, x, timesteps=None, context=None, y=None, **kwargs):
+        emb = self.get_timestep_embedding(x, timesteps, y)
+
+        representations = self.forward_input_blocks(x, context, emb)
+
+        pooled_representations = self.pool_representations(representations)
+
+        return pooled_representations
+
+    def just_reconstruction(self, x, timesteps=None, context=None, y=None, **kwargs):
+        emb = self.get_timestep_embedding(x, timesteps, y)
+
+        representations = self.forward_input_blocks(x, context, emb)
+
+        output = self.forward_output_blocks(x, context, emb, representations)
+
+        return output
+
     def pool_representations(self, representations):
         pooled_representations = []
         for h in representations:
