@@ -60,6 +60,7 @@ class SSLJointDiffusion(JointLatentDiffusion):
             else:
                 self.supervised_imgs = sup_imgs
             self.batch_classes = None
+            self.x_start = None
         return model_input
 
     def p_losses(self, x_start, cond, t, noise=None):
@@ -80,7 +81,9 @@ class SSLJointDiffusion(JointLatentDiffusion):
                 key = 'c_concat' if self.model.conditioning_key == 'concat' else 'c_crossattn'
                 cond = {key: cond}
 
-            _, representations = self.model(sup_imgs, torch.ones(sup_imgs.shape[0], device=self.device), **cond)
+            representations = self.model.diffusion_model.just_representations(
+                sup_imgs, torch.ones(sup_imgs.shape[0], device=self.device)
+            )
             representations = [torch.flatten(z_i, start_dim=1) for z_i in representations]
             representations = torch.concat(representations, dim=1)
             preds = self.classifier(representations)
@@ -89,8 +92,7 @@ class SSLJointDiffusion(JointLatentDiffusion):
 
             loss_classification = nn.functional.cross_entropy(preds, sup_labels)
             loss += loss_classification
-            loss_dict.update(
-                {f'{prefix}/loss_classification': loss_classification})
+            loss_dict.update({f'{prefix}/loss_classification': loss_classification})
             loss_dict.update({f'{prefix}/loss': loss})
             accuracy = torch.sum(torch.argmax(preds, dim=1) == sup_labels) / self.supervised_batch_size
             loss_dict.update({f'{prefix}/accuracy': accuracy})
