@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from einops import rearrange
+import kornia as K
 from .JointLatentDiffusion import JointLatentDiffusion
 
 
@@ -145,6 +146,18 @@ class SSLJointDiffusionV2(JointLatentDiffusion):
         self.supervised_skip_n = 7
         self.supervised_skip_current = 7
 
+        img_size = first_stage_config['params']['ddconfig']['resolution']
+        self.augmentation = K.augmentation.ImageSequential(
+            K.augmentation.ColorJitter(0.1, 0.1, 0.1, 0.1, p=0.25),
+            K.augmentation.RandomResizedCrop((img_size, img_size), scale=(0.5, 1), p=0.25),
+            K.augmentation.RandomRotation((-30, 30), p=0.25),
+            # K.augmentation.RandomHorizontalFlip(0.5),
+            K.augmentation.RandomContrast((0.6, 1.8), p=0.25),
+            K.augmentation.RandomSharpness((0.4, 2), p=0.25),
+            K.augmentation.RandomBrightness((0.6, 1.8), p=0.25),
+            K.augmentation.RandomMixUpV2(p=0.5),
+        )
+
     def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False, cond_key=None, return_original_cond=False, bs=None):
         model_input = super().get_input(batch, k, return_first_stage_outputs, force_c_encode, cond_key, return_original_cond, bs)
         if self.training is True:
@@ -156,7 +169,7 @@ class SSLJointDiffusionV2(JointLatentDiffusion):
                 self.supervised_skip_current -= 1
             else:
                 try:
-                    batch = next(self.supervised_iterator)
+                    b = next(self.supervised_iterator)
                 except (StopIteration, TypeError):
                     self.supervised_iterator = iter(self.supervised_dataloader)
                     b = next(self.supervised_iterator)
@@ -165,6 +178,7 @@ class SSLJointDiffusionV2(JointLatentDiffusion):
                     sup_imgs = sup_imgs[..., None]
                 sup_imgs = rearrange(sup_imgs, 'b h w c -> b c h w')
                 sup_imgs = sup_imgs.to(memory_format=torch.contiguous_format).float().to(self.device)
+                sup_imgs = self.augmentation(sup_imgs)
                 sup_imgs = self.encode_first_stage(sup_imgs)
                 self.supervised_imgs = self.get_first_stage_encoding(sup_imgs).detach()
                 self.supervised_labels = b[self.classification_key].to(self.device)
