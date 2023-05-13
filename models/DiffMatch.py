@@ -81,7 +81,9 @@ class DiffMatch(SSLJointDiffusion):
             encoder_posterior_weak = self.encode_first_stage(weakly_augmented)
             z_weak = self.get_first_stage_encoding(encoder_posterior_weak).detach()
 
-            _, weak_rep = self.model(z_weak, torch.ones(z_weak.shape[0], device=self.device), **cond)
+            weak_rep = self.model.diffusion_model.just_representations(
+                z_weak, torch.ones(z_weak.shape[0], device=self.device)
+            )
             weak_rep = [torch.flatten(z_i, start_dim=1) for z_i in weak_rep]
             weak_rep = torch.concat(weak_rep, dim=1)
             weak_preds = nn.functional.softmax(self.classifier(weak_rep), dim=1).detach()
@@ -97,7 +99,9 @@ class DiffMatch(SSLJointDiffusion):
             encoder_posterior_strong = self.encode_first_stage(strongly_augmented)
             z_strong = self.get_first_stage_encoding(encoder_posterior_strong).detach()
 
-        _, strong_rep = self.model(z_strong, torch.ones(z_strong.shape[0], device=self.device), **cond)
+        strong_rep = self.model.diffusion_model.just_representations(
+            z_strong, torch.ones(z_strong.shape[0], device=self.device)
+        )
         strong_rep = [torch.flatten(z_i, start_dim=1) for z_i in strong_rep]
         strong_rep = torch.concat(strong_rep, dim=1)
         preds = self.classifier(strong_rep)
