@@ -217,6 +217,7 @@ class DiffMatchV2(SSLJointDiffusionV2):
                 cond = [cond]
             key = 'c_concat' if self.model.conditioning_key == 'concat' else 'c_crossattn'
             cond = {key: cond}
+        prefix = 'train' if self.training else 'val'
 
         with torch.no_grad():
             weakly_augmented = self.augmentation(self.raw_imgs)
@@ -233,7 +234,7 @@ class DiffMatchV2(SSLJointDiffusionV2):
             above_threshold_idx ,= (weak_preds.max(dim=1).values > self.min_confidence).nonzero(as_tuple=True)
             pseudo_labels = pseudo_labels[above_threshold_idx]
 
-            loss_dict.update({f'{prefix}/ssl_above_threshold': len(above_threshold_idx) / len(pseudo_labels)})
+            loss_dict.update({f'{prefix}/ssl_above_threshold': len(above_threshold_idx) / len(weak_preds)})
             if len(above_threshold_idx) == 0:
                 return loss, loss_dict
 
@@ -250,7 +251,6 @@ class DiffMatchV2(SSLJointDiffusionV2):
         preds = self.classifier(strong_rep)
         ssl_loss = nn.functional.cross_entropy(preds, pseudo_labels)
 
-        prefix = 'train' if self.training else 'val'
         loss += ssl_loss * len(preds) / len(weak_preds)
         loss_dict.update({f'{prefix}/loss_ssl_classification': ssl_loss})
         loss_dict.update({f'{prefix}/loss': loss})
@@ -286,5 +286,5 @@ class DiffMatchV2(SSLJointDiffusionV2):
         params = list(self.model.parameters())
         if self.learn_logvar:
             params = params + [self.logvar]
-        opt = torch.optim.SGD(params, lr=lr, nesterov=True, momentum=0.9, weight_decay=0.0005)
+        opt = torch.optim.SGD(params, lr=lr, nesterov=True, momentum=0.9)#, weight_decay=0.0005)
         return opt
