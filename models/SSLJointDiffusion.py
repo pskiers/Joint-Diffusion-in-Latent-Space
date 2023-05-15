@@ -157,6 +157,10 @@ class SSLJointDiffusionV2(JointLatentDiffusion):
             K.augmentation.RandomBrightness((0.6, 1.8), p=0.25),
             K.augmentation.RandomMixUpV2(p=0.5),
         )
+        if kwargs.get("ckpt_path", None) is not None:
+            ignore_keys = kwargs.get("ignore_keys", [])
+            only_model = kwargs.get("load_only_unet", False)
+            self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
 
     def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False, cond_key=None, return_original_cond=False, bs=None):
         model_input = super().get_input(batch, k, return_first_stage_outputs, force_c_encode, cond_key, return_original_cond, bs)

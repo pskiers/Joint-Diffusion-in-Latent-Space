@@ -48,6 +48,10 @@ class DiffMatch(SSLJointDiffusion):
         self.raw_imgs = None
         self.strong_augmenter = torch.nn.Sequential(transforms.RandAugment(magnitude=10))
         self.weak_augmenter = torch.nn.Sequential(transforms.RandomAffine(degrees=0, translate=(0.125, 0.125)))
+        if kwargs.get("ckpt_path", None) is not None:
+            ignore_keys = kwargs.get("ignore_keys", [])
+            only_model = kwargs.get("load_only_unet", False)
+            self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
 
     def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False, cond_key=None, return_original_cond=False, bs=None):
         self.raw_imgs = batch[k]
@@ -190,6 +194,10 @@ class DiffMatchV2(SSLJointDiffusionV2):
         self.raw_imgs = None
         self.augmentation = K.augmentation.ImageSequential(K.augmentation.RandomAffine(degrees=0, translate=(0.125, 0.125)))
         self.strong_augmentation = K.augmentation.AugmentationSequential(K.augmentation.auto.RandAugment(n=2, m=10))
+        if kwargs.get("ckpt_path", None) is not None:
+            ignore_keys = kwargs.get("ignore_keys", [])
+            only_model = kwargs.get("load_only_unet", False)
+            self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
 
     def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False, cond_key=None, return_original_cond=False, bs=None):
         if self.training:
