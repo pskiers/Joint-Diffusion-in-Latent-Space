@@ -1,17 +1,17 @@
-import tensorflow as tf
+# import tensorflow as tf
 from ldm.models.diffusion.ddpm import LatentDiffusion
 from omegaconf import OmegaConf
 import argparse
 import torch
 import pytorch_lightning as pl
-from models.ClassifierOnLatentDiffusion import ClassifierOnLatentDiffusion
-from datasets import AdjustedMNIST
+from models import ClassifierOnLatentDiffusion, AttentionOnLatentDiffusion
+from datasets import AdjustedMNIST, AdjustedSVHN
 from os import listdir, path
 import datetime
 from callbacks import ImageLogger, CUDACallback, SetupCallback, FIDScoreLogger
 
 if __name__ == "__main__":
-    config = OmegaConf.load("configs/mnist-simple-classifier-ldm_mnist.yaml")
+    config = OmegaConf.load("configs/svhn-simple-classifier-ldm.yaml")
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
@@ -21,8 +21,8 @@ if __name__ == "__main__":
     trainer_opt = argparse.Namespace(**trainer_config)
     lightning_config.trainer = trainer_config
 
-    train_ds = AdjustedMNIST(train=True)
-    test_ds = AdjustedMNIST(train=False)
+    train_ds = AdjustedSVHN(train="train")
+    test_ds = AdjustedSVHN(train="test")
     train_ds, validation_ds = torch.utils.data.random_split(train_ds, [len(train_ds)-len(test_ds), len(test_ds)], generator=torch.Generator().manual_seed(42))
 
     train_dl = torch.utils.data.DataLoader(train_ds, batch_size=256, shuffle=True, num_workers=0, drop_last=True)
@@ -32,15 +32,23 @@ if __name__ == "__main__":
     model = LatentDiffusion(**config.model.get("params", dict()))
     model.learning_rate = config.model.base_learning_rate
 
+    # classifier_model = AttentionOnLatentDiffusion(
+    #     trained_diffusion=model,
+    #     num_classes=10,
+    #     channels=160,
+    #     dim_head=32,
+    #     context_dims=[160, 160, 160, 160, 320, 320, 320, 480, 480, 480],
+    #     mlp_size=2560,
+    #     hidden_size=1024,
+    # )
     classifier_model = ClassifierOnLatentDiffusion(
         trained_diffusion=model,
         num_classes=10,
-        in_features=8192,
-        hidden_layer=2048
-    )
+        in_features=3040,
+        hidden_layer=2048,)
 
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-    nowname = "ClassifierOnLatentDiffusion_" + now
+    nowname = classifier_model.__class__.__name__ + "_" + now
     logdir = path.join("logs", nowname)
     ckptdir = path.join(logdir, "checkpoints")
     cfgdir = path.join(logdir, "configs")

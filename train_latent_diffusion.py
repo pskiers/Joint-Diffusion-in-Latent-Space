@@ -1,4 +1,4 @@
-import tensorflow as tf     # for some reason this is needed to avoid a crash
+# import tensorflow as tf     # for some reason this is needed to avoid a crash
 from ldm.models.diffusion.ddpm import LatentDiffusion
 from omegaconf import OmegaConf
 import argparse
@@ -8,12 +8,12 @@ import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 from os import listdir, path
 import datetime
-from datasets import AdjustedMNIST, AdjustedCIFAR10
+from datasets import AdjustedMNIST, AdjustedCIFAR10, AdjustedSVHN
 from callbacks import ImageLogger, CUDACallback, SetupCallback, FIDScoreLogger
 
 
 if __name__ == "__main__":
-    config = OmegaConf.load("configs/cifar10-ldm-autoencoder_cifar10.yaml")
+    config = OmegaConf.load("configs/svhn-ldm.yaml")
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
@@ -23,8 +23,8 @@ if __name__ == "__main__":
     trainer_opt = argparse.Namespace(**trainer_config)
     lightning_config.trainer = trainer_config
 
-    train_ds = AdjustedCIFAR10(train=True)
-    test_ds = AdjustedCIFAR10(train=False)
+    train_ds = AdjustedSVHN(train="train")
+    test_ds = AdjustedSVHN(train="test")
     train_ds, validation_ds = torch.utils.data.random_split(train_ds, [len(train_ds)-len(test_ds), len(test_ds)], generator=torch.Generator().manual_seed(42))
 
     train_dl = torch.utils.data.DataLoader(train_ds, batch_size=128, shuffle=True, num_workers=0, drop_last=True)
@@ -33,7 +33,7 @@ if __name__ == "__main__":
 
     # i = 23
     # files = listdir(f"lightning_logs/version_{i}/checkpoints")
-    config.model.params["ckpt_path"] = f"logs/LatentDiffusion_2023-03-28T08-23-58/checkpoints/last.ckpt"
+    # config.model.params["ckpt_path"] = f"logs/LatentDiffusion_2023-03-28T08-23-58/checkpoints/last.ckpt"
 
     model = LatentDiffusion(**config.model.get("params", dict()))
     model.learning_rate = config.model.base_learning_rate
@@ -69,7 +69,7 @@ if __name__ == "__main__":
         pl.callbacks.ModelCheckpoint(**default_modelckpt_cfg["params"]),
         SetupCallback(resume=False, now=now, logdir=logdir, ckptdir=ckptdir, cfgdir=cfgdir, config=config, lightning_config=lightning_config),
         ImageLogger(batch_frequency=2000, max_images=8, clamp=True, increase_log_steps=False, log_images_kwargs={"inpaint": False}),
-        FIDScoreLogger(batch_frequency=10000, samples_amount=5000, metrics_batch_size=64, device=torch.device("cuda"), means_path="fid_saves/cifar10/cifar_means.npy", sigma_path="fid_saves/cifar10/cifar_sigmas.npy"),
+        # FIDScoreLogger(batch_frequency=10000, samples_amount=5000, metrics_batch_size=64, device=torch.device("cuda"), means_path="fid_saves/cifar10/cifar_means.npy", sigma_path="fid_saves/cifar10/cifar_sigmas.npy"),
         CUDACallback()
     ]
 

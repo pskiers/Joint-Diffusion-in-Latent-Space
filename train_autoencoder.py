@@ -7,12 +7,12 @@ import torch
 import pytorch_lightning as pl
 from os import listdir, path
 import datetime
-from datasets import AdjustedMNIST, AdjustedCIFAR10, AdjustedFashionMNIST, AdjustedSVHN
+from datasets import AdjustedMNIST, AdjustedCIFAR10, AdjustedFashionMNIST, AdjustedSVHN, GTSRB
 from callbacks import ImageLogger, CUDACallback, SetupCallback
 
 
 if __name__ == "__main__":
-    config = OmegaConf.load("configs/autoencoder_shvm.yaml")
+    config = OmegaConf.load("configs/autoencoder_fashionmnist.yaml")
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
@@ -25,13 +25,16 @@ if __name__ == "__main__":
 
     config.model.params["image_key"] = 0
 
-    train_ds = AdjustedSVHN(train="train")
-    test_ds = AdjustedSVHN(train="test")
+    # train_ds = GTSRB(path="data/gtsrb/train")
+    # test_ds = GTSRB(train=False)
+    train_ds = AdjustedFashionMNIST(train=True)
+    test_ds = AdjustedFashionMNIST(train=False)
+    # train_ds, validation_ds = torch.utils.data.random_split(train_ds, [len(train_ds)-int(0.2*len(train_ds)), int(0.2*len(train_ds))], generator=torch.Generator().manual_seed(42))
     train_ds, validation_ds = torch.utils.data.random_split(train_ds, [len(train_ds)-len(test_ds), len(test_ds)], generator=torch.Generator().manual_seed(42))
 
-    train_dl = torch.utils.data.DataLoader(train_ds, batch_size=96, shuffle=True, num_workers=0, drop_last=True)
-    valid_dl = torch.utils.data.DataLoader(validation_ds, batch_size=96, shuffle=False, num_workers=0)
-    test_dl = torch.utils.data.DataLoader(test_ds, batch_size=96, shuffle=False, num_workers=0)
+    train_dl = torch.utils.data.DataLoader(train_ds, batch_size=64, shuffle=True, num_workers=0, drop_last=True)
+    valid_dl = torch.utils.data.DataLoader(validation_ds, batch_size=64, shuffle=False, num_workers=0)
+    # test_dl = torch.utils.data.DataLoader(test_ds, batch_size=64, shuffle=False, num_workers=0)
 
 
     # files = listdir(f"logs/Autoencoder_2023-03-18T21-40-57/checkpoints")
@@ -64,7 +67,7 @@ if __name__ == "__main__":
     if hasattr(model, "monitor"):
         print(f"Monitoring {model.monitor} as checkpoint metric.")
         default_modelckpt_cfg["params"]["monitor"] = model.monitor
-        default_modelckpt_cfg["params"]["save_top_k"] = 3
+        default_modelckpt_cfg["params"]["save_top_k"] = 1
 
     trainer_kwargs["checkpoint_callback"] = True
 
@@ -76,7 +79,7 @@ if __name__ == "__main__":
     ]
 
     trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
-    trainer.logdir = logdir  ###
+    trainer.logdir = logdir
 
     try:
         trainer.fit(model=model, train_dataloaders=train_dl, val_dataloaders=valid_dl)
