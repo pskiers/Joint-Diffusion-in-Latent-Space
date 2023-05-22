@@ -243,6 +243,7 @@ class DiffMatchV2(SSLJointDiffusionV2):
             pseudo_labels = pseudo_labels[above_threshold_idx]
 
             loss_dict.update({f'{prefix}/ssl_above_threshold': len(above_threshold_idx) / len(weak_preds)})
+            loss_dict.update({f'{prefix}/ssl_max_confidence': weak_preds.max()})
             if len(above_threshold_idx) == 0:
                 return loss, loss_dict
 
