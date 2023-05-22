@@ -10,7 +10,7 @@ model:
     first_stage_key: 0
     image_size: 8
     channels: 4
-    monitor: val/loss
+    monitor: val/loss_simple_ema
 
     unet_config:
       target: models.AdjustedUNet
@@ -23,7 +23,7 @@ model:
         num_res_blocks: 2
         channel_mult: [ 1, 2, 3 ]
         num_head_channels: 32
-        pool_size: 10000
+        pool_size: 4
 
     first_stage_config:
       target: ldm.models.autoencoder.AutoencoderKL
@@ -45,14 +45,6 @@ model:
         lossconfig:
           target: torch.nn.Identity
     cond_stage_config: __is_unconditional__
-
-    sample_grad_scale: 60
-
-    classifier_in_features: 3040
-    classifier_hidden: 2048
-    num_classes: 10
-    dropout: 0.0
-    classification_key: 1
 
 lightning:
   callbacks:

@@ -1,5 +1,5 @@
 model:
-  base_learning_rate: 5.0e-05
+  base_learning_rate: 3.0e-02
   target: ldm.models.diffusion.ddpm.LatentDiffusion
   params:
     linear_start: 0.0015
@@ -50,7 +50,7 @@ model:
     classifier_in_features: 4480
     classifier_hidden: 2048
     num_classes: 10
-    dropout: 0.95
+    dropout: 0.0
     classification_key: 1
 
 lightning:
