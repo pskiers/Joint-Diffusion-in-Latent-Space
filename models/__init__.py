@@ -1,7 +1,7 @@
-from .AdjustedUNet import AdjustedUNet
-from .ClassifierOnLatentDiffusion import ClassifierOnLatentDiffusion
-from .JointLatentDiffusionNoisyClassifier import JointLatentDiffusionNoisyClassifier
-from .JointLatentDiffusion import JointLatentDiffusion
-from .SSLJointDiffusion import SSLJointDiffusion, SSLJointDiffusionV2
-from .DiffMatch import DiffMatch, DiffMatchV2
-from .AttentionOnLatentDiffusion import AttentionOnLatentDiffusion
+from .adjusted_unet import AdjustedUNet
+from .classifier_on_latent_diffusion import ClassifierOnLatentDiffusion
+from .joint_latent_diffusion_noisy_classifier import JointLatentDiffusionNoisyClassifier
+from .joint_latent_diffusion import JointLatentDiffusion
+from .ssl_joint_diffusion import SSLJointDiffusion, SSLJointDiffusionV2
+from .diff_match import DiffMatch, DiffMatchV2
+from .attention_on_latent_diffusion import AttentionOnLatentDiffusion

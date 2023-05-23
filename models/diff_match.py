@@ -3,7 +3,7 @@ import torch.nn as nn
 from torchvision import transforms
 from einops import rearrange
 import kornia as K
-from .SSLJointDiffusion import SSLJointDiffusion, SSLJointDiffusionV2
+from .ssl_joint_diffusion import SSLJointDiffusion, SSLJointDiffusionV2
 
 
 class DiffMatch(SSLJointDiffusion):

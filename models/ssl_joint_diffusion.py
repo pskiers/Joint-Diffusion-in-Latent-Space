@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 import kornia as K
-from .JointLatentDiffusion import JointLatentDiffusion
+from .joint_latent_diffusion import JointLatentDiffusion
 
 
 class SSLJointDiffusion(JointLatentDiffusion):

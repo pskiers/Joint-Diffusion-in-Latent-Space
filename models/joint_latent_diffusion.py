@@ -1,5 +1,5 @@
 import torch
-from .JointLatentDiffusionNoisyClassifier import JointLatentDiffusionNoisyClassifier
+from .joint_latent_diffusion_noisy_classifier import JointLatentDiffusionNoisyClassifier
 
 
 class JointLatentDiffusion(JointLatentDiffusionNoisyClassifier):
