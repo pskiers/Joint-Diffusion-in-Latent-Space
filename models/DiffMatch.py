@@ -289,11 +289,3 @@ class DiffMatchV2(SSLJointDiffusionV2):
         for img, x_upper, x_lower, y_upper, y_lower in zip(img_batch, x_uppers, x_lowers, y_uppers, y_lowers):
             img[x_upper:x_lower, y_upper:y_lower] = fill
         return img_batch
-
-    def configure_optimizers(self):
-        lr = self.learning_rate
-        params = list(self.model.parameters())
-        if self.learn_logvar:
-            params = params + [self.logvar]
-        opt = torch.optim.SGD(params, lr=lr, nesterov=True, momentum=0.9)#, weight_decay=0.0005)
-        return opt

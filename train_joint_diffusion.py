@@ -35,7 +35,7 @@ if __name__ == "__main__":
     valid_dl = torch.utils.data.DataLoader(test_ds, batch_size=128, shuffle=False, num_workers=0)
     # test_dl = torch.utils.data.DataLoader(test_ds, batch_size=128, shuffle=False, num_workers=0)
 
-    config.model.params["ckpt_path"] = f"logs/JointDiffusion_2023-05-16T02-41-02/checkpoints/last.ckpt"
+    # config.model.params["ckpt_path"] = f"logs/JointDiffusion_2023-05-16T02-41-02/checkpoints/last.ckpt"
 
     model = DiffMatchV2(**config.model.get("params", dict()))
     # model.min_confidence = 0

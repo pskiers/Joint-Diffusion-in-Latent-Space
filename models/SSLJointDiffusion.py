@@ -145,6 +145,7 @@ class SSLJointDiffusionV2(JointLatentDiffusion):
         self.supervised_iterator = None
         self.supervised_skip_n = 7
         self.supervised_skip_current = 7
+        self.classification_loss_scale = 1.0
 
         img_size = first_stage_config['params']['ddconfig']['resolution']
         self.augmentation = K.augmentation.ImageSequential(
@@ -211,7 +212,7 @@ class SSLJointDiffusionV2(JointLatentDiffusion):
 
             prefix = 'train' if self.training else 'val'
 
-            loss_classification = nn.functional.cross_entropy(preds, self.supervised_labels)
+            loss_classification = nn.functional.cross_entropy(preds, self.supervised_labels) * self.classification_loss_scale
             loss += loss_classification
             loss_dict.update(
                 {f'{prefix}/loss_classification': loss_classification})
