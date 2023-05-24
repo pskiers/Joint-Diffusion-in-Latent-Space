@@ -4,6 +4,7 @@ from torchvision import transforms
 from einops import rearrange
 import kornia as K
 from .ssl_joint_diffusion import SSLJointDiffusion, SSLJointDiffusionV2
+from .representation_transformer import RepresentationTransformer
 
 
 class DiffMatch(SSLJointDiffusion):
@@ -233,10 +234,11 @@ class DiffMatchV2(SSLJointDiffusionV2):
             z_weak = self.get_first_stage_encoding(encoder_posterior_weak).detach()
 
             weak_rep = self.model.diffusion_model.just_representations(
-                z_weak, torch.ones(z_weak.shape[0], device=self.device)
+                z_weak,
+                torch.ones(z_weak.shape[0], device=self.device),
+                pooled=False
             )
-            weak_rep = [torch.flatten(z_i, start_dim=1) for z_i in weak_rep]
-            weak_rep = torch.concat(weak_rep, dim=1)
+            weak_rep = self.transform_representations(weak_rep)
             weak_preds = nn.functional.softmax(self.classifier(weak_rep), dim=1).detach()
             pseudo_labels = weak_preds.argmax(dim=1)
             above_threshold_idx ,= (weak_preds.max(dim=1).values > self.min_confidence).nonzero(as_tuple=True)
@@ -253,10 +255,11 @@ class DiffMatchV2(SSLJointDiffusionV2):
             z_strong = self.get_first_stage_encoding(encoder_posterior_strong).detach()
 
         strong_rep = self.model.diffusion_model.just_representations(
-            z_strong, torch.ones(z_strong.shape[0], device=self.device)
+            z_strong,
+            torch.ones(z_strong.shape[0], device=self.device),
+            pooled=False
         )
-        strong_rep = [torch.flatten(z_i, start_dim=1) for z_i in strong_rep]
-        strong_rep = torch.concat(strong_rep, dim=1)
+        strong_rep = self.transform_representations(strong_rep)
         preds = self.classifier(strong_rep)
         ssl_loss = nn.functional.cross_entropy(preds, pseudo_labels)
 
@@ -289,3 +292,49 @@ class DiffMatchV2(SSLJointDiffusionV2):
         for img, x_upper, x_lower, y_upper, y_lower in zip(img_batch, x_uppers, x_lowers, y_uppers, y_lowers):
             img[x_upper:x_lower, y_upper:y_lower] = fill
         return img_batch
+
+
+class DiffMatchV3(DiffMatchV2):
+    def __init__(
+            self,
+            first_stage_config,
+            cond_stage_config,
+            attention_config,
+            classification_key=1,
+            num_timesteps_cond=None,
+            cond_stage_key="image",
+            cond_stage_trainable=False,
+            concat_mode=True,
+            cond_stage_forward=None,
+            conditioning_key=None,
+            scale_factor=1,
+            scale_by_std=False,
+            *args,
+            **kwargs
+        ):
+        super().__init__(
+            first_stage_config,
+            cond_stage_config,
+            0,
+            0,
+            0,
+            classification_key,
+            num_timesteps_cond,
+            cond_stage_key,
+            cond_stage_trainable,
+            concat_mode,
+            cond_stage_forward,
+            conditioning_key,
+            scale_factor,
+            scale_by_std,
+            *args,
+            **kwargs
+        )
+        self.classifier = RepresentationTransformer(**attention_config)
+        if kwargs.get("ckpt_path", None) is not None:
+            ignore_keys = kwargs.get("ignore_keys", [])
+            only_model = kwargs.get("load_only_unet", False)
+            self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
+
+    def transform_representations(self, representations):
+        return representations
