@@ -60,7 +60,7 @@ class AdjustedUNet(UNetModel):
         )
         self.pool_size = pool_size
 
-    def forward(self, x, timesteps=None, context=None, y=None, **kwargs):
+    def forward(self, x, timesteps=None, context=None, y=None, pooled=True, **kwargs):
         """
         Apply the model to an input batch.
         :param x: an [N x C x ...] Tensor of inputs.
@@ -75,18 +75,20 @@ class AdjustedUNet(UNetModel):
 
         output = self.forward_output_blocks(x, context, emb, representations)
 
-        pooled_representations = self.pool_representations(representations)
+        if pooled is True:
+            representations = self.pool_representations(representations)
 
-        return output, pooled_representations
+        return output, representations
 
-    def just_representations(self, x, timesteps=None, context=None, y=None, **kwargs):
+    def just_representations(self, x, timesteps=None, context=None, y=None, pooled=True, **kwargs):
         emb = self.get_timestep_embedding(x, timesteps, y)
 
         representations = self.forward_input_blocks(x, context, emb)
 
-        pooled_representations = self.pool_representations(representations)
+        if pooled is True:
+            representations = self.pool_representations(representations)
 
-        return pooled_representations
+        return representations
 
     def just_reconstruction(self, x, timesteps=None, context=None, y=None, **kwargs):
         emb = self.get_timestep_embedding(x, timesteps, y)
