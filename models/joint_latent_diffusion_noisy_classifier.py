@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from ldm.models.diffusion.ddpm import LatentDiffusion
-from ldm.modules.diffusionmodules.util import noise_like
+from .attention_on_latent_diffusion import RepresentationTransformer
 
 
 class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
@@ -67,23 +67,12 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
         return super().get_input(batch, k, return_first_stage_outputs, force_c_encode, cond_key, return_original_cond, bs)
 
     def apply_model(self, x_noisy, t, cond, return_ids=False):
-        if isinstance(cond, dict):
-            # hybrid case, cond is exptected to be a dict
-            pass
-        else:
-            if not isinstance(cond, list):
-                cond = [cond]
-            key = 'c_concat' if self.model.conditioning_key == 'concat' else 'c_crossattn'
-            cond = {key: cond}
-
         if hasattr(self, "split_input_params"):
             raise NotImplementedError(
                 "This feature is not available for this model")
 
-        x_recon, representations = self.model(x_noisy, t, **cond)
-        representations = [torch.flatten(z_i, start_dim=1)
-                           for z_i in representations]
-        representations = torch.concat(representations, dim=1)
+        x_recon, representations = self.model.diffusion_model(x_noisy, t, pooled=False)
+        representations = self.transform_representations(representations)
         self.batch_class_predictions = self.classifier(representations)
 
         if isinstance(x_recon, tuple) and not return_ids:
@@ -161,9 +150,7 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
             representations = self.model.diffusion_model.forward_input_blocks(x, None, emb)
             for h in representations:
                 h.retain_grad()
-            pooled_representations = self.model.diffusion_model.pool_representations(representations)
-            pooled_representations = [torch.flatten(z_i, start_dim=1) for z_i in pooled_representations]
-            pooled_representations = torch.concat(pooled_representations, dim=1)
+            pooled_representations = self.transform_representations(representations)
             class_predictions = self.classifier(pooled_representations)
             # loss = -torch.log(torch.gather(class_predictions, 1, self.sample_classes.unsqueeze(dim=1))).sum()
             loss = nn.functional.cross_entropy(class_predictions, self.sample_classes, reduction="sum")
@@ -200,3 +187,60 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
             return model_mean, posterior_variance, posterior_log_variance, x_recon
         else:
             return model_mean, posterior_variance, posterior_log_variance
+
+    def transform_representations(self, representations):
+        representations = self.model.diffusion_model.pool_representations(representations)
+        representations = [torch.flatten(z_i, start_dim=1)
+                           for z_i in representations]
+        representations = torch.concat(representations, dim=1)
+        return representations
+
+
+class JointLatentDiffusionNoisyAttention(JointLatentDiffusionNoisyClassifier):
+    def __init__(
+            self,
+            first_stage_config,
+            cond_stage_config,
+            attention_config,
+            sample_grad_scale=60,
+            classification_key=1,
+            num_timesteps_cond=None,
+            cond_stage_key="image",
+            cond_stage_trainable=False,
+            concat_mode=True,
+            cond_stage_forward=None,
+            conditioning_key=None,
+            scale_factor=1,
+            scale_by_std=False,
+            *args,
+            **kwargs
+        ):
+        super().__init__(
+            first_stage_config=first_stage_config,
+            cond_stage_config=cond_stage_config,
+            classifier_in_features=0,
+            classifier_hidden=0,
+            num_classes=0,
+            dropout=0,
+            sample_grad_scale=sample_grad_scale,
+            classification_key=classification_key,
+            num_timesteps_cond=num_timesteps_cond,
+            cond_stage_key=cond_stage_key,
+            cond_stage_trainable=cond_stage_trainable,
+            concat_mode=concat_mode,
+            cond_stage_forward=cond_stage_forward,
+            conditioning_key=conditioning_key,
+            scale_factor=scale_factor,
+            scale_by_std=scale_by_std,
+            *args,
+            **kwargs
+        )
+        self.classifier = RepresentationTransformer(**attention_config)
+        if kwargs.get("ckpt_path", None) is not None:
+            ignore_keys = kwargs.get("ignore_keys", [])
+            only_model = kwargs.get("load_only_unet", False)
+            self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
+
+
+    def transform_representations(self, representations):
+        return representations
