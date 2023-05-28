@@ -40,7 +40,7 @@ class RepresentationTransformer(nn.Module):
 
     def forward(self, repr: List[torch.Tensor]) -> torch.Tensor:
         x = None
-        for z_i, transformer, projection, norm in zip(repr, self.attn_blocks, self.repr_projections, self.norms):
+        for z_i, transformer, projection, norm in zip(repr[::-1], self.attn_blocks, self.repr_projections, self.norms):
             context = norm(z_i)
             context = projection(context)
             context = rearrange(context, 'b c h w -> b (h w) c')

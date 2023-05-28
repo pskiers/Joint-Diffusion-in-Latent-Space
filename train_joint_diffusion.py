@@ -3,7 +3,7 @@ from omegaconf import OmegaConf
 import argparse
 import torch
 import pytorch_lightning as pl
-from models import JointLatentDiffusionNoisyClassifier, JointLatentDiffusion, SSLJointDiffusion, SSLJointDiffusionV2, DiffMatch, DiffMatchV2
+from models import *
 from datasets import AdjustedMNIST, AdjustedSVHN, AdjustedSVHN, GTSRB, equal_labels_random_split
 from os import listdir, path
 import datetime
@@ -13,7 +13,7 @@ import torchvision as tv
 
 
 if __name__ == "__main__":
-    config = OmegaConf.load("configs/svhn-joint-diffusion.yaml")
+    config = OmegaConf.load("configs/svhn-joint-diffusion-attention.yaml")
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
@@ -30,14 +30,14 @@ if __name__ == "__main__":
     train_ds, validation_ds = torch.utils.data.random_split(train_ds, [len(train_ds)-len(test_ds), len(test_ds)], generator=torch.Generator().manual_seed(42))
     _, train_supervised = equal_labels_random_split(train_ds, labels=[i for i in range(10)], amount_per_class=100, generator=torch.Generator().manual_seed(42))
 
-    train_dl_unsupervised = torch.utils.data.DataLoader(train_ds, batch_size=256, shuffle=True, num_workers=0, drop_last=True)
-    train_dl_supervised = torch.utils.data.DataLoader(train_supervised, batch_size=32, shuffle=True, num_workers=0, drop_last=True)
-    valid_dl = torch.utils.data.DataLoader(test_ds, batch_size=128, shuffle=False, num_workers=0)
+    train_dl_unsupervised = torch.utils.data.DataLoader(train_ds, batch_size=192, shuffle=True, num_workers=0, drop_last=True)
+    train_dl_supervised = torch.utils.data.DataLoader(train_supervised, batch_size=28, shuffle=True, num_workers=0, drop_last=True)
+    valid_dl = torch.utils.data.DataLoader(test_ds, batch_size=32, shuffle=False, num_workers=0)
     # test_dl = torch.utils.data.DataLoader(test_ds, batch_size=128, shuffle=False, num_workers=0)
 
-    # config.model.params["ckpt_path"] = f"logs/JointDiffusion_2023-05-16T02-41-02/checkpoints/last.ckpt"
+    # config.model.params["ckpt_path"] = f"logs/DiffMatchV2_2023-05-23T12-43-03/checkpoints/last.ckpt"
 
-    model = DiffMatchV2(**config.model.get("params", dict()))
+    model = DiffMatchV3(**config.model.get("params", dict()))
     # model.min_confidence = 0
     model.supervised_skip_n = 0
     model.supervised_skip_current = 0
