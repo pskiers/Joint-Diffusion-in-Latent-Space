@@ -10,7 +10,7 @@ model:
     first_stage_key: 0
     image_size: 8
     channels: 4
-    monitor: val/loss
+    monitor: val/accuracy_ema
     attention_config:
       num_classes: 10
       channels: 256
