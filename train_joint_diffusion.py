@@ -13,7 +13,7 @@ import torchvision as tv
 
 
 if __name__ == "__main__":
-    config = OmegaConf.load("configs/svhn-joint-diffusion-attention.yaml")
+    config = OmegaConf.load("configs/svhn-diffmatchv3.yaml")
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
@@ -35,12 +35,9 @@ if __name__ == "__main__":
     valid_dl = torch.utils.data.DataLoader(test_ds, batch_size=32, shuffle=False, num_workers=0)
     # test_dl = torch.utils.data.DataLoader(test_ds, batch_size=128, shuffle=False, num_workers=0)
 
-    # config.model.params["ckpt_path"] = f"logs/DiffMatchV2_2023-05-23T12-43-03/checkpoints/last.ckpt"
+    # config.model.params["ckpt_path"] = f"logs/DiffMatchV3_2023-05-28T18-07-03/checkpoints/last.ckpt"
 
     model = DiffMatchV3(**config.model.get("params", dict()))
-    # model.min_confidence = 0
-    model.supervised_skip_n = 0
-    model.supervised_skip_current = 0
     model.supervised_dataloader = train_dl_supervised
 
     model.learning_rate = config.model.base_learning_rate

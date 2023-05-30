@@ -161,6 +161,9 @@ class DiffMatchV2(SSLJointDiffusionV2):
             classifier_in_features,
             classifier_hidden,
             num_classes,
+            min_confidence=0.95,
+            classification_loss_scale=1.0,
+            supervised_skip=0,
             classification_key=1,
             num_timesteps_cond=None,
             cond_stage_key="image",
@@ -179,6 +182,8 @@ class DiffMatchV2(SSLJointDiffusionV2):
             classifier_in_features,
             classifier_hidden,
             num_classes,
+            classification_loss_scale,
+            supervised_skip,
             classification_key,
             num_timesteps_cond,
             cond_stage_key,
@@ -191,7 +196,7 @@ class DiffMatchV2(SSLJointDiffusionV2):
             *args,
             **kwargs
         )
-        self.min_confidence = 0.95
+        self.min_confidence = min_confidence
         self.raw_imgs = None
         self.augmentation = K.augmentation.ImageSequential(K.augmentation.RandomAffine(degrees=0, translate=(0.125, 0.125)))
         self.strong_augmentation = K.augmentation.AugmentationSequential(K.augmentation.auto.RandAugment(n=2, m=10))
@@ -300,6 +305,9 @@ class DiffMatchV3(DiffMatchV2):
             first_stage_config,
             cond_stage_config,
             attention_config,
+            min_confidence=0.95,
+            classification_loss_scale=1.0,
+            supervised_skip=0,
             classification_key=1,
             num_timesteps_cond=None,
             cond_stage_key="image",
@@ -318,6 +326,9 @@ class DiffMatchV3(DiffMatchV2):
             0,
             0,
             0,
+            min_confidence,
+            classification_loss_scale,
+            supervised_skip,
             classification_key,
             num_timesteps_cond,
             cond_stage_key,

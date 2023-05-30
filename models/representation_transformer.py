@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 import torch
 import torch.nn as nn
 from einops import rearrange
@@ -15,19 +15,24 @@ class RepresentationTransformer(nn.Module):
             context_dims: List[int],
             mlp_size: int,
             hidden_size: int,
+            projection_div: Optional[int],
         ) -> None:
         super().__init__()
+        div = 1 if projection_div is None else projection_div
         self.attn_blocks = nn.ModuleList([
             SpatialTransformer(in_channels=channels,
                                n_heads=channels//dim_head,
                                d_head=dim_head,
-                               context_dim=context_dim)
+                               context_dim=(context_dim//div)+((context_dim//div) % 32))
             for context_dim in context_dims
         ])
-        self.repr_projections = nn.ModuleList([
-            nn.Conv2d(channel, channel, kernel_size=1, stride=1, padding=0)
-            for channel in context_dims
-        ])
+        if projection_div is None:
+            self.repr_projections = [lambda x: x for _ in context_dims]
+        else:
+            self.repr_projections = nn.ModuleList([
+                nn.Conv2d(channel, (channel//div)+((channel//div) % 32), kernel_size=1, stride=1, padding=0)
+                for channel in context_dims
+            ])
         self.norms = nn.ModuleList([
             Normalize(channel)
             for channel in context_dims
@@ -42,10 +47,10 @@ class RepresentationTransformer(nn.Module):
         x = None
         for z_i, transformer, projection, norm in zip(repr[::-1], self.attn_blocks, self.repr_projections, self.norms):
             context = norm(z_i)
-            context = projection(context)
-            context = rearrange(context, 'b c h w -> b (h w) c')
+            context_projected = projection(context)
+            context = rearrange(context_projected, 'b c h w -> b (h w) c')
             if x is None:
-                x = transformer(z_i, context=context)
+                x = transformer(context_projected, context=context)
             else:
                 x = transformer(x, context=context)
         return self.mlp(x.flatten(start_dim=1))

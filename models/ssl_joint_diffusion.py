@@ -111,6 +111,8 @@ class SSLJointDiffusionV2(JointLatentDiffusion):
             classifier_in_features,
             classifier_hidden,
             num_classes,
+            classification_loss_scale=1.0,
+            supervised_skip=0,
             classification_key=1,
             num_timesteps_cond=None,
             cond_stage_key="image",
@@ -145,9 +147,9 @@ class SSLJointDiffusionV2(JointLatentDiffusion):
         self.supervised_labels = None
         self.supervised_dataloader = None
         self.supervised_iterator = None
-        self.supervised_skip_n = 7
-        self.supervised_skip_current = 7
-        self.classification_loss_scale = 1.0
+        self.supervised_skip_n = supervised_skip
+        self.supervised_skip_current = supervised_skip
+        self.classification_loss_scale = classification_loss_scale
 
         img_size = first_stage_config['params']['ddconfig']['resolution']
         self.augmentation = K.augmentation.ImageSequential(
@@ -234,6 +236,8 @@ class SSLJointDiffusionV3(SSLJointDiffusionV2):
             first_stage_config,
             cond_stage_config,
             attention_config,
+            classification_loss_scale=1.0,
+            supervised_skip=0,
             classification_key=1,
             num_timesteps_cond=None,
             cond_stage_key="image",
@@ -252,6 +256,8 @@ class SSLJointDiffusionV3(SSLJointDiffusionV2):
             0,
             0,
             0,
+            classification_loss_scale,
+            supervised_skip,
             classification_key,
             num_timesteps_cond,
             cond_stage_key,
