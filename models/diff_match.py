@@ -5,6 +5,7 @@ from einops import rearrange
 import kornia as K
 from .ssl_joint_diffusion import SSLJointDiffusion, SSLJointDiffusionV2
 from .representation_transformer import RepresentationTransformer
+from .ddim import DDIMSamplerGradGuided
 
 
 class DiffMatch(SSLJointDiffusion):
@@ -150,7 +151,6 @@ class DiffMatch(SSLJointDiffusion):
             params = params + [self.logvar]
         opt = torch.optim.SGD(params, lr=lr, nesterov=True, momentum=0.9, weight_decay=0.0005)
         return opt
-
 
 
 class DiffMatchV2(SSLJointDiffusionV2):
@@ -349,3 +349,144 @@ class DiffMatchV3(DiffMatchV2):
 
     def transform_representations(self, representations):
         return representations
+
+
+class DiffMatchWithSampling(DiffMatchV3):
+    def __init__(
+            self,
+            first_stage_config,
+            cond_stage_config,
+            attention_config,
+            noisy_attention_config,
+            generation_start,
+            generation_batch_size,
+            num_classes,
+            ddim_steps=20,
+            min_confidence=0.95,
+            classification_loss_scale=1,
+            supervised_skip=0,
+            classification_key=1,
+            num_timesteps_cond=None,
+            cond_stage_key="image",
+            cond_stage_trainable=False,
+            concat_mode=True,
+            cond_stage_forward=None,
+            conditioning_key=None,
+            scale_factor=1,
+            scale_by_std=False,
+            *args,
+            **kwargs
+        ):
+        super().__init__(
+            first_stage_config,
+            cond_stage_config,
+            attention_config,
+            min_confidence,
+            classification_loss_scale,
+            supervised_skip,
+            classification_key,
+            num_timesteps_cond,
+            cond_stage_key,
+            cond_stage_trainable,
+            concat_mode,
+            cond_stage_forward,
+            conditioning_key,
+            scale_factor,
+            scale_by_std,
+            *args,
+            **kwargs
+        )
+        self.num_classes = num_classes
+        self.ddim_steps = ddim_steps
+        self.noisy_classifier = RepresentationTransformer(**noisy_attention_config)
+        self.gradient_guided_sampling = True
+        self.noisy_class_predictions = None
+        self.generation_start = generation_start
+        self.generation_batch = generation_batch_size
+        if kwargs.get("ckpt_path", None) is not None:
+            ignore_keys = kwargs.get("ignore_keys", [])
+            only_model = kwargs.get("load_only_unet", False)
+            self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
+
+    def apply_model(self, x_noisy, t, cond, return_ids=False):
+        if hasattr(self, "split_input_params"):
+            raise NotImplementedError("This feature is not available for this model")
+
+        x_recon, noisy_rep = self.model.diffusion_model(x_noisy, t, pooled=False)
+        noisy_rep = self.transform_representations(noisy_rep)
+        self.noisy_class_predictions = self.classifier(noisy_rep)
+        if self.x_start is not None:
+            representations = self.model.diffusion_model.just_representations(
+                self.x_start,
+                torch.ones(self.x_start.shape[0], device=self.device),
+                pooled=False
+            )
+            representations = self.transform_representations(representations)
+            self.batch_class_predictions = self.classifier(representations)
+
+        if isinstance(x_recon, tuple) and not return_ids:
+            return x_recon[0]
+        else:
+            return x_recon
+
+    def p_losses(self, x_start, cond, t, noise=None):
+        loss, loss_dict = super().p_losses(x_start, cond, t, noise)
+
+        prefix = 'train' if self.training else 'val'
+        if self.batch_classes is not None:
+
+            noisy_loss_classification = nn.functional.cross_entropy(
+                self.noisy_class_predictions, self.batch_classes)
+            loss += noisy_loss_classification
+            loss_dict.update(
+                {f'{prefix}/loss_noisy_classification': noisy_loss_classification})
+            loss_dict.update({f'{prefix}/loss': loss})
+            accuracy = torch.sum(torch.argmax(
+                self.noisy_class_predictions, dim=1) == self.batch_classes) / len(self.batch_classes)
+            loss_dict.update({f'{prefix}/noisy_accuracy': accuracy})
+
+        if self.generation_start <= 0 and self.training:
+            prev_classes = self.sample_classes
+            self.sample_classes = torch.randint(
+                0, self.num_classes, size=[self.generation_batch], device=self.device)
+            # generated = self.sample(cond=None, batch_size=self.generation_batch)
+
+            ddim_sampler = DDIMSamplerGradGuided(self)
+            shape = (self.channels, self.image_size, self.image_size)
+            generated, _ = ddim_sampler.sample(
+                self.ddim_steps, self.generation_batch, shape, cond=None, verbose=False)
+
+            generated_rep = self.model.diffusion_model.just_representations(
+                generated,
+                torch.ones(generated.shape[0], device=self.device),
+                pooled=False
+            )
+            generated_rep = self.transform_representations(generated_rep)
+            preds = self.classifier(generated_rep)
+            gen_loss = nn.functional.cross_entropy(preds, self.sample_classes)
+
+            loss += gen_loss
+            loss_dict.update(
+                {f'{prefix}/loss_generation_classification': gen_loss})
+            loss_dict.update({f'{prefix}/loss': loss})
+            gen_accuracy = torch.sum(torch.argmax(
+                preds, dim=1) == self.sample_classes) / len(self.sample_classes)
+            loss_dict.update({f'{prefix}/generation_accuracy': gen_accuracy})
+
+            self.sample_classes = prev_classes
+        else:
+            if self.training:
+                self.generation_start -= 1
+        return loss, loss_dict
+
+    def p_mean_variance(self, x, c, t, clip_denoised: bool, return_codebook_ids=False, quantize_denoised=False,
+                        return_x0=False, score_corrector=None, corrector_kwargs=None):
+        self.noisy_classifier, self.classifier = self.classifier, self.noisy_classifier
+        if self.gradient_guided_sampling is True:
+            out = self.grad_guided_p_mean_variance(x, c, t, clip_denoised, return_codebook_ids, quantize_denoised,
+                                                    return_x0, score_corrector, corrector_kwargs)
+        else:
+            out = super().p_mean_variance(x, c, t, clip_denoised, return_codebook_ids, quantize_denoised,
+                                           return_x0, score_corrector, corrector_kwargs)
+        self.noisy_classifier, self.classifier = self.classifier, self.noisy_classifier
+        return out
