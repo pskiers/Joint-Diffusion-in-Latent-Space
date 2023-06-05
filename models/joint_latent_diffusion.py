@@ -50,15 +50,6 @@ class JointLatentDiffusion(JointLatentDiffusionNoisyClassifier):
         return out
 
     def apply_model(self, x_noisy, t, cond, return_ids=False):
-        if isinstance(cond, dict):
-            # hybrid case, cond is exptected to be a dict
-            pass
-        else:
-            if not isinstance(cond, list):
-                cond = [cond]
-            key = 'c_concat' if self.model.conditioning_key == 'concat' else 'c_crossattn'
-            cond = {key: cond}
-
         if hasattr(self, "split_input_params"):
             raise NotImplementedError("This feature is not available for this model")
 

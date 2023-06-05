@@ -32,20 +32,22 @@ if __name__ == "__main__":
     model = LatentDiffusion(**config.model.get("params", dict()))
     model.learning_rate = config.model.base_learning_rate
 
-    # classifier_model = AttentionOnLatentDiffusion(
+    classifier_model = AttentionOnLatentDiffusion(
+        trained_diffusion=model,
+        attention_config={
+            "num_classes": 10,
+            "channels": 160,
+            "dim_head": 32,
+            "context_dims": [160, 160, 160, 160, 320, 320, 320, 480, 480, 480],
+            "mlp_size": 10240,
+            "hidden_size": 1024,
+        }
+    )
+    # classifier_model = ClassifierOnLatentDiffusion(
     #     trained_diffusion=model,
     #     num_classes=10,
-    #     channels=160,
-    #     dim_head=32,
-    #     context_dims=[160, 160, 160, 160, 320, 320, 320, 480, 480, 480],
-    #     mlp_size=2560,
-    #     hidden_size=1024,
-    # )
-    classifier_model = ClassifierOnLatentDiffusion(
-        trained_diffusion=model,
-        num_classes=10,
-        in_features=3040,
-        hidden_layer=2048,)
+    #     in_features=3040,
+    #     hidden_layer=2048,)
 
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     nowname = classifier_model.__class__.__name__ + "_" + now
