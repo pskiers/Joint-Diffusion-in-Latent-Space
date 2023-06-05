@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from ldm.models.diffusion.ddpm import LatentDiffusion
+from .ddim import DDIMSamplerGradGuided
 from .attention_on_latent_diffusion import RepresentationTransformer
 
 
@@ -142,22 +143,7 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
 
     def grad_guided_p_mean_variance(self, x, c, t, clip_denoised: bool, return_codebook_ids=False, quantize_denoised=False,
                         return_x0=False, score_corrector=None, corrector_kwargs=None):
-        t_in = t
-
-        emb = self.model.diffusion_model.get_timestep_embedding(x, t_in, None)
-
-        with torch.enable_grad():
-            representations = self.model.diffusion_model.forward_input_blocks(x, None, emb)
-            for h in representations:
-                h.retain_grad()
-            pooled_representations = self.transform_representations(representations)
-            class_predictions = self.classifier(pooled_representations)
-            # loss = -torch.log(torch.gather(class_predictions, 1, self.sample_classes.unsqueeze(dim=1))).sum()
-            loss = nn.functional.cross_entropy(class_predictions, self.sample_classes, reduction="sum")
-            loss.backward()
-            representations = [(h + self.sample_grad_scale * h.grad).detach() for h in representations]
-
-        model_out = self.model.diffusion_model.forward_output_blocks(x, None, emb, representations)
+        model_out = self.guided_apply_model(x, t)
 
         if isinstance(model_out, tuple) and not return_codebook_ids:
             model_out = model_out[0]
@@ -187,6 +173,26 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
             return model_mean, posterior_variance, posterior_log_variance, x_recon
         else:
             return model_mean, posterior_variance, posterior_log_variance
+
+    @torch.no_grad()
+    def guided_apply_model(self, x, t):
+        t_in = t
+
+        emb = self.model.diffusion_model.get_timestep_embedding(x, t_in, None)
+
+        with torch.enable_grad():
+            representations = self.model.diffusion_model.forward_input_blocks(x, None, emb)
+            for h in representations:
+                h.retain_grad()
+            pooled_representations = self.transform_representations(representations)
+            class_predictions = self.classifier(pooled_representations)
+            # loss = -torch.log(torch.gather(class_predictions, 1, self.sample_classes.unsqueeze(dim=1))).sum()
+            loss = nn.functional.cross_entropy(class_predictions, self.sample_classes, reduction="sum")
+            loss.backward()
+            representations = [(h + self.sample_grad_scale * h.grad).detach() for h in representations]
+
+        model_out = self.model.diffusion_model.forward_output_blocks(x, None, emb, representations)
+        return model_out
 
     def transform_representations(self, representations):
         representations = self.model.diffusion_model.pool_representations(representations)
@@ -241,6 +247,20 @@ class JointLatentDiffusionNoisyAttention(JointLatentDiffusionNoisyClassifier):
             only_model = kwargs.get("load_only_unet", False)
             self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
 
-
     def transform_representations(self, representations):
         return representations
+
+    @torch.no_grad()
+    def sample_log(self,cond,batch_size,ddim, ddim_steps,**kwargs):
+
+        if ddim:
+            ddim_sampler = DDIMSamplerGradGuided(self)
+            shape = (self.channels, self.image_size, self.image_size)
+            samples, intermediates = ddim_sampler.sample(ddim_steps,batch_size,
+                                                         shape,cond,verbose=False,**kwargs)
+
+        else:
+            samples, intermediates = self.sample(cond=cond, batch_size=batch_size,
+                                                 return_intermediates=True,**kwargs)
+
+        return samples, intermediates
