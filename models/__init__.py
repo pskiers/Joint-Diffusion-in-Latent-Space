@@ -5,3 +5,4 @@ from .joint_latent_diffusion import JointLatentDiffusion, JointLatentDiffusionAt
 from .ssl_joint_diffusion import SSLJointDiffusion, SSLJointDiffusionV2, SSLJointDiffusionV3
 from .diff_match import DiffMatch, DiffMatchV2, DiffMatchV3, DiffMatchWithSampling
 from .attention_on_latent_diffusion import AttentionOnLatentDiffusion
+from .wide_resnet import WideResNet, WideResNetEncoder
