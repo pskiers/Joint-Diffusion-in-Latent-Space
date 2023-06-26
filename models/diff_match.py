@@ -361,6 +361,7 @@ class DiffMatchWithSampling(DiffMatchV3):
             generation_start,
             generation_batch_size,
             num_classes,
+            step_per_generation=5,
             ddim_steps=20,
             min_confidence=0.95,
             classification_loss_scale=1,
@@ -403,6 +404,8 @@ class DiffMatchWithSampling(DiffMatchV3):
         self.noisy_class_predictions = None
         self.generation_start = generation_start
         self.generation_batch = generation_batch_size
+        self.step_per_generation = step_per_generation
+        self.current_generation_step = step_per_generation
         if kwargs.get("ckpt_path", None) is not None:
             ignore_keys = kwargs.get("ignore_keys", [])
             only_model = kwargs.get("load_only_unet", False)
@@ -446,16 +449,29 @@ class DiffMatchWithSampling(DiffMatchV3):
             loss_dict.update({f'{prefix}/noisy_accuracy': accuracy})
 
         if self.generation_start <= 0 and self.training:
-            prev_classes = self.sample_classes
-            self.sample_classes = torch.randint(
-                0, self.num_classes, size=[self.generation_batch], device=self.device)
-            # generated = self.sample(cond=None, batch_size=self.generation_batch)
+            if self.current_generation_step >= self.step_per_generation:
+                self.current_generation_step = 0
+                prev_classes = self.sample_classes
+                self.sample_classes = torch.randint(
+                    0,
+                    self.num_classes,
+                    size=[self.generation_batch * self.step_per_generation],
+                    device=self.device
+                )
+                self.generation_classes = self.sample_classes
+                # generated = self.sample(cond=None, batch_size=self.generation_batch)
 
-            ddim_sampler = DDIMSamplerGradGuided(self)
-            shape = (self.channels, self.image_size, self.image_size)
-            generated, _ = ddim_sampler.sample(
-                self.ddim_steps, self.generation_batch, shape, cond=None, verbose=False)
+                ddim_sampler = DDIMSamplerGradGuided(self)
+                shape = (self.channels, self.image_size, self.image_size)
+                self.generated, _ = ddim_sampler.sample(
+                    self.ddim_steps, self.generation_batch * self.step_per_generation, shape, cond=None, verbose=False)
+                self.sample_classes = prev_classes
 
+            start = self.generation_batch * self.current_generation_step
+            end = self.generation_batch * (self.current_generation_step + 1)
+            generated = self.generated[start:end]
+            labels = self.generation_classes[start:end]
+            self.current_generation_step += 1
             generated_rep = self.model.diffusion_model.just_representations(
                 generated,
                 torch.ones(generated.shape[0], device=self.device),
@@ -463,17 +479,16 @@ class DiffMatchWithSampling(DiffMatchV3):
             )
             generated_rep = self.transform_representations(generated_rep)
             preds = self.classifier(generated_rep)
-            gen_loss = nn.functional.cross_entropy(preds, self.sample_classes)
+            gen_loss = nn.functional.cross_entropy(preds, labels)
 
             loss += gen_loss
             loss_dict.update(
                 {f'{prefix}/loss_generation_classification': gen_loss})
             loss_dict.update({f'{prefix}/loss': loss})
             gen_accuracy = torch.sum(torch.argmax(
-                preds, dim=1) == self.sample_classes) / len(self.sample_classes)
+                preds, dim=1) == labels) / len(labels)
             loss_dict.update({f'{prefix}/generation_accuracy': gen_accuracy})
 
-            self.sample_classes = prev_classes
         else:
             if self.training:
                 self.generation_start -= 1
