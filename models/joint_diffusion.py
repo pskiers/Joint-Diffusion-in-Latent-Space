@@ -134,7 +134,16 @@ class JointDiffusionNoisyClassifier(DDPM):
         if self.gradient_guided_sampling is True:
             return self.grad_guided_p_mean_variance(x, t, clip_denoised)
         else:
-            return super().p_mean_variance(x, t, clip_denoised)
+            model_out = self.apply_model(x, t)
+            if self.parameterization == "eps":
+                x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
+            elif self.parameterization == "x0":
+                x_recon = model_out
+            if clip_denoised:
+                x_recon.clamp_(-1., 1.)
+
+            model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
+            return model_mean, posterior_variance, posterior_log_variance
 
     def grad_guided_p_mean_variance(self, x, t, clip_denoised: bool):
         model_out = self.guided_apply_model(x, t)
@@ -177,3 +186,34 @@ class JointDiffusionNoisyClassifier(DDPM):
                            for z_i in representations]
         representations = torch.concat(representations, dim=1)
         return representations
+
+
+class JointDiffusion(JointDiffusionNoisyClassifier):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.x_start = None
+        self.gradient_guided_sampling = False
+
+    def get_input(self, batch, k):
+        out = super().get_input(batch, k)
+        self.x_start = out
+        return out
+
+    def apply_model(self, x_noisy, t, return_ids=False):
+        if hasattr(self, "split_input_params"):
+            raise NotImplementedError("This feature is not available for this model")
+
+        x_recon = self.model.diffusion_model.just_reconstruction(x_noisy, t)
+        if self.x_start is not None:
+            representations = self.model.diffusion_model.just_representations(
+                self.x_start,
+                torch.ones(self.x_start.shape[0], device=self.device),
+                pooled=False
+            )
+            representations = self.transform_representations(representations)
+            self.batch_class_predictions = self.classifier(representations)
+
+        if isinstance(x_recon, tuple) and not return_ids:
+            return x_recon[0]
+        else:
+            return x_recon
