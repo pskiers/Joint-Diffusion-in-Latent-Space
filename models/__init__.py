@@ -7,3 +7,4 @@ from .diff_match import DiffMatch, DiffMatchV2, DiffMatchV3, DiffMatchWithSampli
 from .attention_on_latent_diffusion import AttentionOnLatentDiffusion
 from .wide_resnet import WideResNet, WideResNetEncoder
 from .joint_diffusion import JointDiffusionNoisyClassifier, JointDiffusion
+from .ssl_joint_standard_diffusion import SSLJointStandardDiffusion
