@@ -3,12 +3,12 @@ import torch.nn as nn
 from torchvision import transforms
 from einops import rearrange
 import kornia as K
-from .ssl_joint_diffusion import SSLJointDiffusion, SSLJointDiffusionV2
-from .representation_transformer import RepresentationTransformer
-from .ddim import DDIMSamplerGradGuided
+from .ssl_joint_diffusion import SSLJointLatentDiffusion, SSLJointLatentDiffusionV2
+from ..representation_transformer import RepresentationTransformer
+from ..ddim import DDIMSamplerGradGuided
 
 
-class DiffMatch(SSLJointDiffusion):
+class LatentDiffMatch(SSLJointLatentDiffusion):
     def __init__(
             self,
             first_stage_config,
@@ -153,7 +153,7 @@ class DiffMatch(SSLJointDiffusion):
         return opt
 
 
-class DiffMatchV2(SSLJointDiffusionV2):
+class LatentDiffMatchV2(SSLJointLatentDiffusionV2):
     def __init__(
             self,
             first_stage_config,
@@ -299,7 +299,7 @@ class DiffMatchV2(SSLJointDiffusionV2):
         return img_batch
 
 
-class DiffMatchV3(DiffMatchV2):
+class LatentDiffMatchV3(LatentDiffMatchV2):
     def __init__(
             self,
             first_stage_config,
@@ -351,7 +351,7 @@ class DiffMatchV3(DiffMatchV2):
         return representations
 
 
-class DiffMatchWithSampling(DiffMatchV3):
+class LatentDiffMatchWithSampling(LatentDiffMatchV3):
     def __init__(
             self,
             first_stage_config,

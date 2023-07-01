@@ -3,10 +3,10 @@ import torch.nn as nn
 from einops import rearrange
 import kornia as K
 from .joint_latent_diffusion import JointLatentDiffusion
-from .representation_transformer import RepresentationTransformer
+from ..representation_transformer import RepresentationTransformer
 
 
-class SSLJointDiffusion(JointLatentDiffusion):
+class SSLJointLatentDiffusion(JointLatentDiffusion):
     def __init__(
             self,
             first_stage_config,
@@ -103,7 +103,7 @@ class SSLJointDiffusion(JointLatentDiffusion):
         return loss, loss_dict
 
 
-class SSLJointDiffusionV2(JointLatentDiffusion):
+class SSLJointLatentDiffusionV2(JointLatentDiffusion):
     def __init__(
             self,
             first_stage_config,
@@ -230,7 +230,7 @@ class SSLJointDiffusionV2(JointLatentDiffusion):
         return loss, loss_dict
 
 
-class SSLJointDiffusionV3(SSLJointDiffusionV2):
+class SSLJointLatentDiffusionV3(SSLJointLatentDiffusionV2):
     def __init__(
             self,
             first_stage_config,

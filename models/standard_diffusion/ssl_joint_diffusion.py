@@ -5,7 +5,7 @@ import kornia as K
 from .joint_diffusion import JointDiffusion
 
 
-class SSLJointStandardDiffusion(JointDiffusion):
+class SSLJointDiffusion(JointDiffusion):
     def __init__(
             self,
             classification_loss_scale=1.0,

@@ -1,6 +1,6 @@
 import torch
 from .joint_latent_diffusion_noisy_classifier import JointLatentDiffusionNoisyClassifier
-from .representation_transformer import RepresentationTransformer
+from ..representation_transformer import RepresentationTransformer
 
 
 class JointLatentDiffusion(JointLatentDiffusionNoisyClassifier):

@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 from ldm.models.diffusion.ddpm import LatentDiffusion
-from .ddim import DDIMSamplerGradGuided
-from .attention_on_latent_diffusion import RepresentationTransformer
+from ..ddim import DDIMSamplerGradGuided
+from ..representation_transformer import RepresentationTransformer
 
 
 class JointLatentDiffusionNoisyClassifier(LatentDiffusion):

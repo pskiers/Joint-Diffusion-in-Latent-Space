@@ -4,17 +4,15 @@ import torch.nn as nn
 import pytorch_lightning as pl
 from einops import rearrange
 from ldm.models.diffusion.ddpm import LatentDiffusion
-from .representation_transformer import RepresentationTransformer
+from ..representation_transformer import RepresentationTransformer
 
 
 
 class AttentionOnLatentDiffusion(pl.LightningModule):
-    def __init__(
-            self,
-            trained_diffusion: LatentDiffusion,
-            attention_config: Dict,
-            lr: float=0.001
-        ) -> None:
+    def __init__(self,
+                 trained_diffusion: LatentDiffusion,
+                 attention_config: Dict,
+                 lr: float=0.001) -> None:
         super().__init__()
         self.trained_diffusion = trained_diffusion
         self.attention_classifier = RepresentationTransformer(**attention_config)

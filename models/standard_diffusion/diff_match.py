@@ -2,10 +2,10 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 import kornia as K
-from .ssl_joint_standard_diffusion import SSLJointStandardDiffusion
+from .ssl_joint_diffusion import SSLJointDiffusion
 
 
-class DiffMatchStandardDiffusion(SSLJointStandardDiffusion):
+class DiffMatch(SSLJointDiffusion):
     def __init__(
             self,
             min_confidence=0.95,
