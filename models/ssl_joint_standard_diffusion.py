@@ -64,7 +64,7 @@ class SSLJointStandardDiffusion(JointDiffusion):
                 sup_imgs = rearrange(sup_imgs, 'b h w c -> b c h w')
                 sup_imgs = sup_imgs.to(
                     memory_format=torch.contiguous_format).float().to(self.device)
-                self.supervised_imgs = self.augmentation(sup_imgs)
+                self.supervised_imgs = self.augmentation(sup_imgs).detach()
                 self.supervised_labels = b[self.classification_key].to(self.device)
                 self.supervised_skip_current = self.supervised_skip_n
 

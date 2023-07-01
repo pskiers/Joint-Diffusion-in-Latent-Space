@@ -8,3 +8,4 @@ from .attention_on_latent_diffusion import AttentionOnLatentDiffusion
 from .wide_resnet import WideResNet, WideResNetEncoder
 from .joint_diffusion import JointDiffusionNoisyClassifier, JointDiffusion
 from .ssl_joint_standard_diffusion import SSLJointStandardDiffusion
+from .standard_diffusion_diffmatch import DiffMatchStandardDiffusion
