@@ -10,6 +10,14 @@ model:
     image_size: 32
     channels: 3
     monitor: val/loss
+    attention_config:
+      num_classes: 10
+      channels: 64
+      dim_head: 32
+      context_dims: [480, 480, 480, 320, 320, 320, 160, 160, 160, 160]
+      mlp_size: 4096
+      hidden_size: 1024
+      projection_div: 8
 
     unet_config:
       target: models.AdjustedUNet
@@ -25,10 +33,6 @@ model:
         pool_size: 10000
 
     sample_grad_scale: 60
-    classifier_in_features: 3040
-    classifier_hidden: 2048
-    num_classes: 10
-    dropout: 0.0
     classification_key: 1
 
 lightning:

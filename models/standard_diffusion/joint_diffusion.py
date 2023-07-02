@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from ldm.models.diffusion.ddpm import DDPM
 from ldm.util import default
+from ..representation_transformer import RepresentationTransformer
 
 
 class JointDiffusionNoisyClassifier(DDPM):
@@ -217,3 +218,22 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
             return x_recon[0]
         else:
             return x_recon
+
+
+class JointDiffusionAttention(JointDiffusion):
+    def __init__(self, attention_config, *args, **kwargs):
+        super().__init__(
+            classifier_in_features=0,
+            classifier_hidden=0,
+            num_classes=0,
+            *args,
+            **kwargs
+        )
+        self.classifier = RepresentationTransformer(**attention_config)
+        if kwargs.get("ckpt_path", None) is not None:
+            ignore_keys = kwargs.get("ignore_keys", [])
+            only_model = kwargs.get("load_only_unet", False)
+            self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
+
+    def transform_representations(self, representations):
+        return representations
