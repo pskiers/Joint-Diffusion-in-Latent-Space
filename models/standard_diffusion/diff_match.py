@@ -3,6 +3,7 @@ import torch.nn as nn
 from einops import rearrange
 import kornia as K
 from .ssl_joint_diffusion import SSLJointDiffusion
+from ..representation_transformer import RepresentationTransformer
 
 
 class DiffMatch(SSLJointDiffusion):
@@ -113,3 +114,22 @@ class DiffMatch(SSLJointDiffusion):
         for img, x_upper, x_lower, y_upper, y_lower in zip(img_batch, x_uppers, x_lowers, y_uppers, y_lowers):
             img[x_upper:x_lower, y_upper:y_lower] = fill
         return img_batch
+
+
+class DiffMatchAttention(DiffMatch):
+    def __init__(self, attention_config, *args, **kwargs):
+        super().__init__(
+            classifier_in_features=0,
+            classifier_hidden=0,
+            num_classes=0,
+            *args,
+            **kwargs
+        )
+        self.classifier = RepresentationTransformer(**attention_config)
+        if kwargs.get("ckpt_path", None) is not None:
+            ignore_keys = kwargs.get("ignore_keys", [])
+            only_model = kwargs.get("load_only_unet", False)
+            self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
+
+    def transform_representations(self, representations):
+        return representations
