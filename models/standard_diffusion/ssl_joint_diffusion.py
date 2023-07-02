@@ -3,6 +3,7 @@ import torch.nn as nn
 from einops import rearrange
 import kornia as K
 from .joint_diffusion import JointDiffusion
+from ..representation_transformer import RepresentationTransformer
 
 
 class SSLJointDiffusion(JointDiffusion):
@@ -96,3 +97,28 @@ class SSLJointDiffusion(JointDiffusion):
             self.supervised_imgs = None
             self.supervised_labels = None
         return loss, loss_dict
+
+
+class SSLJointDiffusionAttention(SSLJointDiffusion):
+    def __init__(
+            self,
+            attention_config,
+            *args,
+            **kwargs
+        ):
+        super().__init__(
+            classifier_in_features=0,
+            classifier_hidden=0,
+            num_classes=0,
+            *args,
+            **kwargs
+        )
+        self.classifier = RepresentationTransformer(**attention_config)
+        if kwargs.get("ckpt_path", None) is not None:
+            ignore_keys = kwargs.get("ignore_keys", [])
+            only_model = kwargs.get("load_only_unet", False)
+            self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
+
+    def transform_representations(self, representations):
+        return representations
+
