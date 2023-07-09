@@ -12,25 +12,21 @@ model:
     monitor: val/loss
 
     unet_config:
-      target: models.Wide_ResNet_UNet
+      target: models.AdjustedUNet
       params:
-        num_classes: 10
-        repr_channels: [
-          32, 32,
-          64, 64,
-          128, 128, 128
-        ]
-        decoder_channels_mult: [ 1, 2, 3 ]
-        ds: 6
+        image_size: 32
+        in_channels: 3
         out_channels: 3
         model_channels: 256
         attention_resolutions: [  ]
-        num_res_blocks: 1
+        num_res_blocks: 2
+        channel_mult: [ 1, 2, 3 ]
         num_head_channels: 32
+        pool_size: 10000
 
     sample_grad_scale: 60
-    classifier_in_features: 0
-    classifier_hidden: 0
+    classifier_in_features: 4864
+    classifier_hidden: 2048
     num_classes: 10
     dropout: 0.0
     classification_key: 1
