@@ -38,7 +38,7 @@ class Wide_ResNet_UNet(nn.Module):
                  depth: int = 28,
                  widen_factor: int = 2,
                  dropout: float = 0.0,
-                 unet_layer_idx: List[int] = [1, 3]) -> None:
+                 unet_layer_idx: List[int] = [0, 1, 2, 3]) -> None:
         super().__init__()
         self.model_channels = model_channels
         self.representations = []
@@ -95,7 +95,7 @@ class Wide_ResNet_UNet(nn.Module):
                             use_new_attention_order=use_new_attention_order,
                         )
                     )
-                if (level != len(decoder_channels_mult) - 1 and i == num_res_blocks):
+                if level != len(decoder_channels_mult) - 1 and i == num_res_blocks:
                     out_ch = ch
                     layers.append(
                         ResBlock(

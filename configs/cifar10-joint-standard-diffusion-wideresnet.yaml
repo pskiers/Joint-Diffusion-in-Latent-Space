@@ -16,16 +16,16 @@ model:
       params:
         num_classes: 10
         repr_channels: [
-          32, 32,
-          64, 64,
-          128, 128, 128
+          32, 32, 32, 32,
+          64, 64, 64, 64,
+          128, 128, 128, 128, 128
         ]
         decoder_channels_mult: [ 1, 2, 3 ]
         ds: 6
         out_channels: 3
-        model_channels: 256
+        model_channels: 160
         attention_resolutions: [  ]
-        num_res_blocks: 1
+        num_res_blocks: 3
         num_head_channels: 32
 
     sample_grad_scale: 60

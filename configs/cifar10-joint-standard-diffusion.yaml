@@ -17,7 +17,7 @@ model:
         image_size: 32
         in_channels: 3
         out_channels: 3
-        model_channels: 256
+        model_channels: 160
         attention_resolutions: [  ]
         num_res_blocks: 2
         channel_mult: [ 1, 2, 3 ]
