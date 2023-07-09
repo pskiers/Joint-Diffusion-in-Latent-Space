@@ -133,7 +133,7 @@ class Wide_ResNet_UNet(nn.Module):
         out = self.encoder(x)
 
         rec = self.forward_output_blocks(x, context, emb, self.representations)
-
+        self.representations = []
         return rec, out
 
     def just_representations(self,
@@ -143,7 +143,9 @@ class Wide_ResNet_UNet(nn.Module):
                              y=None,
                              pooled=True,
                              **kwargs):
-        return self.encoder(x)
+        out = self.encoder(x)
+        self.representations = []
+        return out
 
     def just_reconstruction(self,
                             x,
@@ -156,7 +158,7 @@ class Wide_ResNet_UNet(nn.Module):
         self.encoder(x)
 
         rec = self.forward_output_blocks(x, context, emb, self.representations)
-
+        self.representations = []
         return rec
 
     def forward_output_blocks(self, x, context, emb, representations):
