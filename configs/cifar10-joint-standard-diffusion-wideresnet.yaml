@@ -1,0 +1,50 @@
+model:
+  base_learning_rate: 5.0e-05
+  target: ldm.models.diffusion.ddpm.LatentDiffusion
+  params:
+    linear_start: 0.0015
+    linear_end: 0.0195
+    log_every_t: 200
+    timesteps: 1000
+    first_stage_key: 0
+    image_size: 32
+    channels: 3
+    monitor: val/loss
+
+    unet_config:
+      target: models.Wide_ResNet_UNet
+      params:
+        num_classes: 10
+
+        repr_channels: [
+          32, 32,
+          64, 64,
+          128, 128, 128
+        ]
+        decoder_channels_mult: [ 1, 2, 3 ]
+        ds: 6
+
+        out_channels: 3
+        model_channels: 256
+        attention_resolutions: [ 1, 2, 4 ]
+        num_res_blocks: 1
+        num_head_channels: 32
+
+    sample_grad_scale: 60
+    classifier_in_features: 0
+    classifier_hidden: 0
+    num_classes: 10
+    dropout: 0.0
+    classification_key: 1
+
+lightning:
+  callbacks:
+    image_logger:
+      target: main.ImageLogger
+      params:
+        batch_frequency: 5000
+        max_images: 8
+        increase_log_steps: False
+
+  trainer:
+    benchmark: True

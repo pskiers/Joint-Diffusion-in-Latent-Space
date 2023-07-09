@@ -57,9 +57,12 @@ class DiffMatch(SSLJointDiffusion):
                 torch.ones(weakly_augmented.shape[0], device=self.device),
                 pooled=False
             )
-            weak_rep = self.transform_representations(weak_rep)
-            weak_preds = nn.functional.softmax(
-                self.classifier(weak_rep), dim=1).detach()
+            if isinstance(weak_rep, list): # TODO refactor this shit
+                weak_rep = self.transform_representations(weak_rep)
+                weak_preds = nn.functional.softmax(
+                    self.classifier(weak_rep), dim=1).detach()
+            else:
+                weak_preds = nn.functional.softmax(weak_rep, dim=1).detach()
             pseudo_labels = weak_preds.argmax(dim=1)
             above_threshold_idx, = (
                 weak_preds.max(dim=1).values > self.min_confidence
@@ -80,8 +83,11 @@ class DiffMatch(SSLJointDiffusion):
             torch.ones(strongly_augmented.shape[0], device=self.device),
             pooled=False
         )
-        strong_rep = self.transform_representations(strong_rep)
-        preds = self.classifier(strong_rep)
+        if isinstance(weak_rep, list): # TODO refactor this shit
+            strong_rep = self.transform_representations(strong_rep)
+            preds = self.classifier(strong_rep)
+        else:
+            preds = strong_rep
         ssl_loss = nn.functional.cross_entropy(preds, pseudo_labels)
 
         loss += ssl_loss * len(preds) / len(weak_preds)

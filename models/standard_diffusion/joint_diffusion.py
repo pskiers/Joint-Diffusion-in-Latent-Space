@@ -57,8 +57,11 @@ class JointDiffusionNoisyClassifier(DDPM):
                 "This feature is not available for this model")
 
         x_recon, representations = self.model.diffusion_model(x_noisy, t, pooled=False)
-        representations = self.transform_representations(representations)
-        self.batch_class_predictions = self.classifier(representations)
+        if isinstance(representations, list): # TODO refactor this shit
+            representations = self.transform_representations(representations)
+            self.batch_class_predictions = self.classifier(representations)
+        else:
+            self.batch_class_predictions = representations
 
         if isinstance(x_recon, tuple) and not return_ids:
             return x_recon[0]
@@ -163,6 +166,8 @@ class JointDiffusionNoisyClassifier(DDPM):
 
     @torch.no_grad()
     def guided_apply_model(self, x, t):
+        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'): # TODO refactor this shit
+            return self.apply_model(x, t)
         t_in = t
 
         emb = self.model.diffusion_model.get_timestep_embedding(x, t_in, None)
@@ -211,8 +216,11 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
                 torch.ones(self.x_start.shape[0], device=self.device),
                 pooled=False
             )
-            representations = self.transform_representations(representations)
-            self.batch_class_predictions = self.classifier(representations)
+            if isinstance(representations, list):  # TODO refactor this shit
+                representations = self.transform_representations(representations)
+                self.batch_class_predictions = self.classifier(representations)
+            else:
+                self.batch_class_predictions = representations
 
         if isinstance(x_recon, tuple) and not return_ids:
             return x_recon[0]

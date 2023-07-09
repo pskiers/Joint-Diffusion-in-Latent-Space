@@ -80,8 +80,11 @@ class SSLJointDiffusion(JointDiffusion):
                 torch.ones(self.supervised_imgs.shape[0], device=self.device),
                 pooled=False
             )
-            representations = self.transform_representations(representations)
-            preds = self.classifier(representations)
+            if isinstance(representations, list): # TODO refactor this shit
+                representations = self.transform_representations(representations)
+                preds = self.classifier(representations)
+            else:
+                preds = representations
 
             prefix = 'train' if self.training else 'val'
 
