@@ -83,7 +83,7 @@ class DiffMatch(SSLJointDiffusion):
             torch.ones(strongly_augmented.shape[0], device=self.device),
             pooled=False
         )
-        if isinstance(weak_rep, list): # TODO refactor this shit
+        if isinstance(strong_rep, list): # TODO refactor this shit
             strong_rep = self.transform_representations(strong_rep)
             preds = self.classifier(strong_rep)
         else:
