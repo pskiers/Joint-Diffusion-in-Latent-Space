@@ -12,7 +12,7 @@ import kornia as K
 class FixMatch(DiffMatch):
     def __init__(self, min_confidence=0.95, *args, **kwargs):
         super().__init__(min_confidence, *args, **kwargs)
-        self.model = Wide_ResNet(28, 2, 0, 10)
+        self.model = Wide_ResNet(depth=28, num_classes=10, widen_factor=2, drop_rate=0)
         count_params(self.model, verbose=True)
         self.model_ema = LitEma(self.model)
         print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
@@ -70,10 +70,6 @@ class FixMatch(DiffMatch):
 
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, -1)
         return optimizer
-
-    def on_train_epoch_end(self, unused: Optional = None) -> None:
-        self.scheduler.step()
-        return
 
     def p_losses(self, x_start, t, noise=None):
         loss, loss_dict = torch.zeros(1, device=self.device), {}
@@ -139,11 +135,13 @@ class FixMatch(DiffMatch):
         )
         ssl_loss = nn.functional.cross_entropy(preds, pseudo_labels)
 
-        loss += ssl_loss * len(preds) / len(weak_preds)
+        loss += ssl_loss  # * len(preds) / len(weak_preds)
         loss_dict.update({f'{prefix}/loss_ssl_classification': ssl_loss})
         loss_dict.update({f'{prefix}/loss': loss})
         accuracy = torch.sum(
             torch.argmax(preds, dim=1) == pseudo_labels) / len(pseudo_labels)
         loss_dict.update({f'{prefix}/ssl_accuracy': accuracy})
+
+        self.scheduler.step()
 
         return loss, loss_dict

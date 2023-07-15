@@ -53,10 +53,10 @@ class Wide_ResNet_UNet(nn.Module):
             self.representations.append(output)
         self.encoder = Wide_ResNet(depth, widen_factor, dropout, num_classes)
         target_layers = []
-        for layer in [self.encoder.layer1,
-                      self.encoder.layer2,
-                      self.encoder.layer3]:
-            target_layers.extend([layer[idx] for idx in unet_layer_idx])
+        for layer in [self.encoder.block1,
+                      self.encoder.block2,
+                      self.encoder.block3]:
+            target_layers.extend([layer.layer[idx] for idx in unet_layer_idx])
         for layer in target_layers:
             layer.register_forward_hook(hook)
 
