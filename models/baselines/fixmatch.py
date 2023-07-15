@@ -1,4 +1,5 @@
 import math
+from typing import Optional
 import torch
 import torch.nn as nn
 from ..standard_diffusion import DiffMatch
@@ -11,7 +12,7 @@ import kornia as K
 class FixMatch(DiffMatch):
     def __init__(self, min_confidence=0.95, *args, **kwargs):
         super().__init__(min_confidence, *args, **kwargs)
-        self.model = Wide_ResNet(28, 2)
+        self.model = Wide_ResNet(28, 2, 0, 10)
         count_params(self.model, verbose=True)
         self.model_ema = LitEma(self.model)
         print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
@@ -45,6 +46,7 @@ class FixMatch(DiffMatch):
             K.augmentation.Normalize(mean=(0.4914, 0.4822, 0.4465),
                                      std=(0.2471, 0.2435, 0.2616)),
         )
+        self.scheduler = None
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(
@@ -66,11 +68,15 @@ class FixMatch(DiffMatch):
                 float(max(1, num_training_steps - num_warmup_steps))
             return max(0., math.cos(math.pi * num_cycles * no_progress))
 
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, -1)
-        return [optimizer], [scheduler]
+        self.scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, -1)
+        return optimizer
+
+    def on_train_epoch_end(self, unused: Optional = None) -> None:
+        self.scheduler.step()
+        return
 
     def p_losses(self, x_start, t, noise=None):
-        loss, loss_dict = torch.zeros(1), {}
+        loss, loss_dict = torch.zeros(1, device=self.device), {}
         if self.batch_classes is not None:
             prefix = 'train' if self.training else 'val'
             x = self.labeled_aug(x_start) if self.training else self.val_aug(x_start)
