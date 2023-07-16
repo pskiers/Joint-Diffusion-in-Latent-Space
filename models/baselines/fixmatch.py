@@ -9,13 +9,48 @@ from ldm.modules.ema import LitEma
 import kornia as K
 
 
+class FixMatchEma(LitEma):
+    def forward(self,model):
+        decay = self.decay
+
+        one_minus_decay = 1.0 - decay
+
+        with torch.no_grad():
+            m_param = dict(model.named_parameters())
+            shadow_params = dict(self.named_buffers())
+
+            for key in m_param:
+                if m_param[key].requires_grad:
+                    sname = self.m_name2s_name[key]
+                    shadow_params[sname] = shadow_params[sname].type_as(m_param[key])
+                    shadow_params[sname].sub_(one_minus_decay * (shadow_params[sname] - m_param[key]))
+                else:
+                    assert not key in self.m_name2s_name
+
+
 class FixMatch(DiffMatch):
     def __init__(self, min_confidence=0.95, *args, **kwargs):
         super().__init__(min_confidence, *args, **kwargs)
         self.model = Wide_ResNet(depth=28, num_classes=10, widen_factor=2, drop_rate=0)
         count_params(self.model, verbose=True)
-        self.model_ema = LitEma(self.model)
+        self.model_ema = FixMatchEma(self.model, decay=0.999)
         print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
+
+        fixmatch_policy = [
+            [("auto_contrast", 0, 1)],
+            [("brightness", 0.05, 0.95)],
+            [("color", 0.05, 0.95)],
+            [("contrast", 0.05, 0.95)],
+            [("equalize", 0, 1)],
+            [("posterize", 4, 8)],
+            [("rotate", -30.0, 30.0)],
+            [("sharpness", 0.05, 0.95)],
+            [("shear_x", -0.3, 0.3)],
+            [("shear_y", -0.3, 0.3)],
+            [("solarize", 0.0, 1.0)],
+            [("translate_x", -0.3, 0.3)],
+            [("translate_x", -0.3, 0.3)],
+        ]
 
         self.val_aug = K.augmentation.ImageSequential(
             K.augmentation.Normalize(mean=(0.4914, 0.4822, 0.4465),
@@ -42,19 +77,25 @@ class FixMatch(DiffMatch):
             K.augmentation.RandomCrop((32, 32),
                                       padding=int(32*0.125),
                                       padding_mode='reflect'),
-            K.augmentation.auto.RandAugment(n=2, m=10),
+            K.augmentation.auto.RandAugment(n=2, m=10, policy=fixmatch_policy),
             K.augmentation.Normalize(mean=(0.4914, 0.4822, 0.4465),
                                      std=(0.2471, 0.2435, 0.2616)),
         )
         self.scheduler = None
 
     def configure_optimizers(self):
+        no_decay = ['bias', 'bn']
+        grouped_parameters = [
+            {'params': [p for n, p in self.model.named_parameters() if not any(
+                nd in n for nd in no_decay)], 'weight_decay': 5e-4},
+            {'params': [p for n, p in self.model.named_parameters() if any(
+                nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        ]
         optimizer = torch.optim.SGD(
-            self.model.parameters(),
+            grouped_parameters,
             lr=0.03,
             momentum=0.9,
-            nesterov=True,
-            weight_decay=5e-4
+            nesterov=True
         )
 
         def _lr_lambda(current_step):
@@ -129,19 +170,22 @@ class FixMatch(DiffMatch):
                 return loss, loss_dict
 
             strongly_augmented = self.strong_augmentation((self.raw_imgs[above_threshold_idx])).detach()
+            strongly_augmented = self.cutout(strongly_augmented, level=1).detach()
 
         preds = self.model(
             strongly_augmented
         )
         ssl_loss = nn.functional.cross_entropy(preds, pseudo_labels)
 
-        loss += ssl_loss  # * len(preds) / len(weak_preds)
+        loss += ssl_loss * len(preds) / len(weak_preds)
         loss_dict.update({f'{prefix}/loss_ssl_classification': ssl_loss})
         loss_dict.update({f'{prefix}/loss': loss})
         accuracy = torch.sum(
             torch.argmax(preds, dim=1) == pseudo_labels) / len(pseudo_labels)
         loss_dict.update({f'{prefix}/ssl_accuracy': accuracy})
 
-        self.scheduler.step()
-
         return loss, loss_dict
+
+    def on_train_batch_end(self, *args, **kwargs):
+        self.scheduler.step()
+        return super().on_train_batch_end(*args, **kwargs)
