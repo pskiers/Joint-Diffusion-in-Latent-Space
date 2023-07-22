@@ -5,3 +5,4 @@ from .fashionMNIST import AdjustedFashionMNIST
 from .svhn import AdjustedSVHN
 from .gtsrb import GTSRB
 from .utils import equal_labels_random_split
+from .fixmatch_cifar import DATASET_GETTERS

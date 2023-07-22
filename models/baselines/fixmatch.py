@@ -10,6 +10,7 @@ from ..standard_diffusion import DiffMatch
 from ..wide_resnet import Wide_ResNet
 from ldm.util import count_params
 from ldm.modules.ema import LitEma
+from copy import deepcopy
 
 
 def interleave(x, size):
@@ -22,24 +23,57 @@ def de_interleave(x, size):
     return x.reshape([size, -1] + s[1:]).transpose(0, 1).reshape([-1] + s[1:])
 
 
+class ModelEMA(object):
+    def __init__(self, model, decay, device):
+        self.ema = deepcopy(model)
+        self.ema.to(device)
+        self.ema.eval()
+        self.decay = decay
+        self.ema_has_module = hasattr(self.ema, 'module')
+        # Fix EMA. https://github.com/valencebond/FixMatch_pytorch thank you!
+        self.param_keys = [k for k, _ in self.ema.named_parameters()]
+        self.buffer_keys = [k for k, _ in self.ema.named_buffers()]
+        for p in self.ema.parameters():
+            p.requires_grad_(False)
 
-class FixMatchEma(LitEma):
-    def forward(self,model):
-        decay = self.decay
-
-        one_minus_decay = 1.0 - decay
-
+    def update(self, model):
+        needs_module = hasattr(model, 'module') and not self.ema_has_module
         with torch.no_grad():
-            m_param = dict(model.named_parameters())
-            shadow_params = dict(self.named_buffers())
-
-            for key in m_param:
-                if m_param[key].requires_grad:
-                    sname = self.m_name2s_name[key]
-                    shadow_params[sname] = shadow_params[sname].type_as(m_param[key])
-                    shadow_params[sname].sub_(one_minus_decay * (shadow_params[sname] - m_param[key]))
+            msd = model.state_dict()
+            esd = self.ema.state_dict()
+            for k in self.param_keys:
+                if needs_module:
+                    j = 'module.' + k
                 else:
-                    assert key not in self.m_name2s_name
+                    j = k
+                model_v = msd[j].detach()
+                ema_v = esd[k]
+                esd[k].copy_(ema_v * self.decay + (1. - self.decay) * model_v)
+
+            for k in self.buffer_keys:
+                if needs_module:
+                    j = 'module.' + k
+                else:
+                    j = k
+                esd[k].copy_(msd[j])
+
+# class FixMatchEma(LitEma):
+#     def forward(self,model):
+#         decay = self.decay
+
+#         one_minus_decay = 1.0 - decay
+
+#         with torch.no_grad():
+#             m_param = dict(model.named_parameters())
+#             shadow_params = dict(self.named_buffers())
+
+#             for key in m_param:
+#                 if m_param[key].requires_grad:
+#                     sname = self.m_name2s_name[key]
+#                     shadow_params[sname] = shadow_params[sname].type_as(m_param[key])
+#                     shadow_params[sname].sub_(one_minus_decay * (shadow_params[sname] - m_param[key]))
+#                 else:
+#                     assert key not in self.m_name2s_name
 
 
 class FixMatch(pl.LightningModule):
@@ -59,8 +93,8 @@ class FixMatch(pl.LightningModule):
         self.batch_size = batch_size
         self.model = Wide_ResNet(depth=28, num_classes=10, widen_factor=2, drop_rate=0)
         count_params(self.model, verbose=True)
-        self.model_ema = FixMatchEma(self.model, decay=0.999)
-        print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
+        # self.model_ema = FixMatchEma(self.model, decay=0.999)
+        self.model_ema = ModelEMA(self.model, 0.999, torch.device("cuda"))
         self.monitor = monitor
         if ckpt_path is not None:
             self.init_from_ckpt(ckpt_path)
@@ -69,67 +103,67 @@ class FixMatch(pl.LightningModule):
         self.unsup_img_key = unsup_img_key
         self.use_ema = True
 
-        fixmatch_policy = [
-            [("auto_contrast", 0, 1)],
-            [("brightness", 0.05, 0.95)],
-            [("color", 0.05, 0.95)],
-            [("contrast", 0.05, 0.95)],
-            [("equalize", 0, 1)],
-            [("posterize", 4, 8)],
-            [("rotate", -30.0, 30.0)],
-            [("sharpness", 0.05, 0.95)],
-            [("shear_x", -0.3, 0.3)],
-            [("shear_y", -0.3, 0.3)],
-            [("solarize", 0.0, 1.0)],
-            [("translate_x", -0.3, 0.3)],
-            [("translate_x", -0.3, 0.3)],
-        ]
+        # fixmatch_policy = [
+        #     [("auto_contrast", 0, 1)],
+        #     [("brightness", 0.05, 0.95)],
+        #     [("color", 0.05, 0.95)],
+        #     [("contrast", 0.05, 0.95)],
+        #     [("equalize", 0, 1)],
+        #     [("posterize", 4, 8)],
+        #     [("rotate", -30.0, 30.0)],
+        #     [("sharpness", 0.05, 0.95)],
+        #     [("shear_x", -0.3, 0.3)],
+        #     [("shear_y", -0.3, 0.3)],
+        #     [("solarize", 0.0, 1.0)],
+        #     [("translate_x", -0.3, 0.3)],
+        #     [("translate_x", -0.3, 0.3)],
+        # ]
 
-        self.val_aug = K.augmentation.ImageSequential(
-            K.augmentation.Normalize(mean=(0.4914, 0.4822, 0.4465),
-                                     std=(0.2471, 0.2435, 0.2616)),
-        )
-        self.labeled_aug = K.augmentation.ImageSequential(
-            K.augmentation.RandomHorizontalFlip(),
-            K.augmentation.RandomCrop((32, 32),
-                                      padding=int(32*0.125),
-                                      padding_mode='reflect'),
-            K.augmentation.Normalize(mean=(0.4914, 0.4822, 0.4465),
-                                     std=(0.2471, 0.2435, 0.2616)),
-        )
-        self.augmentation = K.augmentation.ImageSequential(
-            K.augmentation.RandomHorizontalFlip(),
-            K.augmentation.RandomCrop((32, 32),
-                                      padding=int(32*0.125),
-                                      padding_mode='reflect'),
-            K.augmentation.Normalize(mean=(0.4914, 0.4822, 0.4465),
-                                     std=(0.2471, 0.2435, 0.2616)),
-        )
-        self.strong_augmentation = K.augmentation.AugmentationSequential(
-            K.augmentation.RandomHorizontalFlip(),
-            K.augmentation.RandomCrop((32, 32),
-                                      padding=int(32*0.125),
-                                      padding_mode='reflect'),
-            K.augmentation.auto.RandAugment(n=2, m=10, policy=fixmatch_policy),
-            K.augmentation.Normalize(mean=(0.4914, 0.4822, 0.4465),
-                                     std=(0.2471, 0.2435, 0.2616)),
-        )
+        # self.val_aug = K.augmentation.ImageSequential(
+        #     K.augmentation.Normalize(mean=(0.4914, 0.4822, 0.4465),
+        #                              std=(0.2471, 0.2435, 0.2616)),
+        # )
+        # self.labeled_aug = K.augmentation.ImageSequential(
+        #     K.augmentation.RandomHorizontalFlip(),
+        #     K.augmentation.RandomCrop((32, 32),
+        #                               padding=int(32*0.125),
+        #                               padding_mode='reflect'),
+        #     K.augmentation.Normalize(mean=(0.4914, 0.4822, 0.4465),
+        #                              std=(0.2471, 0.2435, 0.2616)),
+        # )
+        # self.augmentation = K.augmentation.ImageSequential(
+        #     K.augmentation.RandomHorizontalFlip(),
+        #     K.augmentation.RandomCrop((32, 32),
+        #                               padding=int(32*0.125),
+        #                               padding_mode='reflect'),
+        #     K.augmentation.Normalize(mean=(0.4914, 0.4822, 0.4465),
+        #                              std=(0.2471, 0.2435, 0.2616)),
+        # )
+        # self.strong_augmentation = K.augmentation.AugmentationSequential(
+        #     K.augmentation.RandomHorizontalFlip(),
+        #     K.augmentation.RandomCrop((32, 32),
+        #                               padding=int(32*0.125),
+        #                               padding_mode='reflect'),
+        #     K.augmentation.auto.RandAugment(n=2, m=10, policy=fixmatch_policy),
+        #     K.augmentation.Normalize(mean=(0.4914, 0.4822, 0.4465),
+        #                              std=(0.2471, 0.2435, 0.2616)),
+        # )
         self.scheduler = None
 
-    @contextmanager
-    def ema_scope(self, context=None):
-        if self.use_ema:
-            self.model_ema.store(self.model.parameters())
-            self.model_ema.copy_to(self.model)
-            if context is not None:
-                print(f"{context}: Switched to EMA weights")
-        try:
-            yield None
-        finally:
-            if self.use_ema:
-                self.model_ema.restore(self.model.parameters())
-                if context is not None:
-                    print(f"{context}: Restored training weights")
+    # @contextmanager
+    # def ema_scope(self, context=None):
+    #     if self.use_ema:
+    #         self.model_ema.store(self.model.parameters())
+    #         self.model_ema.copy_to(self.model)
+    #         if context is not None:
+    #             print(f"{context}: Switched to EMA weights")
+    #     try:
+    #         yield None
+    #     finally:
+    #         if self.use_ema:
+    #             self.model_ema.restore(self.model.parameters())
+    #             if context is not None:
+    #                 print(f"{context}: Restored training weights")
 
     def init_from_ckpt(self, path, ignore_keys=list(), only_model=False):
         sd = torch.load(path, map_location="cpu")
@@ -183,30 +217,32 @@ class FixMatch(pl.LightningModule):
 
     def get_train_input(self, batch):
         x = batch[0][self.img_key]
-        if len(x.shape) == 3:
-            x = x[..., None]
-        x = rearrange(x, 'b h w c -> b c h w')
-        x = x.to(memory_format=torch.contiguous_format).float()
-        x = self.labeled_aug(x)
+        # if len(x.shape) == 3:
+        #     x = x[..., None]
+        # x = rearrange(x, 'b h w c -> b c h w')
+        # x = x.to(memory_format=torch.contiguous_format).float()
+        # x = self.labeled_aug(x)
         y = batch[0][self.label_key]
 
-        unsup_img = batch[1][self.unsup_img_key]
-        if len(unsup_img.shape) == 3:
-            unsup_img = unsup_img[..., None]
-        unsup_img = rearrange(unsup_img, 'b h w c -> b c h w')
-        unsup_img = unsup_img.to(memory_format=torch.contiguous_format).float()
-        weak_img = self.augmentation(unsup_img)
-        strong_img = self.strong_augmentation(unsup_img)
-        strong_img = self.cutout(strong_img, 1)
+        # unsup_img = batch[1][self.unsup_img_key]
+        # if len(unsup_img.shape) == 3:
+        #     unsup_img = unsup_img[..., None]
+        # unsup_img = rearrange(unsup_img, 'b h w c -> b c h w')
+        # unsup_img = unsup_img.to(memory_format=torch.contiguous_format).float()
+        # weak_img = self.augmentation(unsup_img)
+        # strong_img = self.strong_augmentation(unsup_img)
+        # strong_img = self.cutout(strong_img, 1)
+
+        weak_img, strong_img = batch[1][0]
         return x, y, weak_img, strong_img
 
     def get_val_input(self, batch):
         x = batch[self.img_key]
-        if len(x.shape) == 3:
-            x = x[..., None]
-        x = rearrange(x, 'b h w c -> b c h w')
-        x = x.to(memory_format=torch.contiguous_format).float()
-        x = self.val_aug(x)
+        # if len(x.shape) == 3:
+            # x = x[..., None]
+        # x = rearrange(x, 'b h w c -> b c h w')
+        # x = x.to(memory_format=torch.contiguous_format).float()
+        # x = self.val_aug(x)
         y = batch[self.label_key]
         return x, y
 
@@ -271,14 +307,13 @@ class FixMatch(pl.LightningModule):
         loss_dict_no_ema.update({'val/loss': loss})
         loss_dict_no_ema.update({'val/accuracy': accuracy})
 
-        with self.ema_scope():
-            loss_dict_ema = {}
-            preds = self.model(x)
-            loss = nn.functional.cross_entropy(preds, y, reduction="mean")
-            accuracy = torch.sum(torch.argmax(preds, dim=1) == y) / len(y)
-            loss_dict_ema.update({'val/loss': loss})
-            loss_dict_ema.update({'val/accuracy': accuracy})
-            loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
+        loss_dict_ema = {}
+        preds = self.model_ema.ema(x)
+        loss = nn.functional.cross_entropy(preds, y, reduction="mean")
+        accuracy = torch.sum(torch.argmax(preds, dim=1) == y) / len(y)
+        loss_dict_ema.update({'val/loss': loss})
+        loss_dict_ema.update({'val/accuracy': accuracy})
+        loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
         self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
         self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
 
@@ -359,7 +394,8 @@ class FixMatch(pl.LightningModule):
     def on_train_batch_end(self, *args, **kwargs):
         self.scheduler.step()
         if self.use_ema:
-            self.model_ema(self.model)
+            # self.model_ema(self.model)
+            self.model_ema.update(self.model)
         return
 
     def cutout(self, img_batch, level, fill=0.5):
