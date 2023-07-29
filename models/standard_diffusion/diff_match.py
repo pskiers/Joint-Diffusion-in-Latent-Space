@@ -1,9 +1,13 @@
+import math
 import torch
 import torch.nn as nn
 from einops import rearrange
 import kornia as K
+from ldm.models.diffusion.ddpm import DDPM
+from ldm.util import default
 from .ssl_joint_diffusion import SSLJointDiffusion
 from ..representation_transformer import RepresentationTransformer
+from ..baselines.fixmatch import FixMatchEma, interleave, de_interleave
 
 
 class DiffMatch(SSLJointDiffusion):
@@ -139,3 +143,177 @@ class DiffMatchAttention(DiffMatch):
 
     def transform_representations(self, representations):
         return representations
+
+
+class DiffMatchFixed(DDPM):
+    def __init__(self,
+                 min_confidence=0.95,
+                 mu=7,
+                 batch_size=64,
+                 img_key=0,
+                 label_key=1,
+                 unsup_img_key=0,
+                 *args,
+                 **kwargs):
+        super().__init__(*args, **kwargs)
+        self.min_confidence = min_confidence
+        self.mu = mu
+        self.batch_size = batch_size
+        self.model_ema = FixMatchEma(self.model, decay=0.999)
+        self.img_key = img_key
+        self.label_key = label_key
+        self.unsup_img_key = unsup_img_key
+        self.scheduler = None
+
+    def configure_optimizers(self):
+        no_decay = ['bias', 'bn']
+        grouped_parameters = [
+            {'params': [p for n, p in self.model.named_parameters() if not any(
+                nd in n for nd in no_decay)], 'weight_decay': 5e-4},
+            {'params': [p for n, p in self.model.named_parameters() if any(
+                nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        ]
+        optimizer = torch.optim.SGD(
+            grouped_parameters,
+            lr=0.03,
+            momentum=0.9,
+            nesterov=True
+        )
+
+        def _lr_lambda(current_step):
+            num_warmup_steps = 0
+            num_training_steps = 2**20
+            num_cycles = 7./16.
+
+            if current_step < num_warmup_steps:
+                return float(current_step) / float(max(1, num_warmup_steps))
+            no_progress = float(current_step - num_warmup_steps) / \
+                float(max(1, num_training_steps - num_warmup_steps))
+            return max(0., math.cos(math.pi * num_cycles * no_progress))
+
+        self.scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, -1)
+        return optimizer
+
+    def p_losses(self, x_start, t, noise=None):
+        noise = default(noise, lambda: torch.randn_like(x_start))
+        x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
+        model_out, _ = self.model(x_noisy, t)
+
+        loss_dict = {}
+        if self.parameterization == "eps":
+            target = noise
+        elif self.parameterization == "x0":
+            target = x_start
+        else:
+            raise NotImplementedError(f"Paramterization {self.parameterization} not yet supported")
+
+        loss = self.get_loss(model_out, target, mean=False).mean(dim=[1, 2, 3])
+
+        log_prefix = 'train' if self.training else 'val'
+
+        loss_dict.update({f'{log_prefix}/loss_simple': loss.mean()})
+        loss_simple = loss.mean() * self.l_simple_weight
+
+        loss_vlb = (self.lvlb_weights[t] * loss).mean()
+        loss_dict.update({f'{log_prefix}/loss_vlb': loss_vlb})
+
+        loss = loss_simple + self.original_elbo_weight * loss_vlb
+
+        loss_dict.update({f'{log_prefix}/loss': loss})
+
+        return loss, loss_dict
+
+    def get_train_input(self, batch):
+        x = batch[0][self.img_key]
+        y = batch[0][self.label_key]
+        weak_img, strong_img = batch[1][0]
+        return x, y, weak_img, strong_img
+
+    def get_val_input(self, batch):
+        x = batch[self.img_key]
+        y = batch[self.label_key]
+        return x, y
+
+    def training_step(self, batch, batch_idx):
+        x, y, weak_img, strong_img = self.get_train_input(batch)
+        loss, loss_dict = self(weak_img)
+
+        inputs = interleave(
+            torch.cat((x, weak_img, strong_img)), 2*self.mu+1)
+        logits = self.model.diffusion_model.just_representations(inputs)
+        logits = de_interleave(logits, 2*self.mu+1)
+        preds_x = logits[:self.batch_size]
+        preds_weak, preds_strong = logits[self.batch_size:].chunk(2)
+        del logits
+
+        loss_classification = nn.functional.cross_entropy(preds_x, y, reduction="mean")
+        loss += loss_classification
+        accuracy = torch.sum(torch.argmax(preds_x, dim=1) == y) / len(y)
+        loss_dict.update(
+            {'train/loss_classification': loss_classification})
+        loss_dict.update({'train/loss': loss})
+        loss_dict.update({'train/accuracy': accuracy})
+
+        pseudo_label = torch.softmax(preds_weak.detach(), dim=-1)
+        max_probs, targets_u = torch.max(pseudo_label, dim=-1)
+        mask = max_probs.ge(self.min_confidence).float()
+        ssl_loss = (nn.functional.cross_entropy(
+            preds_strong, targets_u, reduction='none') * mask).mean()
+        loss += ssl_loss
+        accuracy = torch.sum(
+            (torch.argmax(preds_strong, dim=1) == targets_u) * mask
+        ) / mask.sum() if mask.sum() > 0 else 0
+        loss_dict.update(
+                {'train/ssl_above_threshold': mask.mean().item()})
+        loss_dict.update({'train/ssl_max_confidence': mask.max().item()})
+        loss_dict.update({'train/loss_ssl_classification': ssl_loss})
+        loss_dict.update({'train/loss': loss})
+        loss_dict.update({'train/ssl_accuracy': accuracy})
+
+        lr = self.optimizers().param_groups[0]['lr']
+        self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        self.log_dict(loss_dict, prog_bar=True,
+                      logger=True, on_step=True, on_epoch=True)
+        self.log("global_step", self.global_step,
+                 prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        return loss
+
+    @torch.no_grad()
+    def validation_step(self, batch, batch_idx):
+        x, y = self.get_val_input(batch)
+        _, loss_dict_no_ema = self(x)
+        preds = self.model.diffusion_model.just_representations(x)
+        loss = nn.functional.cross_entropy(preds, y, reduction="mean")
+        accuracy = torch.sum(torch.argmax(preds, dim=1) == y) / len(y)
+        loss_dict_no_ema.update({'val/loss': loss})
+        loss_dict_no_ema.update({'val/accuracy': accuracy})
+        with self.ema_scope():
+            x, y = self.get_val_input(batch)
+            _, loss_dict_ema = self(x)
+            preds = self.model.diffusion_model.just_representations(x)
+            loss = nn.functional.cross_entropy(preds, y, reduction="mean")
+            accuracy = torch.sum(torch.argmax(preds, dim=1) == y) / len(y)
+            loss_dict_ema.update({'val/loss': loss})
+            loss_dict_ema.update({'val/accuracy': accuracy})
+            loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
+        self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
+        self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
+
+    def on_train_batch_end(self, *args, **kwargs):
+        self.scheduler.step()
+        if self.use_ema:
+            self.model_ema(self.model)
+            # self.model_ema.update(self.model)
+        return
+
+    def p_mean_variance(self, x, t, clip_denoised: bool):
+        model_out, _ = self.model(x, t)
+        if self.parameterization == "eps":
+            x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
+        elif self.parameterization == "x0":
+            x_recon = model_out
+        if clip_denoised:
+            x_recon.clamp_(-1., 1.)
+
+        model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
+        return model_mean, posterior_variance, posterior_log_variance

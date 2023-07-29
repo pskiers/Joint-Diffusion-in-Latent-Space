@@ -29,12 +29,12 @@ model:
         num_res_blocks: 2
         num_head_channels: 32
 
-    sample_grad_scale: 60
-    classifier_in_features: 0
-    classifier_hidden: 0
-    num_classes: 10
-    dropout: 0.0
-    classification_key: 1
+    # sample_grad_scale: 60
+    # classifier_in_features: 0
+    # classifier_hidden: 0
+    # num_classes: 10
+    # dropout: 0.0
+    # classification_key: 1
 
 lightning:
   callbacks:

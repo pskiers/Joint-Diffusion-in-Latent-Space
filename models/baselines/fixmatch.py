@@ -6,7 +6,6 @@ import torch.nn as nn
 import pytorch_lightning as pl
 from einops import rearrange
 import kornia as K
-from ..standard_diffusion import DiffMatch
 from ..wide_resnet import Wide_ResNet
 from ldm.util import count_params
 from ldm.modules.ema import LitEma
@@ -279,7 +278,7 @@ class FixMatch(pl.LightningModule):
             preds_strong, targets_u, reduction='none') * mask).mean()
         loss += ssl_loss
         accuracy = torch.sum(
-            torch.argmax(preds_strong, dim=1) == targets_u * mask
+            (torch.argmax(preds_strong, dim=1) == targets_u) * mask
         ) / mask.sum() if mask.sum() > 0 else 0
         loss_dict.update(
                 {'train/ssl_above_threshold': mask.mean().item()})

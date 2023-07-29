@@ -1,7 +1,9 @@
 # import tensorflow as tf
+from dataclasses import dataclass
 from omegaconf import OmegaConf
 import argparse
 import torch
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 import pytorch_lightning as pl
 from models import *
 from datasets import *
@@ -12,64 +14,97 @@ import matplotlib.pyplot as plt
 import torchvision as tv
 
 
+@dataclass
+class Args:
+    num_labeled: int = 1000
+    num_classes: int = 10
+    expand_labels: bool = True
+    batch_size: int = 64
+    eval_step: int = 1024
+
+
 if __name__ == "__main__":
-    config = OmegaConf.load("configs/svhn-joint-standard-diffusion.yaml")
+    config = OmegaConf.load("configs/cifar10-joint-standard-diffusion-wideresnet.yaml")
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
     trainer_config = lightning_config.get("trainer", OmegaConf.create())
-    trainer_config["accelerator"] = "ddp"
+    # trainer_config["accelerator"] = "ddp"
     trainer_config["gpus"] = 1
     trainer_opt = argparse.Namespace(**trainer_config)
     lightning_config.trainer = trainer_config
 
-    train_ds = AdjustedSVHN(train="train")
-    test_ds = AdjustedSVHN(train="test")
+    args = Args()
+    train_sampler = RandomSampler
+    labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS["cifar10"](args, './data')
+    labeled_trainloader = DataLoader(
+        labeled_dataset,
+        sampler=train_sampler(labeled_dataset),
+        batch_size=64,
+        num_workers=4,
+        drop_last=True)
+
+    unlabeled_trainloader = DataLoader(
+        unlabeled_dataset,
+        sampler=train_sampler(unlabeled_dataset),
+        batch_size=448,
+        num_workers=4,
+        drop_last=True)
+
+    test_loader = DataLoader(
+        test_dataset,
+        sampler=SequentialSampler(test_dataset),
+        batch_size=64,
+        num_workers=4)
+
+    # train_ds = AdjustedCIFAR10(train=True)
+    # test_ds = AdjustedCIFAR10(train=False)
 
     # train_ds, validation_ds = torch.utils.data.random_split(
     #     train_ds,
     #     [len(train_ds)-int(0.2*len(train_ds)), int(0.2*len(train_ds))],
     #     generator=torch.Generator().manual_seed(42)
     # )
-    train_ds, validation_ds = torch.utils.data.random_split(
-        train_ds,
-        [len(train_ds)-len(test_ds), len(test_ds)],
-        generator=torch.Generator().manual_seed(42)
-    )
-    _, train_supervised = equal_labels_random_split(
-        train_ds,
-        labels=[i for i in range(10)],
-        amount_per_class=100,
-        generator=torch.Generator().manual_seed(42)
-    )
+    # train_ds, validation_ds = torch.utils.data.random_split(
+    #     train_ds,
+    #     [len(train_ds)-len(test_ds), len(test_ds)],
+    #     generator=torch.Generator().manual_seed(42)
+    # )
+    # _, train_supervised = equal_labels_random_split(
+    #     train_ds,
+    #     labels=[i for i in range(10)],
+    #     amount_per_class=100,
+    #     generator=torch.Generator().manual_seed(42)
+    # )
 
-    train_dl_unsupervised = torch.utils.data.DataLoader(
-        train_ds,
-        batch_size=8,
-        shuffle=True,
-        num_workers=0,
-        drop_last=True
-    )
-    train_dl_supervised = torch.utils.data.DataLoader(
-        train_supervised,
-        batch_size=8,
-        shuffle=True,
-        num_workers=0,
-        drop_last=True
-    )
-    valid_dl = torch.utils.data.DataLoader(
-        test_ds,
-        batch_size=8,
-        shuffle=False,
-        num_workers=0
-    )
+    # train_dl_unsupervised = torch.utils.data.DataLoader(
+    #     train_ds,
+    #     batch_size=448,
+    #     shuffle=True,
+    #     num_workers=0,
+    #     drop_last=True
+    # )
+    # train_dl_supervised = torch.utils.data.DataLoader(
+    #     train_supervised,
+    #     batch_size=64,
+    #     shuffle=True,
+    #     num_workers=0,
+    #     drop_last=True
+    # )
+    # valid_dl = torch.utils.data.DataLoader(
+    #     test_ds,
+    #     batch_size=128,
+    #     shuffle=False,
+    #     num_workers=0
+    # )
     # test_dl = torch.utils.data.DataLoader(
     #     test_ds, batch_size=128, shuffle=False, num_workers=0)
 
     # config.model.params["ckpt_path"] = f"logs/DiffMatchWithSampling_2023-06-06T01-49-32/checkpoints/last.ckpt"
 
-    model = DiffMatch(**config.model.get("params", dict()))
-    model.supervised_dataloader = train_dl_supervised
+    model = DiffMatchFixed(**config.model.get("params", dict()))
+    # model = FixMatch()
+    # model.supervised_dataloader = train_dl_supervised
 
     model.learning_rate = config.model.base_learning_rate
 
@@ -112,7 +147,7 @@ if __name__ == "__main__":
             lightning_config=lightning_config
         ),
         ImageLogger(
-            batch_frequency=2,
+            batch_frequency=2000,
             max_images=10,
             clamp=True,
             increase_log_steps=False,
@@ -136,9 +171,14 @@ if __name__ == "__main__":
 
     trainer.fit(
         model,
-        train_dataloaders=train_dl_unsupervised,
-        val_dataloaders=valid_dl
+        train_dataloaders=[labeled_trainloader, unlabeled_trainloader],
+        val_dataloaders=test_loader,
     )
+
+    # from torch.profiler import profile, record_function, ProfilerActivity
+    # with profile(activities=[ProfilerActivity.CPU], profile_memory=True) as prof:
+    #     model.training_step(next(iter(train_dl_unsupervised)), 0)
+    # print(prof.key_averages().table(sort_by="self_cpu_memory_usage", row_limit=10))
 
     # model.to(torch.device("cuda"))
     # model.sample_classes=torch.tensor(
