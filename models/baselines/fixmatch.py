@@ -1,78 +1,11 @@
 import math
-from typing import Optional
 from contextlib import contextmanager
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
-from einops import rearrange
-import kornia as K
-from ..wide_resnet import Wide_ResNet
 from ldm.util import count_params
-from ldm.modules.ema import LitEma
-from copy import deepcopy
-
-
-def interleave(x, size):
-    s = list(x.shape)
-    return x.reshape([-1, size] + s[1:]).transpose(0, 1).reshape([-1] + s[1:])
-
-
-def de_interleave(x, size):
-    s = list(x.shape)
-    return x.reshape([size, -1] + s[1:]).transpose(0, 1).reshape([-1] + s[1:])
-
-
-class ModelEMA(object):
-    def __init__(self, model, decay, device):
-        self.ema = deepcopy(model)
-        self.ema.to(device)
-        self.ema.eval()
-        self.decay = decay
-        self.ema_has_module = hasattr(self.ema, 'module')
-        # Fix EMA. https://github.com/valencebond/FixMatch_pytorch thank you!
-        self.param_keys = [k for k, _ in self.ema.named_parameters()]
-        self.buffer_keys = [k for k, _ in self.ema.named_buffers()]
-        for p in self.ema.parameters():
-            p.requires_grad_(False)
-
-    def update(self, model):
-        needs_module = hasattr(model, 'module') and not self.ema_has_module
-        with torch.no_grad():
-            msd = model.state_dict()
-            esd = self.ema.state_dict()
-            for k in self.param_keys:
-                if needs_module:
-                    j = 'module.' + k
-                else:
-                    j = k
-                model_v = msd[j].detach()
-                ema_v = esd[k]
-                esd[k].copy_(ema_v * self.decay + (1. - self.decay) * model_v)
-
-            for k in self.buffer_keys:
-                if needs_module:
-                    j = 'module.' + k
-                else:
-                    j = k
-                esd[k].copy_(msd[j])
-
-class FixMatchEma(LitEma):
-    def forward(self,model):
-        decay = self.decay
-
-        one_minus_decay = 1.0 - decay
-
-        with torch.no_grad():
-            m_param = dict(model.named_parameters())
-            shadow_params = dict(self.named_buffers())
-
-            for key in m_param:
-                if m_param[key].requires_grad:
-                    sname = self.m_name2s_name[key]
-                    shadow_params[sname] = shadow_params[sname].type_as(m_param[key])
-                    shadow_params[sname].sub_(one_minus_decay * (shadow_params[sname] - m_param[key]))
-                else:
-                    assert key not in self.m_name2s_name
+from ..utils import FixMatchEma, interleave, de_interleave
+from ..wide_resnet import Wide_ResNet
 
 
 class FixMatch(pl.LightningModule):
@@ -93,7 +26,6 @@ class FixMatch(pl.LightningModule):
         self.model = Wide_ResNet(depth=28, num_classes=10, widen_factor=2, drop_rate=0)
         count_params(self.model, verbose=True)
         self.model_ema = FixMatchEma(self.model, decay=0.999)
-        # self.model_ema = ModelEMA(self.model, 0.999, torch.device("cuda"))
         self.monitor = monitor
         if ckpt_path is not None:
             self.init_from_ckpt(ckpt_path)
@@ -101,52 +33,6 @@ class FixMatch(pl.LightningModule):
         self.label_key = label_key
         self.unsup_img_key = unsup_img_key
         self.use_ema = True
-
-        # fixmatch_policy = [
-        #     [("auto_contrast", 0, 1)],
-        #     [("brightness", 0.05, 0.95)],
-        #     [("color", 0.05, 0.95)],
-        #     [("contrast", 0.05, 0.95)],
-        #     [("equalize", 0, 1)],
-        #     [("posterize", 4, 8)],
-        #     [("rotate", -30.0, 30.0)],
-        #     [("sharpness", 0.05, 0.95)],
-        #     [("shear_x", -0.3, 0.3)],
-        #     [("shear_y", -0.3, 0.3)],
-        #     [("solarize", 0.0, 1.0)],
-        #     [("translate_x", -0.3, 0.3)],
-        #     [("translate_x", -0.3, 0.3)],
-        # ]
-
-        # self.val_aug = K.augmentation.ImageSequential(
-        #     K.augmentation.Normalize(mean=(0.4914, 0.4822, 0.4465),
-        #                              std=(0.2471, 0.2435, 0.2616)),
-        # )
-        # self.labeled_aug = K.augmentation.ImageSequential(
-        #     K.augmentation.RandomHorizontalFlip(),
-        #     K.augmentation.RandomCrop((32, 32),
-        #                               padding=int(32*0.125),
-        #                               padding_mode='reflect'),
-        #     K.augmentation.Normalize(mean=(0.4914, 0.4822, 0.4465),
-        #                              std=(0.2471, 0.2435, 0.2616)),
-        # )
-        # self.augmentation = K.augmentation.ImageSequential(
-        #     K.augmentation.RandomHorizontalFlip(),
-        #     K.augmentation.RandomCrop((32, 32),
-        #                               padding=int(32*0.125),
-        #                               padding_mode='reflect'),
-        #     K.augmentation.Normalize(mean=(0.4914, 0.4822, 0.4465),
-        #                              std=(0.2471, 0.2435, 0.2616)),
-        # )
-        # self.strong_augmentation = K.augmentation.AugmentationSequential(
-        #     K.augmentation.RandomHorizontalFlip(),
-        #     K.augmentation.RandomCrop((32, 32),
-        #                               padding=int(32*0.125),
-        #                               padding_mode='reflect'),
-        #     K.augmentation.auto.RandAugment(n=2, m=10, policy=fixmatch_policy),
-        #     K.augmentation.Normalize(mean=(0.4914, 0.4822, 0.4465),
-        #                              std=(0.2471, 0.2435, 0.2616)),
-        # )
         self.scheduler = None
 
     @contextmanager
@@ -216,39 +102,14 @@ class FixMatch(pl.LightningModule):
 
     def get_train_input(self, batch):
         x = batch[0][self.img_key]
-        # if len(x.shape) == 3:
-        #     x = x[..., None]
-        # x = rearrange(x, 'b h w c -> b c h w')
-        # x = x.to(memory_format=torch.contiguous_format).float()
-        # x = self.labeled_aug(x)
         y = batch[0][self.label_key]
-
-        # unsup_img = batch[1][self.unsup_img_key]
-        # if len(unsup_img.shape) == 3:
-        #     unsup_img = unsup_img[..., None]
-        # unsup_img = rearrange(unsup_img, 'b h w c -> b c h w')
-        # unsup_img = unsup_img.to(memory_format=torch.contiguous_format).float()
-        # weak_img = self.augmentation(unsup_img)
-        # strong_img = self.strong_augmentation(unsup_img)
-        # strong_img = self.cutout(strong_img, 1)
-
         weak_img, strong_img = batch[1][0]
         return x, y, weak_img, strong_img
 
     def get_val_input(self, batch):
         x = batch[self.img_key]
-        # if len(x.shape) == 3:
-            # x = x[..., None]
-        # x = rearrange(x, 'b h w c -> b c h w')
-        # x = x.to(memory_format=torch.contiguous_format).float()
-        # x = self.val_aug(x)
         y = batch[self.label_key]
         return x, y
-
-    # def shared_step(self, batch):
-    #     x = self.get_input(batch, self.first_stage_key)
-    #     loss, loss_dict = self(x)
-    #     return loss, loss_dict
 
     def training_step(self, batch, batch_idx):
         x, y, weak_img, strong_img = self.get_train_input(batch)
@@ -308,7 +169,6 @@ class FixMatch(pl.LightningModule):
 
         loss_dict_ema = {}
         with self.ema_scope():
-            # preds = self.model_ema.ema(x)
             preds = self.model(x)
             loss = nn.functional.cross_entropy(preds, y, reduction="mean")
             accuracy = torch.sum(torch.argmax(preds, dim=1) == y) / len(y)
@@ -318,104 +178,8 @@ class FixMatch(pl.LightningModule):
         self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
         self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
 
-    # def p_losses(self, x_start, t, noise=None):
-    #     loss, loss_dict = torch.zeros(1, device=self.device), {}
-    #     if self.batch_classes is not None:
-    #         prefix = 'train' if self.training else 'val'
-    #         x = self.labeled_aug(x_start) if self.training else self.val_aug(x_start)
-    #         self.batch_class_predictions = self.model(x)
-
-    #         loss_classification = nn.functional.cross_entropy(
-    #             self.batch_class_predictions, self.batch_classes)
-    #         loss += loss_classification
-    #         loss_dict.update(
-    #             {f'{prefix}/loss_classification': loss_classification})
-    #         loss_dict.update({f'{prefix}/loss': loss})
-    #         accuracy = torch.sum(torch.argmax(
-    #             self.batch_class_predictions, dim=1) == self.batch_classes) / len(self.batch_classes)
-    #         loss_dict.update({f'{prefix}/accuracy': accuracy})
-    #     if self.supervised_imgs is not None:
-
-    #         prefix = 'train' if self.training else 'val'
-    #         x = self.labeled_aug(self.supervised_imgs) if self.training else self.val_aug(self.supervised_imgs)
-    #         preds = self.model(x)
-
-    #         loss_classification = nn.functional.cross_entropy(
-    #             preds, self.supervised_labels) * self.classification_loss_scale
-    #         loss += loss_classification
-    #         loss_dict.update(
-    #             {f'{prefix}/loss_classification': loss_classification})
-    #         loss_dict.update({f'{prefix}/loss': loss})
-    #         accuracy = torch.sum(torch.argmax(preds, dim=1) == self.supervised_labels) / len(self.supervised_labels)
-    #         loss_dict.update({f'{prefix}/accuracy': accuracy})
-
-    #         self.supervised_imgs = None
-    #         self.supervised_labels = None
-
-    #     if not self.training:
-    #         return loss, loss_dict
-    #     prefix = 'train'
-
-    #     with torch.no_grad():
-    #         weakly_augmented = self.augmentation(self.raw_imgs).detach()
-    #         weak_preds = self.model(
-    #             weakly_augmented
-    #         )
-
-    #         weak_preds = nn.functional.softmax(weak_preds, dim=1).detach()
-    #         pseudo_labels = weak_preds.argmax(dim=1)
-    #         above_threshold_idx, = (
-    #             weak_preds.max(dim=1).values > self.min_confidence
-    #         ).nonzero(as_tuple=True)
-    #         pseudo_labels = pseudo_labels[above_threshold_idx]
-
-    #         loss_dict.update(
-    #             {f'{prefix}/ssl_above_threshold': len(above_threshold_idx) / len(weak_preds)})
-    #         loss_dict.update({f'{prefix}/ssl_max_confidence': weak_preds.max()})
-    #         if len(above_threshold_idx) == 0:
-    #             return loss, loss_dict
-
-    #         strongly_augmented = self.strong_augmentation((self.raw_imgs[above_threshold_idx])).detach()
-    #         strongly_augmented = self.cutout(strongly_augmented, level=1).detach()
-
-    #     preds = self.model(
-    #         strongly_augmented
-    #     )
-    #     ssl_loss = nn.functional.cross_entropy(preds, pseudo_labels)
-
-    #     loss += ssl_loss * len(preds) / len(weak_preds)
-    #     loss_dict.update({f'{prefix}/loss_ssl_classification': ssl_loss})
-    #     loss_dict.update({f'{prefix}/loss': loss})
-    #     accuracy = torch.sum(
-    #         torch.argmax(preds, dim=1) == pseudo_labels) / len(pseudo_labels)
-    #     loss_dict.update({f'{prefix}/ssl_accuracy': accuracy})
-
-    #     return loss, loss_dict
-
     def on_train_batch_end(self, *args, **kwargs):
         self.scheduler.step()
         if self.use_ema:
             self.model_ema(self.model)
-            # self.model_ema.update(self.model)
         return
-
-    def cutout(self, img_batch, level, fill=0.5):
-        """
-        Apply cutout to torch tensor of shape (batch, height, width, channel) at the specified level.
-        """
-        size = 1 + int(level * min(img_batch.shape[1:3]) * 0.499)
-        batch, img_height, img_width = img_batch.shape[0:3]
-        height_loc = torch.randint(low=0, high=img_height, size=[batch])
-        width_loc = torch.randint(low=0, high=img_width, size=[batch])
-        x_uppers = (height_loc - size // 2)
-        x_uppers *= (x_uppers >= 0)
-        x_lowers = (height_loc + size // 2)
-        x_lowers -= (x_lowers >= img_height) * (x_lowers - img_height - 1)
-        y_uppers = (width_loc - size // 2)
-        y_uppers *= (y_uppers >= 0)
-        y_lowers = (width_loc + size // 2)
-        y_lowers -= (y_lowers >= img_width) * (y_lowers - img_width - 1)
-
-        for img, x_upper, x_lower, y_upper, y_lower in zip(img_batch, x_uppers, x_lowers, y_uppers, y_lowers):
-            img[x_upper:x_lower, y_upper:y_lower] = fill
-        return img_batch

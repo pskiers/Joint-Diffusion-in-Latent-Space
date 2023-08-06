@@ -1,13 +1,14 @@
 import math
 import torch
 import torch.nn as nn
-from einops import rearrange
+import numpy as np
+from einops import rearrange, repeat
 import kornia as K
 from ldm.models.diffusion.ddpm import DDPM
 from ldm.util import default
 from .ssl_joint_diffusion import SSLJointDiffusion
 from ..representation_transformer import RepresentationTransformer
-from ..baselines.fixmatch import FixMatchEma, interleave, de_interleave
+from ..utils import FixMatchEma, interleave, de_interleave
 
 
 class DiffMatch(SSLJointDiffusion):
@@ -61,7 +62,7 @@ class DiffMatch(SSLJointDiffusion):
                 torch.ones(weakly_augmented.shape[0], device=self.device),
                 pooled=False
             )
-            if isinstance(weak_rep, list): # TODO refactor this shit
+            if isinstance(weak_rep, list):  # TODO refactor this shit
                 weak_rep = self.transform_representations(weak_rep)
                 weak_preds = nn.functional.softmax(
                     self.classifier(weak_rep), dim=1).detach()
@@ -317,3 +318,44 @@ class DiffMatchFixed(DDPM):
 
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
         return model_mean, posterior_variance, posterior_log_variance
+
+    @torch.no_grad()
+    def log_images(self, batch, N=8, n_row=2, sample=True, return_keys=None, **kwargs):
+        log = dict()
+        if len(batch) == 2:
+            _, _, x, _ = self.get_train_input(batch)
+        else:
+            x, _ = self.get_val_input(batch)
+        N = min(x.shape[0], N)
+        n_row = min(x.shape[0], n_row)
+        x = x.to(self.device)[:N]
+        log["inputs"] = x
+
+        # get diffusion row
+        diffusion_row = list()
+        x_start = x[:n_row]
+
+        for t in range(self.num_timesteps):
+            if t % self.log_every_t == 0 or t == self.num_timesteps - 1:
+                t = repeat(torch.tensor([t]), '1 -> b', b=n_row)
+                t = t.to(self.device).long()
+                noise = torch.randn_like(x_start)
+                x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
+                diffusion_row.append(x_noisy)
+
+        log["diffusion_row"] = self._get_rows_from_list(diffusion_row)
+
+        if sample:
+            # get denoise row
+            with self.ema_scope("Plotting"):
+                samples, denoise_row = self.sample(batch_size=N, return_intermediates=True)
+
+            log["samples"] = samples
+            log["denoise_row"] = self._get_rows_from_list(denoise_row)
+
+        if return_keys:
+            if np.intersect1d(list(log.keys()), return_keys).shape[0] == 0:
+                return log
+            else:
+                return {key: log[key] for key in return_keys}
+        return log
