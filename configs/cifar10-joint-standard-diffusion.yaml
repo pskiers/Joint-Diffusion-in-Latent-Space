@@ -24,12 +24,12 @@ model:
         num_head_channels: 32
         pool_size: 10000
 
-    sample_grad_scale: 60
-    classifier_in_features: 4864
-    classifier_hidden: 2048
+    # sample_grad_scale: 60
+    classifier_in_features: 3040
+    classifier_hidden: 1024
     num_classes: 10
     dropout: 0.0
-    classification_key: 1
+    # classification_key: 1
 
 lightning:
   callbacks:

@@ -174,11 +174,10 @@ class DiffMatchFixed(DDPM):
             {'params': [p for n, p in self.model.named_parameters() if any(
                 nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
-        optimizer = torch.optim.SGD(
+        optimizer = torch.optim.Adam(
             grouped_parameters,
-            lr=0.03,
-            momentum=0.9,
-            nesterov=True
+            lr=0.0003,
+            betas=(0.9, 0.999)
         )
 
         def _lr_lambda(current_step):
@@ -241,7 +240,14 @@ class DiffMatchFixed(DDPM):
 
         inputs = interleave(
             torch.cat((x, weak_img, strong_img)), 2*self.mu+1)
-        logits = self.model.diffusion_model.just_representations(inputs)
+        logits = self.model.diffusion_model.just_representations(
+            inputs,
+            torch.ones(inputs.shape[0], device=self.device),
+            pooled=False
+        )
+        if isinstance(logits, list): # TODO refactor this shit
+            logits = self.transform_representations(logits)
+            logits = self.classifier(logits)
         logits = de_interleave(logits, 2*self.mu+1)
         preds_x = logits[:self.batch_size]
         preds_weak, preds_strong = logits[self.batch_size:].chunk(2)
@@ -283,7 +289,14 @@ class DiffMatchFixed(DDPM):
     def validation_step(self, batch, batch_idx):
         x, y = self.get_val_input(batch)
         _, loss_dict_no_ema = self(x)
-        preds = self.model.diffusion_model.just_representations(x)
+        preds = self.model.diffusion_model.just_representations(
+            x,
+            torch.ones(x.shape[0], device=self.device),
+            pooled=False
+        )
+        if isinstance(preds, list): # TODO refactor this shit
+            preds = self.transform_representations(preds)
+            preds = self.classifier(preds)
         loss = nn.functional.cross_entropy(preds, y, reduction="mean")
         accuracy = torch.sum(torch.argmax(preds, dim=1) == y) / len(y)
         loss_dict_no_ema.update({'val/loss': loss})
@@ -291,7 +304,14 @@ class DiffMatchFixed(DDPM):
         with self.ema_scope():
             x, y = self.get_val_input(batch)
             _, loss_dict_ema = self(x)
-            preds = self.model.diffusion_model.just_representations(x)
+            preds = self.model.diffusion_model.just_representations(
+                x,
+                torch.ones(x.shape[0], device=self.device),
+                pooled=False
+            )
+            if isinstance(preds, list): # TODO refactor this shit
+                preds = self.transform_representations(preds)
+                preds = self.classifier(preds)
             loss = nn.functional.cross_entropy(preds, y, reduction="mean")
             accuracy = torch.sum(torch.argmax(preds, dim=1) == y) / len(y)
             loss_dict_ema.update({'val/loss': loss})
@@ -359,3 +379,43 @@ class DiffMatchFixed(DDPM):
             else:
                 return {key: log[key] for key in return_keys}
         return log
+
+
+class DiffMatchFixedAttention(DiffMatchFixed):
+    def __init__(self, attention_config, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.classifier = RepresentationTransformer(**attention_config)
+        if kwargs.get("ckpt_path", None) is not None:
+            ignore_keys = kwargs.get("ignore_keys", [])
+            only_model = kwargs.get("load_only_unet", False)
+            self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
+
+    def transform_representations(self, representations):
+        return representations
+
+
+class DiffMatchFixedPooling(DiffMatchFixed):
+    def __init__(self,
+                 classifier_in_features,
+                 classifier_hidden,
+                 num_classes,
+                 dropout=0,
+                 *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.classifier = nn.Sequential(
+            nn.Linear(classifier_in_features, classifier_hidden),
+            nn.LeakyReLU(negative_slope=0.2),
+            nn.Dropout(p=dropout),
+            nn.Linear(classifier_hidden, num_classes)
+        )
+        if kwargs.get("ckpt_path", None) is not None:
+            ignore_keys = kwargs.get("ignore_keys", [])
+            only_model = kwargs.get("load_only_unet", False)
+            self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
+
+    def transform_representations(self, representations):
+        representations = self.model.diffusion_model.pool_representations(representations)
+        representations = [torch.flatten(z_i, start_dim=1)
+                           for z_i in representations]
+        representations = torch.concat(representations, dim=1)
+        return representations

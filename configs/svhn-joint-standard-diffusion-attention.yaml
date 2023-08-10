@@ -32,8 +32,8 @@ model:
         num_head_channels: 32
         pool_size: 10000
 
-    sample_grad_scale: 60
-    classification_key: 1
+    # sample_grad_scale: 60
+    # classification_key: 1
 
 lightning:
   callbacks:
