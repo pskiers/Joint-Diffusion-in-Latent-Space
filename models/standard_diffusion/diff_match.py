@@ -280,6 +280,8 @@ class DiffMatchFixed(DDPM):
             loss_dict.update({'train/loss_ssl_classification': ssl_loss})
             loss_dict.update({'train/loss': loss})
             loss_dict.update({'train/ssl_accuracy': accuracy})
+        else:
+            self.classification_start -= 1
 
         lr = self.optimizers().param_groups[0]['lr']
         self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
