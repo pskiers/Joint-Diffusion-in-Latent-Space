@@ -47,6 +47,12 @@ class JointDiffusionNoisyClassifier(DDPM):
             only_model = kwargs.get("load_only_unet", False)
             self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
 
+    def configure_optimizers(self):
+        lr = self.learning_rate
+        params = list(self.parameters())
+        opt = torch.optim.AdamW(params, lr=lr)
+        return opt
+
     def get_input(self, batch, k):
         self.batch_classes = batch[self.classification_key]
         return super().get_input(batch, k)

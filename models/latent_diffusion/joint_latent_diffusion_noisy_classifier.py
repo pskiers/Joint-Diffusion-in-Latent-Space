@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
+from torch.optim.lr_scheduler import LambdaLR
 from ldm.models.diffusion.ddpm import LatentDiffusion
+from ldm.util import instantiate_from_config
 from ..ddim import DDIMSamplerGradGuided
 from ..representation_transformer import RepresentationTransformer
 
@@ -62,6 +64,32 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
             ignore_keys = kwargs.get("ignore_keys", [])
             only_model = kwargs.get("load_only_unet", False)
             self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
+
+    def configure_optimizers(self):
+        lr = self.learning_rate
+        params = list(self.model.parameters())
+        if hasattr(self, "classifier"):
+            params = params + self.classifier.parameters()
+        if self.cond_stage_trainable:
+            print(f"{self.__class__.__name__}: Also optimizing conditioner params!")
+            params = params + list(self.cond_stage_model.parameters())
+        if self.learn_logvar:
+            print('Diffusion model optimizing logvar')
+            params.append(self.logvar)
+        opt = torch.optim.AdamW(params, lr=lr)
+        if self.use_scheduler:
+            assert 'target' in self.scheduler_config
+            scheduler = instantiate_from_config(self.scheduler_config)
+
+            print("Setting up LambdaLR scheduler...")
+            scheduler = [
+                {
+                    'scheduler': LambdaLR(opt, lr_lambda=scheduler.schedule),
+                    'interval': 'step',
+                    'frequency': 1
+                }]
+            return [opt], scheduler
+        return opt
 
     def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False, cond_key=None, return_original_cond=False, bs=None):
         self.batch_classes = batch[self.classification_key]
