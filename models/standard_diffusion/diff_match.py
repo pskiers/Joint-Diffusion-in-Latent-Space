@@ -178,6 +178,13 @@ class DiffMatchFixed(DDPM):
             {'params': [p for n, p in self.named_parameters() if any(
                 nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
+        # decay = ['fc']
+        # grouped_parameters = [
+        #     {'params': [p for n, p in self.named_parameters() if any(
+        #         nd in n for nd in decay) and not any(nd in n for nd in no_decay)], 'weight_decay': 5e-4},
+        #     {'params': [p for n, p in self.named_parameters() if not any(
+        #         nd in n for nd in decay) or any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        # ]
         optimizer = torch.optim.Adam(
             grouped_parameters,
             lr=0.0003,
@@ -399,6 +406,34 @@ class DiffMatchFixedAttention(DiffMatchFixed):
     def transform_representations(self, representations):
         return representations
 
+    def configure_optimizers(self):
+        no_decay = ['bias', 'bn']
+        grouped_parameters = [
+            {'params': [p for n, p in self.classifier.named_parameters() if not any(
+                nd in n for nd in no_decay)], 'weight_decay': 5e-4},
+            {'params': [p for n, p in self.classifier.named_parameters() if any(
+                nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        ]
+        grouped_parameters[1]["params"] = grouped_parameters[1]["params"] + list(self.model.parameters())
+        optimizer = torch.optim.Adam(
+            grouped_parameters,
+            lr=0.0003,
+            betas=(0.9, 0.999)
+        )
+
+        def _lr_lambda(current_step):
+            num_warmup_steps = 0
+            num_training_steps = 2**20
+            num_cycles = 7./16.
+
+            if current_step < num_warmup_steps:
+                return float(current_step) / float(max(1, num_warmup_steps))
+            no_progress = float(current_step - num_warmup_steps) / \
+                float(max(1, num_training_steps - num_warmup_steps))
+            return max(0., math.cos(math.pi * num_cycles * no_progress))
+
+        self.scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, -1)
+        return optimizer
 
 class DiffMatchFixedPooling(DiffMatchFixed):
     def __init__(self,
@@ -425,3 +460,32 @@ class DiffMatchFixedPooling(DiffMatchFixed):
                            for z_i in representations]
         representations = torch.concat(representations, dim=1)
         return representations
+
+    def configure_optimizers(self):
+        no_decay = ['bias', 'bn']
+        grouped_parameters = [
+            {'params': [p for n, p in self.classifier.named_parameters() if not any(
+                nd in n for nd in no_decay)], 'weight_decay': 5e-4},
+            {'params': [p for n, p in self.classifier.named_parameters() if any(
+                nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        ]
+        grouped_parameters[1]["params"] = grouped_parameters[1]["params"] + list(self.model.parameters())
+        optimizer = torch.optim.Adam(
+            grouped_parameters,
+            lr=0.0003,
+            betas=(0.9, 0.999)
+        )
+
+        def _lr_lambda(current_step):
+            num_warmup_steps = 0
+            num_training_steps = 2**20
+            num_cycles = 7./16.
+
+            if current_step < num_warmup_steps:
+                return float(current_step) / float(max(1, num_warmup_steps))
+            no_progress = float(current_step - num_warmup_steps) / \
+                float(max(1, num_training_steps - num_warmup_steps))
+            return max(0., math.cos(math.pi * num_cycles * no_progress))
+
+        self.scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, -1)
+        return optimizer

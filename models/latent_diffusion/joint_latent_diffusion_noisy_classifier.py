@@ -69,7 +69,7 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
         lr = self.learning_rate
         params = list(self.model.parameters())
         if hasattr(self, "classifier"):
-            params = params + self.classifier.parameters()
+            params = params + list(self.classifier.parameters())
         if self.cond_stage_trainable:
             print(f"{self.__class__.__name__}: Also optimizing conditioner params!")
             params = params + list(self.cond_stage_model.parameters())
