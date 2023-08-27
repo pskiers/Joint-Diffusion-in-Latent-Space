@@ -150,7 +150,7 @@ class DiffMatchFixed(DDPM):
     def __init__(self,
                  min_confidence=0.95,
                  mu=7,
-                 batch_size=2,
+                 batch_size=64,
                  img_key=0,
                  label_key=1,
                  unsup_img_key=0,
