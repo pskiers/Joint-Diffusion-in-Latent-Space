@@ -12,7 +12,7 @@ from ldm.modules.diffusionmodules.openaimodel import (
     timestep_embedding,
     linear
 )
-from .wide_resnet import Wide_ResNet
+from .wide_resnet import Wide_ResNet, Wide_ResNet_Timestep
 
 
 class Wide_ResNet_UNet(nn.Module):
@@ -21,7 +21,7 @@ class Wide_ResNet_UNet(nn.Module):
                  out_channels: int,
                  repr_channels: List[int],
                  decoder_channels_mult: List[int],
-                 ds: int,
+                 ds: int,  # downsample done by
                  model_channels: int,
                  attention_resolutions: List[int],
                  num_res_blocks: int = 2,
@@ -38,7 +38,8 @@ class Wide_ResNet_UNet(nn.Module):
                  depth: int = 28,
                  widen_factor: int = 2,
                  dropout: float = 0.0,
-                 unet_layer_idx: List[int] = [0, 1, 2, 3]) -> None:
+                 unet_layer_idx: List[int] = [0, 1, 2, 3],
+                 use_timestep_emb=True) -> None:
         super().__init__()
         self.model_channels = model_channels
         self.representations = []
@@ -51,11 +52,15 @@ class Wide_ResNet_UNet(nn.Module):
 
         def hook(module, input, output):
             self.representations.append(output)
-        self.encoder = Wide_ResNet(depth, widen_factor, dropout, num_classes)
+        self.use_timestep_emb = use_timestep_emb
+        if use_timestep_emb:
+            self.encoder = Wide_ResNet_Timestep(depth, widen_factor, dropout, num_classes, time_embed_dim)
+        else:
+            self.encoder = Wide_ResNet(depth, widen_factor, dropout, num_classes)
         target_layers = []
         for layer in [self.encoder.block1,
                       self.encoder.block2,
-                      self.encoder.block3]:
+                      ]:
             target_layers.extend([layer.layer[idx] for idx in unet_layer_idx])
         for layer in target_layers:
             layer.register_forward_hook(hook)
@@ -130,7 +135,10 @@ class Wide_ResNet_UNet(nn.Module):
                 **kwargs):
         emb = self.get_timestep_embedding(x, timesteps, y)
 
-        out = self.encoder(x)
+        if self.use_timestep_emb:
+            out = self.encoder(x, emb)
+        else:
+            out = self.encoder(x)
 
         rec = self.forward_output_blocks(x, context, emb, self.representations)
         self.representations = []
@@ -143,7 +151,11 @@ class Wide_ResNet_UNet(nn.Module):
                              y=None,
                              pooled=True,
                              **kwargs):
-        out = self.encoder(x)
+        if self.use_timestep_emb:
+            emb = self.get_timestep_embedding(x, timesteps, y)
+            out = self.encoder(x, emb)
+        else:
+            out = self.encoder(x)
         self.representations = []
         return out
 
@@ -155,7 +167,10 @@ class Wide_ResNet_UNet(nn.Module):
                             **kwargs):
         emb = self.get_timestep_embedding(x, timesteps, y)
 
-        self.encoder(x)
+        if self.use_timestep_emb:
+            self.encoder(x, emb)
+        else:
+            self.encoder(x)
 
         rec = self.forward_output_blocks(x, context, emb, self.representations)
         self.representations = []

@@ -150,7 +150,7 @@ class DiffMatchFixed(DDPM):
     def __init__(self,
                  min_confidence=0.95,
                  mu=7,
-                 batch_size=64,
+                 batch_size=2,
                  img_key=0,
                  label_key=1,
                  unsup_img_key=0,
@@ -172,19 +172,19 @@ class DiffMatchFixed(DDPM):
 
     def configure_optimizers(self):
         no_decay = ['bias', 'bn']
-        grouped_parameters = [
-            {'params': [p for n, p in self.named_parameters() if not any(
-                nd in n for nd in no_decay)], 'weight_decay': 5e-4},
-            {'params': [p for n, p in self.named_parameters() if any(
-                nd in n for nd in no_decay)], 'weight_decay': 0.0}
-        ]
-        # decay = ['fc']
         # grouped_parameters = [
-        #     {'params': [p for n, p in self.named_parameters() if any(
-        #         nd in n for nd in decay) and not any(nd in n for nd in no_decay)], 'weight_decay': 5e-4},
         #     {'params': [p for n, p in self.named_parameters() if not any(
-        #         nd in n for nd in decay) or any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        #         nd in n for nd in no_decay)], 'weight_decay': 5e-4},
+        #     {'params': [p for n, p in self.named_parameters() if any(
+        #         nd in n for nd in no_decay)], 'weight_decay': 0.0}
         # ]
+        decay = ['fc']
+        grouped_parameters = [
+            {'params': [p for n, p in self.named_parameters() if any(
+                nd in n for nd in decay) and not any(nd in n for nd in no_decay)], 'weight_decay': 5e-4},
+            {'params': [p for n, p in self.named_parameters() if not any(
+                nd in n for nd in decay) or any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        ]
         optimizer = torch.optim.Adam(
             grouped_parameters,
             lr=0.0003,
@@ -253,7 +253,7 @@ class DiffMatchFixed(DDPM):
                 torch.cat((x, weak_img, strong_img)), 2*self.mu+1)
             logits = self.model.diffusion_model.just_representations(
                 inputs,
-                torch.ones(inputs.shape[0], device=self.device),
+                torch.zeros(inputs.shape[0], device=self.device),
                 pooled=False
             )
             if isinstance(logits, list): # TODO refactor this shit
@@ -304,7 +304,7 @@ class DiffMatchFixed(DDPM):
         _, loss_dict_no_ema = self(x)
         preds = self.model.diffusion_model.just_representations(
             x,
-            torch.ones(x.shape[0], device=self.device),
+            torch.zeros(x.shape[0], device=self.device),
             pooled=False
         )
         if isinstance(preds, list): # TODO refactor this shit
