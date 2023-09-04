@@ -42,19 +42,20 @@ class Wide_ResNet_UNet(nn.Module):
                  use_timestep_emb=True) -> None:
         super().__init__()
         self.model_channels = model_channels
+        self.num_classes = num_classes
         self.representations = []
-        time_embed_dim = model_channels * 4
+        self.time_embed_dim = model_channels * 4
         self.time_embed = nn.Sequential(
-            linear(model_channels, time_embed_dim),
+            linear(model_channels, self.time_embed_dim),
             nn.SiLU(),
-            linear(time_embed_dim, time_embed_dim),
+            linear(self.time_embed_dim, self.time_embed_dim),
         )
 
         def hook(module, input, output):
             self.representations.append(output)
         self.use_timestep_emb = use_timestep_emb
         if use_timestep_emb:
-            self.encoder = Wide_ResNet_Timestep(depth, widen_factor, dropout, num_classes, time_embed_dim)
+            self.encoder = Wide_ResNet_Timestep(depth, widen_factor, dropout, num_classes, self.time_embed_dim)
         else:
             self.encoder = Wide_ResNet(depth, widen_factor, dropout, num_classes)
         target_layers = []
@@ -65,7 +66,7 @@ class Wide_ResNet_UNet(nn.Module):
         for layer in target_layers:
             layer.register_forward_hook(hook)
 
-        time_embed_dim = model_channels * 4
+        self.time_embed_dim = model_channels * 4
         ch = repr_channels.pop()
         self.output_blocks = nn.ModuleList([])
         for level, mult in enumerate(decoder_channels_mult):
@@ -74,7 +75,7 @@ class Wide_ResNet_UNet(nn.Module):
                 layers = [
                     ResBlock(
                         ch + ich,
-                        time_embed_dim,
+                        self.time_embed_dim,
                         dropout,
                         out_channels=model_channels * mult,
                         dims=dims,
@@ -105,7 +106,7 @@ class Wide_ResNet_UNet(nn.Module):
                     layers.append(
                         ResBlock(
                             ch,
-                            time_embed_dim,
+                            self.time_embed_dim,
                             dropout,
                             out_channels=out_ch,
                             dims=dims,
@@ -150,12 +151,16 @@ class Wide_ResNet_UNet(nn.Module):
                              context=None,
                              y=None,
                              pooled=True,
+                             return_emb=False,
                              **kwargs):
         if self.use_timestep_emb:
             emb = self.get_timestep_embedding(x, timesteps, y)
             out = self.encoder(x, emb)
         else:
             out = self.encoder(x)
+            emb = None
+        if return_emb:
+            return out, emb  # does not delete representations, need to delete manualy
         self.representations = []
         return out
 

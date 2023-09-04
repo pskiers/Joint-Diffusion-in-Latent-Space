@@ -1,6 +1,7 @@
 import logging
 import math
 
+import torch
 import numpy as np
 from PIL import Image
 from torchvision import datasets
@@ -43,6 +44,38 @@ def get_cifar10(args, root):
     train_unlabeled_dataset = CIFAR10SSL(
         root, train_unlabeled_idxs, train=True,
         transform=TransformFixMatch(mean=cifar10_mean, std=cifar10_std))
+
+    test_dataset = datasets.CIFAR10(
+        root, train=False, transform=transform_val, download=False)
+
+    return train_labeled_dataset, train_unlabeled_dataset, test_dataset
+
+
+def get_cifar10_multi(args, root):
+    transform_labeled = transforms.Compose([
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomCrop(size=32,
+                              padding=int(32*0.125),
+                              padding_mode='reflect'),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=cifar10_mean, std=cifar10_std)
+    ])
+    transform_val = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=cifar10_mean, std=cifar10_std)
+    ])
+    base_dataset = datasets.CIFAR10(root, train=True, download=True)
+
+    train_labeled_idxs, train_unlabeled_idxs = x_u_split(
+        args, base_dataset.targets)
+
+    train_labeled_dataset = CIFAR10SSL(
+        root, train_labeled_idxs, train=True,
+        transform=transform_labeled)
+
+    train_unlabeled_dataset = CIFAR10SSL(
+        root, train_unlabeled_idxs, train=True,
+        transform=TransformMultiFixMatch(mean=cifar10_mean, std=cifar10_std, number=10))
 
     test_dataset = datasets.CIFAR10(
         root, train=False, transform=transform_val, download=False)
@@ -128,6 +161,30 @@ class TransformFixMatch(object):
         return self.normalize(weak), self.normalize(strong)
 
 
+class TransformMultiFixMatch(object):
+    def __init__(self, mean, std, number=10):
+        self.number = 10
+        self.weak = transforms.Compose([
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomCrop(size=32,
+                                  padding=int(32*0.125),
+                                  padding_mode='reflect')])
+        self.strong = transforms.Compose([
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomCrop(size=32,
+                                  padding=int(32*0.125),
+                                  padding_mode='reflect'),
+            RandAugmentMC(n=2, m=10)])
+        self.normalize = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean, std=std)])
+
+    def __call__(self, x):
+        weak = [self.normalize(self.weak(x)) for _ in range(self.number)]
+        strong = [self.normalize(self.strong(x)) for _ in range(self.number)]
+        return torch.stack(weak, dim=0), torch.stack(strong, dim=0)
+
+
 class CIFAR10SSL(datasets.CIFAR10):
     def __init__(self, root, indexs, train=True,
                  transform=None, target_transform=None,
@@ -179,4 +236,5 @@ class CIFAR100SSL(datasets.CIFAR100):
 
 
 DATASET_GETTERS = {'cifar10': get_cifar10,
+                   'cifar10_multi': get_cifar10_multi,
                    'cifar100': get_cifar100}

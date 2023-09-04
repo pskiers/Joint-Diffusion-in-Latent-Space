@@ -489,3 +489,163 @@ class DiffMatchFixedPooling(DiffMatchFixed):
 
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, -1)
         return optimizer
+
+
+class DiffMatchMulti(DiffMatchFixed):
+    def __init__(self,
+                 min_confidence=0.95,
+                 mu=7,
+                 batch_size=64,
+                 img_key=0,
+                 label_key=1,
+                 unsup_img_key=0,
+                 classification_start=0,
+                 classification_loss_weight=1,
+                 sample_multi=10,
+                 *args,
+                 **kwargs):
+        super().__init__(
+            min_confidence=min_confidence,
+            mu=mu,
+            batch_size=batch_size,
+            img_key=img_key,
+            label_key=label_key,
+            unsup_img_key=unsup_img_key,
+            classification_start=classification_start,
+            classification_loss_weight=classification_loss_weight,
+            *args, **kwargs
+        )
+        self.sample_multi = sample_multi
+        
+        self.class_emb = nn.Sequential(
+            nn.Linear(self.model.diffusion_model.num_classes, self.model.diffusion_model.time_embed_dim),
+            nn.SiLU(),
+            nn.Linear(self.model.diffusion_model.time_embed_dim, self.model.diffusion_model.time_embed_dim)
+        )
+
+    def configure_optimizers(self):
+        no_decay = ['bias', 'bn']
+        # grouped_parameters = [
+        #     {'params': [p for n, p in self.named_parameters() if not any(
+        #         nd in n for nd in no_decay)], 'weight_decay': 5e-4},
+        #     {'params': [p for n, p in self.named_parameters() if any(
+        #         nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        # ]
+        # decay = ['fc']
+        # grouped_parameters = [
+        #     {'params': [p for n, p in self.named_parameters() if any(
+        #         nd in n for nd in decay) and not any(nd in n for nd in no_decay)], 'weight_decay': 5e-4},
+        #     {'params': [p for n, p in self.named_parameters() if not any(
+        #         nd in n for nd in decay) or any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        # ]
+        optimizer = torch.optim.Adam(
+            self.parameters(), # grouped_parameters,
+            lr=0.0003,
+            betas=(0.9, 0.999)
+        )
+
+        def _lr_lambda(current_step):
+            num_warmup_steps = 0
+            num_training_steps = 2**20
+            num_cycles = 7./16.
+
+            if current_step < num_warmup_steps:
+                return float(current_step) / float(max(1, num_warmup_steps))
+            no_progress = float(current_step - num_warmup_steps) / \
+                float(max(1, num_training_steps - num_warmup_steps))
+            return max(0., math.cos(math.pi * num_cycles * no_progress))
+
+        self.scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, -1)
+        return optimizer
+
+    def training_step(self, batch, batch_idx):
+        x, y, weak_img, strong_img = self.get_train_input(batch)
+        loss, loss_dict = self(weak_img)
+        if self.classification_start <= 0:
+            inputs = interleave(
+                torch.cat((x, weak_img, strong_img)), 2*self.mu+1)
+            logits = self.model.diffusion_model.just_representations(
+                inputs,
+                torch.zeros(inputs.shape[0], device=self.device),
+                pooled=False
+            )
+            if isinstance(logits, list): # TODO refactor this shit
+                logits = self.transform_representations(logits)
+                logits = self.classifier(logits)
+            logits = de_interleave(logits, 2*self.mu+1)
+            # emb = de_interleave(emb, 2*self.mu+1)
+            # representations = self.model.diffusion_model.representations
+            # self.model.diffusion_model.representations = []
+            # representations = [de_interleave(rep, 2*self.mu+1) for rep in representations]
+            preds_x = logits[:self.batch_size]
+            preds_weak, preds_strong = logits[self.batch_size:].chunk(2)
+            # emb_weak, _ = emb[self.batch_size:].chunk(2)
+            # representations = [rep[self.batch_size:].chunk(2)[0] for rep in representations]
+            del logits
+
+            loss_classification = nn.functional.cross_entropy(preds_x, y, reduction="mean")
+            loss += loss_classification * self.classification_loss_weight
+            accuracy = torch.sum(torch.argmax(preds_x, dim=1) == y) / len(y)
+            loss_dict.update(
+                {'train/loss_classification': loss_classification})
+            loss_dict.update({'train/loss': loss})
+            loss_dict.update({'train/accuracy': accuracy})
+
+            b, c = preds_weak.shape
+            preds_weak = preds_weak.view(b // self.sample_multi, self.sample_multi, c)
+            preds_weak[:] = torch.sum(preds_weak, dim=1, keepdim=True)
+
+            pseudo_label = torch.softmax(preds_weak.detach(), dim=-1)
+            max_probs, targets_u = torch.max(pseudo_label, dim=-1)
+            mask = max_probs.ge(self.min_confidence).float()
+            ssl_loss = (nn.functional.cross_entropy(
+                preds_strong, targets_u, reduction='none') * mask).mean()
+            loss += ssl_loss * self.classification_loss_weight
+            accuracy = torch.sum(
+                (torch.argmax(preds_strong, dim=1) == targets_u) * mask
+            ) / mask.sum() if mask.sum() > 0 else 0
+            loss_dict.update(
+                    {'train/ssl_above_threshold': mask.mean().item()})
+            loss_dict.update({'train/ssl_max_confidence': mask.max().item()})
+            loss_dict.update({'train/loss_ssl_classification': ssl_loss})
+            loss_dict.update({'train/loss': loss})
+            loss_dict.update({'train/ssl_accuracy': accuracy})
+        else:
+            self.classification_start -= 1
+
+        lr = self.optimizers().param_groups[0]['lr']
+        self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        self.log_dict(loss_dict, prog_bar=True,
+                      logger=True, on_step=True, on_epoch=True)
+        self.log("global_step", self.global_step,
+                 prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        return loss
+
+    def p_losses(self, x_start, t, noise=None):
+        noise = default(noise, lambda: torch.randn_like(x_start))
+        x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
+        model_out, _ = self.model(x_noisy, t)
+
+        loss_dict = {}
+        if self.parameterization == "eps":
+            target = noise
+        elif self.parameterization == "x0":
+            target = x_start
+        else:
+            raise NotImplementedError(f"Paramterization {self.parameterization} not yet supported")
+
+        loss = self.get_loss(model_out, target, mean=False).mean(dim=[1, 2, 3])
+
+        log_prefix = 'train' if self.training else 'val'
+
+        loss_dict.update({f'{log_prefix}/loss_simple': loss.mean()})
+        loss_simple = loss.mean() * self.l_simple_weight
+
+        loss_vlb = (self.lvlb_weights[t] * loss).mean()
+        loss_dict.update({f'{log_prefix}/loss_vlb': loss_vlb})
+
+        loss = loss_simple + self.original_elbo_weight * loss_vlb
+
+        loss_dict.update({f'{log_prefix}/loss': loss})
+
+        return loss, loss_dict
