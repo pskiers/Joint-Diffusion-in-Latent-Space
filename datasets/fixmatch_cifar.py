@@ -163,7 +163,7 @@ class TransformFixMatch(object):
 
 class TransformMultiFixMatch(object):
     def __init__(self, mean, std, number=10):
-        self.number = 10
+        self.number = number
         self.weak = transforms.Compose([
             transforms.RandomHorizontalFlip(),
             transforms.RandomCrop(size=32,
@@ -180,9 +180,10 @@ class TransformMultiFixMatch(object):
             transforms.Normalize(mean=mean, std=std)])
 
     def __call__(self, x):
+        img = [self.normalize(x) for _ in range(self.number)]
         weak = [self.normalize(self.weak(x)) for _ in range(self.number)]
         strong = [self.normalize(self.strong(x)) for _ in range(self.number)]
-        return torch.stack(weak, dim=0), torch.stack(strong, dim=0)
+        return torch.stack(img, dim=0), torch.stack(weak, dim=0), torch.stack(strong, dim=0)
 
 
 class CIFAR10SSL(datasets.CIFAR10):

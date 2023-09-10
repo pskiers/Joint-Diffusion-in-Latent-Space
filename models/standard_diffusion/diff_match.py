@@ -435,6 +435,7 @@ class DiffMatchFixedAttention(DiffMatchFixed):
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, -1)
         return optimizer
 
+
 class DiffMatchFixedPooling(DiffMatchFixed):
     def __init__(self,
                  classifier_in_features,
@@ -516,11 +517,17 @@ class DiffMatchMulti(DiffMatchFixed):
             *args, **kwargs
         )
         self.sample_multi = sample_multi
-        
+
         self.class_emb = nn.Sequential(
-            nn.Linear(self.model.diffusion_model.num_classes, self.model.diffusion_model.time_embed_dim),
+            nn.Linear(
+                self.model.diffusion_model.num_classes,
+                self.model.diffusion_model.time_embed_dim
+            ),
             nn.SiLU(),
-            nn.Linear(self.model.diffusion_model.time_embed_dim, self.model.diffusion_model.time_embed_dim)
+            nn.Linear(
+                self.model.diffusion_model.time_embed_dim,
+                self.model.diffusion_model.time_embed_dim
+            )
         )
 
     def configure_optimizers(self):
@@ -539,7 +546,7 @@ class DiffMatchMulti(DiffMatchFixed):
         #         nd in n for nd in decay) or any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         # ]
         optimizer = torch.optim.Adam(
-            self.parameters(), # grouped_parameters,
+            self.parameters(),  # grouped_parameters,
             lr=0.0003,
             betas=(0.9, 0.999)
         )
@@ -555,12 +562,25 @@ class DiffMatchMulti(DiffMatchFixed):
                 float(max(1, num_training_steps - num_warmup_steps))
             return max(0., math.cos(math.pi * num_cycles * no_progress))
 
-        self.scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, -1)
+        self.scheduler = torch.optim.lr_scheduler.LambdaLR(
+            optimizer, _lr_lambda, -1)
         return optimizer
 
+    def get_train_input(self, batch):
+        x = batch[0][self.img_key]
+        y = batch[0][self.label_key]
+        img, weak_img, strong_img = batch[1][0]
+        _, _, c, h, w = img.shape
+        return (
+            x, y,
+            img.view(-1, c, h, w),
+            weak_img.view(-1, c, h, w),
+            strong_img.view(-1, c, h, w)
+        )
+
     def training_step(self, batch, batch_idx):
-        x, y, weak_img, strong_img = self.get_train_input(batch)
-        loss, loss_dict = self(weak_img)
+        x, y, imgs, weak_img, strong_img = self.get_train_input(batch)
+        loss, loss_dict = self(imgs)
         if self.classification_start <= 0:
             inputs = interleave(
                 torch.cat((x, weak_img, strong_img)), 2*self.mu+1)
@@ -569,21 +589,16 @@ class DiffMatchMulti(DiffMatchFixed):
                 torch.zeros(inputs.shape[0], device=self.device),
                 pooled=False
             )
-            if isinstance(logits, list): # TODO refactor this shit
+            if isinstance(logits, list):  # TODO refactor this shit
                 logits = self.transform_representations(logits)
                 logits = self.classifier(logits)
             logits = de_interleave(logits, 2*self.mu+1)
-            # emb = de_interleave(emb, 2*self.mu+1)
-            # representations = self.model.diffusion_model.representations
-            # self.model.diffusion_model.representations = []
-            # representations = [de_interleave(rep, 2*self.mu+1) for rep in representations]
             preds_x = logits[:self.batch_size]
             preds_weak, preds_strong = logits[self.batch_size:].chunk(2)
-            # emb_weak, _ = emb[self.batch_size:].chunk(2)
-            # representations = [rep[self.batch_size:].chunk(2)[0] for rep in representations]
             del logits
 
-            loss_classification = nn.functional.cross_entropy(preds_x, y, reduction="mean")
+            loss_classification = nn.functional.cross_entropy(
+                preds_x, y, reduction="mean")
             loss += loss_classification * self.classification_loss_weight
             accuracy = torch.sum(torch.argmax(preds_x, dim=1) == y) / len(y)
             loss_dict.update(
@@ -592,10 +607,14 @@ class DiffMatchMulti(DiffMatchFixed):
             loss_dict.update({'train/accuracy': accuracy})
 
             b, c = preds_weak.shape
-            preds_weak = preds_weak.view(b // self.sample_multi, self.sample_multi, c)
-            preds_weak[:] = torch.sum(preds_weak, dim=1, keepdim=True)
+            reshape_weak = preds_weak.view(
+                b // self.sample_multi, self.sample_multi, c)
+            weak_clone = reshape_weak.clone()
+            weak_clone[:] = torch.sum(
+                reshape_weak, dim=1, keepdim=True) / self.sample_multi
+            weak_clone = weak_clone.view(b, c)
 
-            pseudo_label = torch.softmax(preds_weak.detach(), dim=-1)
+            pseudo_label = torch.softmax(weak_clone.detach(), dim=-1)
             max_probs, targets_u = torch.max(pseudo_label, dim=-1)
             mask = max_probs.ge(self.min_confidence).float()
             ssl_loss = (nn.functional.cross_entropy(
@@ -614,7 +633,13 @@ class DiffMatchMulti(DiffMatchFixed):
             self.classification_start -= 1
 
         lr = self.optimizers().param_groups[0]['lr']
-        self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        self.log(
+            'lr_abs', lr,
+            prog_bar=True,
+            logger=True,
+            on_step=True,
+            on_epoch=False
+        )
         self.log_dict(loss_dict, prog_bar=True,
                       logger=True, on_step=True, on_epoch=True)
         self.log("global_step", self.global_step,
@@ -624,7 +649,35 @@ class DiffMatchMulti(DiffMatchFixed):
     def p_losses(self, x_start, t, noise=None):
         noise = default(noise, lambda: torch.randn_like(x_start))
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
-        model_out, _ = self.model(x_noisy, t)
+
+        if self.training:
+            out, emb = self.model.diffusion_model.just_representations(
+                x_noisy, t, return_emb=True)
+            b, c = out.shape
+            reshaped_out = out.view(
+                b // self.sample_multi, self.sample_multi, c)
+            logits = torch.softmax(
+                torch.sum(reshaped_out, dim=1) / self.sample_multi,
+                dim=-1
+            ).flatten()
+
+            # c probably should == self.sample_multi
+            assert b % c == 0 and c == self.sample_multi
+            class_emb = torch.diag_embed(
+                torch.ones(b // self.sample_multi, c, dtype=torch.float)
+            ).view(b, c).to(self.device)
+            class_emb = self.class_emb(class_emb)
+            full_emb = emb + class_emb
+
+            model_out = self.model.diffusion_model.forward_output_blocks(
+                x_noisy,
+                None,
+                full_emb,
+                self.model.diffusion_model.representations
+            )
+            self.model.diffusion_model.representations = []
+        else:
+            model_out, _ = self.model(x_noisy, t)
 
         loss_dict = {}
         if self.parameterization == "eps":
@@ -635,6 +688,8 @@ class DiffMatchMulti(DiffMatchFixed):
             raise NotImplementedError(f"Paramterization {self.parameterization} not yet supported")
 
         loss = self.get_loss(model_out, target, mean=False).mean(dim=[1, 2, 3])
+        if self.training:
+            loss *= logits
 
         log_prefix = 'train' if self.training else 'val'
 
