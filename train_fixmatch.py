@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 
 @dataclass
 class Args:
-    num_labeled: int = 1000
+    num_labeled: int = 40
     num_classes: int = 10
     expand_labels: bool = True
     batch_size: int = 64
@@ -32,18 +32,18 @@ if __name__ == "__main__":
 
     args = Args()
     train_sampler = RandomSampler
-    labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS["cifar10"](args, './data')
+    labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS["cifar10_multi"](args, './data')
     labeled_trainloader = DataLoader(
         labeled_dataset,
         sampler=train_sampler(labeled_dataset),
-        batch_size=64,
+        batch_size=60,
         num_workers=4,
         drop_last=True)
 
     unlabeled_trainloader = DataLoader(
         unlabeled_dataset,
         sampler=train_sampler(unlabeled_dataset),
-        batch_size=448,
+        batch_size=42,
         num_workers=4,
         drop_last=True)
 
@@ -54,7 +54,7 @@ if __name__ == "__main__":
         num_workers=4)
 
 
-    model = FixMatch()
+    model = MeanMatch(batch_size=60)
 
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     nowname = model.__class__.__name__ + "_" + now

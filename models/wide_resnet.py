@@ -35,7 +35,7 @@ class BasicBlock(nn.Module):
 class TimestepBlock(BasicBlock):
     def __init__(self, in_planes, out_planes, stride, drop_rate=0, activate_before_residual=False, emb_size=2137):
         super().__init__(in_planes, out_planes, stride, drop_rate, activate_before_residual)
-        self.emb_layers = nn.Sequential(nn.SiLU(), nn.Linear(emb_size, out_planes))
+        self.emb_layers = nn.Sequential(nn.SiLU(inplace=False), nn.Linear(emb_size, out_planes))
 
     def forward(self, x, emb):
         if not self.equalInOut and self.activate_before_residual == True:

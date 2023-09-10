@@ -183,3 +183,94 @@ class FixMatch(pl.LightningModule):
         if self.use_ema:
             self.model_ema(self.model)
         return
+
+
+class MeanMatch(FixMatch):
+    def __init__(self,
+                 min_confidence=0.95,
+                 mu=7,
+                 batch_size=64,
+                 img_key=0,
+                 label_key=1,
+                 unsup_img_key=0,
+                 monitor="val/loss_ema",
+                 ckpt_path=None,
+                 *args,
+                 **kwargs):
+        super().__init__(
+            min_confidence,
+            mu,
+            batch_size,
+            img_key,
+            label_key,
+            unsup_img_key,
+            monitor,
+            ckpt_path,
+            *args, **kwargs
+        )
+        self.num_classes = 10
+
+    def get_train_input(self, batch):
+        x = batch[0][self.img_key]
+        y = batch[0][self.label_key]
+        img, weak_img, strong_img = batch[1][0]
+        _, _, c, h, w = img.shape
+        del img
+        return (
+            x, y,
+            weak_img.view(-1, c, h, w),
+            strong_img.view(-1, c, h, w)
+        )
+
+    def training_step(self, batch, batch_idx):
+        x, y, weak_img, strong_img = self.get_train_input(batch)
+
+        loss, loss_dict = torch.zeros(1, device=self.device), {}
+
+        inputs = interleave(
+            torch.cat((x, weak_img, strong_img)), 2*self.mu+1)
+        logits = self.model(inputs)
+        logits = de_interleave(logits, 2*self.mu+1)
+        preds_x = logits[:self.batch_size]
+        preds_weak, preds_strong = logits[self.batch_size:].chunk(2)
+        del logits
+
+        loss_classification = nn.functional.cross_entropy(preds_x, y, reduction="mean")
+        loss += loss_classification
+        accuracy = torch.sum(torch.argmax(preds_x, dim=1) == y) / len(y)
+        loss_dict.update(
+            {'train/loss_classification': loss_classification})
+        loss_dict.update({'train/loss': loss})
+        loss_dict.update({'train/accuracy': accuracy})
+
+        b, c = preds_weak.shape
+        reshape_weak = preds_weak.view(
+            b // self.num_classes, self.num_classes, c)
+        weak_clone = reshape_weak.clone()
+        weak_clone[:] = torch.sum(
+            reshape_weak, dim=1, keepdim=True) / self.num_classes
+        weak_clone = weak_clone.view(b, c)
+
+        pseudo_label = torch.softmax(weak_clone.detach(), dim=-1)
+        max_probs, targets_u = torch.max(pseudo_label, dim=-1)
+        mask = max_probs.ge(self.min_confidence).float()
+        ssl_loss = (nn.functional.cross_entropy(
+            preds_strong, targets_u, reduction='none') * mask).mean()
+        loss += ssl_loss
+        accuracy = torch.sum(
+            (torch.argmax(preds_strong, dim=1) == targets_u) * mask
+        ) / mask.sum() if mask.sum() > 0 else 0
+        loss_dict.update(
+                {'train/ssl_above_threshold': mask.mean().item()})
+        loss_dict.update({'train/ssl_max_confidence': mask.max().item()})
+        loss_dict.update({'train/loss_ssl_classification': ssl_loss})
+        loss_dict.update({'train/loss': loss})
+        loss_dict.update({'train/ssl_accuracy': accuracy})
+        self.log_dict(loss_dict, prog_bar=True,
+                      logger=True, on_step=True, on_epoch=True)
+        self.log("global_step", self.global_step,
+                 prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        lr = self.optimizers().param_groups[0]['lr']
+        self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+
+        return loss
