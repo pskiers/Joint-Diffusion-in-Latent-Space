@@ -19,7 +19,7 @@ from tqdm import tqdm
 
 
 class FIDScoreLogger(Callback):
-    def __init__(self, device, batch_frequency, samples_amount, metrics_batch_size, dims=2048, means_path=None, sigma_path=None) -> None:
+    def __init__(self, device, batch_frequency, samples_amount, metrics_batch_size, dims=2048, means_path=None, sigma_path=None, cond=False, latent=True) -> None:
         super().__init__()
         self.batch_freq = batch_frequency
         self.samples_amount = samples_amount
@@ -28,6 +28,8 @@ class FIDScoreLogger(Callback):
         }
         self.device = device
         self.dims = dims
+        self.latent = latent
+        self.cond = cond
         self.metrics_batch_size = metrics_batch_size
         self.test_mu = None
         self.test_sigma = None
@@ -74,11 +76,12 @@ class FIDScoreLogger(Callback):
         return pred_arr
 
     def get_model_statistics(self, dataloader, img_key):
-        if self.test_mu is None or self.test_sigma is None:
-            act = self.get_activations(dataloader, img_key)
-            self.test_mu = np.mean(act, axis=0)
-            self.test_sigma = np.cov(act, rowvar=False)
-        return self.test_mu, self.test_sigma
+        # if self.test_mu is None or self.test_sigma is None:
+        #     act = self.get_activations(dataloader, img_key)
+        #     self.test_mu = np.mean(act, axis=0)
+        #     self.test_sigma = np.cov(act, rowvar=False)
+        # return self.test_mu, self.test_sigma
+        return 0, 0
 
     def _wandb(self, pl_module, score):
         pl_module.logger.experiment.log({"val/FID": score})
@@ -86,8 +89,8 @@ class FIDScoreLogger(Callback):
     @torch.no_grad()
     def log_fid(self, pl_module, batch_idx, trainer):
         if (pl_module.global_step % self.batch_freq == 0 and
-            hasattr(pl_module, "sample_log") and
-            callable(pl_module.sample_log) and
+            # hasattr(pl_module, "sample_log") and
+            # callable(pl_module.sample_log) and
             self.samples_amount > 0):
 
             logger = type(pl_module.logger)
@@ -125,10 +128,18 @@ class FIDScoreLogger(Callback):
 
     @torch.no_grad()
     def get_samples_activations(self, samples_generator, pred_arr, start_idx):
-        with samples_generator.ema_scope("Plotting"):
-            samples, _ = samples_generator.sample_log(cond=None, batch_size=self.metrics_batch_size, ddim=True, ddim_steps=200, eta=1)
-        x_samples = samples_generator.decode_first_stage(samples)
-        x_samples = x_samples.to(self.device)
+        with samples_generator.ema_scope("Sampling"):
+            if self.cond:
+                samples_generator.sample_classes = torch.randint(0, 10, [self.metrics_batch_size]).to(self.device)
+            if self.latent:
+                samples, _ = samples_generator.sample_log(cond=None, batch_size=self.metrics_batch_size, ddim=True, ddim_steps=200, eta=1)
+            else:
+                samples = samples_generator.sample(batch_size=self.metrics_batch_size, return_intermediates=False)
+        if self.latent:
+            x_samples = samples_generator.decode_first_stage(samples)
+            x_samples = x_samples.to(self.device)
+        else:
+            x_samples = samples.to(self.device)
 
         pred = self.activation_model(x_samples)[0]
                 # If model output is not scalar, apply global spatial average pooling.
