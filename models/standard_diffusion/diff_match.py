@@ -569,18 +569,19 @@ class DiffMatchMulti(DiffMatchFixed):
     def get_train_input(self, batch):
         x = batch[0][self.img_key]
         y = batch[0][self.label_key]
-        img, weak_img, strong_img = batch[1][0]
-        _, _, c, h, w = img.shape
-        return (
-            x, y,
-            img.view(-1, c, h, w),
-            weak_img.view(-1, c, h, w),
-            strong_img.view(-1, c, h, w)
-        )
+        weak_img, strong_img = batch[1][0]
+        # _, _, c, h, w = img.shape
+        # return (
+        #     x, y,
+        #     img.view(-1, c, h, w),
+        #     weak_img.view(-1, c, h, w),
+        #     strong_img.view(-1, c, h, w)
+        # )
+        return x, y, weak_img, strong_img
 
     def training_step(self, batch, batch_idx):
-        x, y, imgs, weak_img, strong_img = self.get_train_input(batch)
-        loss, loss_dict = self(imgs)
+        x, y, weak_img, strong_img = self.get_train_input(batch)
+        loss, loss_dict = self(weak_img)
         if self.classification_start <= 0:
             inputs = interleave(
                 torch.cat((x, weak_img, strong_img)), 2*self.mu+1)
@@ -606,15 +607,16 @@ class DiffMatchMulti(DiffMatchFixed):
             loss_dict.update({'train/loss': loss})
             loss_dict.update({'train/accuracy': accuracy})
 
-            b, c = preds_weak.shape
-            reshape_weak = preds_weak.view(
-                b // self.sample_multi, self.sample_multi, c)
-            weak_clone = reshape_weak.clone()
-            weak_clone[:] = torch.sum(
-                reshape_weak, dim=1, keepdim=True) / self.sample_multi
-            weak_clone = weak_clone.view(b, c)
+            # b, c = preds_weak.shape
+            # reshape_weak = preds_weak.view(
+            #     b // self.sample_multi, self.sample_multi, c)
+            # weak_clone = reshape_weak.clone()
+            # weak_clone[:] = torch.sum(
+            #     reshape_weak, dim=1, keepdim=True) / self.sample_multi
+            # weak_clone = weak_clone.view(b, c)
 
-            pseudo_label = torch.softmax(weak_clone.detach(), dim=-1)
+            # pseudo_label = torch.softmax(weak_clone.detach(), dim=-1)
+            pseudo_label = torch.softmax(preds_weak.detach(), dim=-1)
             max_probs, targets_u = torch.max(pseudo_label, dim=-1)
             mask = max_probs.ge(self.min_confidence).float()
             ssl_loss = (nn.functional.cross_entropy(
@@ -650,34 +652,34 @@ class DiffMatchMulti(DiffMatchFixed):
         noise = default(noise, lambda: torch.randn_like(x_start))
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
 
-        if self.training:
-            out, emb = self.model.diffusion_model.just_representations(
-                x_noisy, t, return_emb=True)
-            b, c = out.shape
-            reshaped_out = out.view(
-                b // self.sample_multi, self.sample_multi, c)
-            logits = torch.softmax(
-                torch.sum(reshaped_out, dim=1) / self.sample_multi,
-                dim=-1
-            ).flatten()
+        # if self.training:
+        out, emb = self.model.diffusion_model.just_representations(
+            x_noisy, t, return_emb=True)
+        # b, c = out.shape
+        # reshaped_out = out.view(
+        #     b // self.sample_multi, self.sample_multi, c)
+        # logits = torch.softmax(
+        #     torch.sum(reshaped_out, dim=1) / self.sample_multi,
+        #     dim=-1
+        # ).flatten()
 
-            # c probably should == self.sample_multi
-            assert b % c == 0 and c == self.sample_multi
-            class_emb = torch.diag_embed(
-                torch.ones(b // self.sample_multi, c, dtype=torch.float)
-            ).view(b, c).to(self.device)
-            class_emb = self.class_emb(class_emb)
-            full_emb = emb + class_emb
+        # # c probably should == self.sample_multi
+        # assert b % c == 0 and c == self.sample_multi
+        # class_emb = torch.diag_embed(
+        #     torch.ones(b // self.sample_multi, c, dtype=torch.float)
+        # ).view(b, c).to(self.device)
+        class_emb = self.class_emb(out)
+        full_emb = emb + class_emb
 
-            model_out = self.model.diffusion_model.forward_output_blocks(
-                x_noisy,
-                None,
-                full_emb,
-                self.model.diffusion_model.representations
-            )
-            self.model.diffusion_model.representations = []
-        else:
-            model_out, _ = self.model(x_noisy, t)
+        model_out = self.model.diffusion_model.forward_output_blocks(
+            x_noisy,
+            None,
+            full_emb,
+            self.model.diffusion_model.representations
+        )
+        self.model.diffusion_model.representations = []
+        # else:
+        #     model_out, _ = self.model(x_noisy, t)
 
         loss_dict = {}
         if self.parameterization == "eps":
@@ -688,8 +690,8 @@ class DiffMatchMulti(DiffMatchFixed):
             raise NotImplementedError(f"Paramterization {self.parameterization} not yet supported")
 
         loss = self.get_loss(model_out, target, mean=False).mean(dim=[1, 2, 3])
-        if self.training:
-            loss *= logits
+        # if self.training:
+        #     loss *= logits
 
         log_prefix = 'train' if self.training else 'val'
 
