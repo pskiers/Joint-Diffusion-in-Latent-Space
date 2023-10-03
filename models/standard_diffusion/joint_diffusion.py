@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import kornia as K
+import kornia.augmentation as aug
 from ldm.models.diffusion.ddpm import DDPM
 from ldm.util import default
 from ..representation_transformer import RepresentationTransformer
@@ -31,7 +33,7 @@ class JointDiffusionNoisyClassifier(DDPM):
             nn.Linear(classifier_in_features, classifier_hidden),
             nn.LeakyReLU(negative_slope=0.2),
             nn.Dropout(p=dropout),
-            nn.ReLU(),
+            # nn.ReLU(),
             nn.Linear(classifier_hidden, self.num_classes)
         )
         self.gradient_guided_sampling = True
@@ -234,7 +236,34 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
             return x_recon
 
 
-class JointDiffusionAttention(JointDiffusion):
+class JointDiffusionAugmentations(JointDiffusion):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        img_size = self.image_size
+        self.augmentation = K.augmentation.ImageSequential(
+            aug.ColorJitter(0.1, 0.1, 0.1, 0.1, p=0.25),
+            aug.RandomResizedCrop((img_size, img_size), scale=(0.5, 1), p=0.25),
+            aug.RandomRotation((-30, 30), p=0.25),
+            aug.RandomHorizontalFlip(0.5),
+            aug.RandomContrast((0.6, 1.8), p=0.25),
+            aug.RandomSharpness((0.4, 2), p=0.25),
+            aug.RandomBrightness((0.6, 1.8), p=0.25),
+            aug.RandomMixUpV2(p=0.5),
+            # random_apply=(1, 6),
+            aug.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+        )
+        if kwargs.get("ckpt_path", None) is not None:
+            ignore_keys = kwargs.get("ignore_keys", [])
+            only_model = kwargs.get("load_only_unet", False)
+            self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
+
+    def get_input(self, batch, k):
+        out = super().get_input(batch, k)
+        self.x_start = self.augmentation(out)
+        return out
+
+
+class JointDiffusionAttention(JointDiffusionAugmentations):
     def __init__(self, attention_config, *args, **kwargs):
         super().__init__(
             classifier_in_features=0,

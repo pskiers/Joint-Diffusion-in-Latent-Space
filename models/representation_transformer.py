@@ -16,6 +16,7 @@ class RepresentationTransformer(nn.Module):
             mlp_size: int,
             hidden_size: int,
             projection_div: Optional[int],
+            dropout: Optional[float] = 0,
         ) -> None:
         super().__init__()
         div = 1 if projection_div is None else projection_div
@@ -23,7 +24,8 @@ class RepresentationTransformer(nn.Module):
             SpatialTransformer(in_channels=channels,
                                n_heads=channels//dim_head,
                                d_head=dim_head,
-                               context_dim=(context_dim//div)+(dim_head - (context_dim//div) % dim_head))
+                               context_dim=(context_dim//div)+(dim_head - (context_dim//div) % dim_head),
+                               dropout=dropout)
             for context_dim in context_dims
         ])
         if projection_div is None:
@@ -40,6 +42,7 @@ class RepresentationTransformer(nn.Module):
         self.mlp = nn.Sequential(
             nn.Linear(mlp_size, hidden_size),
             nn.LeakyReLU(negative_slope=0.2),
+            nn.Dropout(dropout),
             nn.Linear(hidden_size, num_classes)
         )
 
