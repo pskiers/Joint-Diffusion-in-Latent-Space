@@ -1,4 +1,5 @@
 from .cifar10 import AdjustedCIFAR10
+from .cifar100 import AdjustedCIFAR100
 from .mnist import AdjustedMNIST
 from .cleba import AdjustedCelbA
 from .fashionMNIST import AdjustedFashionMNIST
