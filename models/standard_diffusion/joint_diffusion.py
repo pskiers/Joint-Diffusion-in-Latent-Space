@@ -4,6 +4,8 @@ import kornia as K
 import kornia.augmentation as aug
 from ldm.models.diffusion.ddpm import DDPM
 from ldm.util import default
+from ldm.modules.ema import LitEma
+from contextlib import contextmanager
 from ..representation_transformer import RepresentationTransformer
 
 
@@ -44,6 +46,10 @@ class JointDiffusionNoisyClassifier(DDPM):
         # Attributes that will store img labels and labels predictions
         # This is really ugly but since we are unable to change the parent classes and we don't want to copy-paste
         # code (especially that we'd have to copy a lot), this solution seems to be marginally better.
+        if self.use_ema:
+            self.model_ema = LitEma(self)
+            print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
+
         if kwargs.get("ckpt_path", None) is not None:
             ignore_keys = kwargs.get("ignore_keys", [])
             only_model = kwargs.get("load_only_unet", False)
@@ -54,6 +60,25 @@ class JointDiffusionNoisyClassifier(DDPM):
         params = list(self.parameters())
         opt = torch.optim.AdamW(params, lr=lr)
         return opt
+
+    @contextmanager
+    def ema_scope(self, context=None):
+        if self.use_ema:
+            self.model_ema.store(self.parameters())
+            self.model_ema.copy_to(self)
+            if context is not None:
+                print(f"{context}: Switched to EMA weights")
+        try:
+            yield None
+        finally:
+            if self.use_ema:
+                self.model_ema.restore(self.parameters())
+                if context is not None:
+                    print(f"{context}: Restored training weights")
+
+    def on_train_batch_end(self, *args, **kwargs):
+        if self.use_ema:
+            self.model_ema(self)
 
     def get_input(self, batch, k):
         self.batch_classes = batch[self.classification_key]
