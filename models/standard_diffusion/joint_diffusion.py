@@ -221,7 +221,7 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
         if self.x_start is not None:
             representations = self.model.diffusion_model.just_representations(
                 self.x_start,
-                torch.ones(self.x_start.shape[0], device=self.device),
+                torch.zeros(self.x_start.shape[0], device=self.device),
                 pooled=False
             )
             if isinstance(representations, list):  # TODO refactor this shit
@@ -259,7 +259,10 @@ class JointDiffusionAugmentations(JointDiffusion):
 
     def get_input(self, batch, k):
         out = super().get_input(batch, k)
-        self.x_start = self.augmentation(out)
+        if self.training:
+            self.x_start = self.augmentation(out)
+        else:
+            self.x_start = out
         return out
 
 
