@@ -15,7 +15,8 @@ class RepresentationTransformer(nn.Module):
             context_dims: List[int],
             mlp_size: int,
             hidden_size: int,
-            projection_div: Optional[int],
+            projection_div: Optional[int] = None,
+            pool_sizes: Optional[List[int]] = None,
             dropout: Optional[float] = 0,
         ) -> None:
         super().__init__()
@@ -28,6 +29,10 @@ class RepresentationTransformer(nn.Module):
                                dropout=dropout)
             for context_dim in context_dims
         ])
+        if pool_sizes is None:
+            self.pool_sizes = [None for _ in context_dims]
+        else:
+            self.pool_sizes = pool_sizes
         if projection_div is None:
             self.repr_projections = [lambda x: x for _ in context_dims]
         else:
@@ -48,8 +53,10 @@ class RepresentationTransformer(nn.Module):
 
     def forward(self, repr: List[torch.Tensor]) -> torch.Tensor:
         x = None
-        for z_i, transformer, projection, norm in zip(repr[::-1], self.attn_blocks, self.repr_projections, self.norms):
+        for z_i, transformer, projection, norm, pool_size in zip(repr, self.attn_blocks, self.repr_projections, self.norms, self.pool_sizes):
             context = norm(z_i)
+            if pool_size is not None:
+                context = nn.functional.avg_pool2d(context, pool_size)
             context_projected = projection(context)
             context = rearrange(context_projected, 'b c h w -> b (h w) c')
             if x is None:
