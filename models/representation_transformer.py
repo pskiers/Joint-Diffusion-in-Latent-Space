@@ -25,7 +25,7 @@ class RepresentationTransformer(nn.Module):
             SpatialTransformer(in_channels=channels,
                                n_heads=channels//dim_head,
                                d_head=dim_head,
-                               context_dim=(context_dim//div)+(dim_head - (context_dim//div) % dim_head),
+                               context_dim=(context_dim//div)+((dim_head - (context_dim//div) % dim_head) % dim_head),
                                dropout=dropout)
             for context_dim in context_dims
         ])
@@ -37,7 +37,7 @@ class RepresentationTransformer(nn.Module):
             self.repr_projections = [lambda x: x for _ in context_dims]
         else:
             self.repr_projections = nn.ModuleList([
-                nn.Conv2d(channel, (channel//div)+(dim_head - (channel//div) % dim_head), kernel_size=1, stride=1, padding=0)
+                nn.Conv2d(channel, (channel//div)+((dim_head - (channel//div) % dim_head) % dim_head), kernel_size=1, stride=1, padding=0)
                 for channel in context_dims
             ])
         self.norms = nn.ModuleList([
