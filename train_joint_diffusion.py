@@ -7,7 +7,8 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
 import pytorch_lightning as pl
 from models import *
 from datasets import *
-from os import listdir, path
+from os import listdir, path, environ
+from pathlib import Path
 import datetime
 from callbacks import ImageLogger, CUDACallback, SetupCallback, FIDScoreLogger
 import matplotlib.pyplot as plt
@@ -24,7 +25,17 @@ class Args:
 
 
 if __name__ == "__main__":
-    config = OmegaConf.load("configs/cifar10-joint-standard-diffusion-wideresnet.yaml")
+    environ["WANDB__SERVICE_WAIT"] = "300"
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--path", "-p", type=Path, required=True, help="path to config file")
+    parser.add_argument("--checkpoint", "-c", type=Path, required=False, help="path to model checkpoint file")
+    args = parser.parse_args()
+    config_path = str(args.path)
+    checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
+
+    config = OmegaConf.load(config_path)
+    # config = OmegaConf.load("configs/cifar100-joint-standard-diffusion-attention.yaml")
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
@@ -34,31 +45,33 @@ if __name__ == "__main__":
     trainer_opt = argparse.Namespace(**trainer_config)
     lightning_config.trainer = trainer_config
 
-    args = Args()
-    train_sampler = RandomSampler
-    labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS["cifar10"](args, './data')
-    labeled_trainloader = DataLoader(
-        labeled_dataset,
-        sampler=train_sampler(labeled_dataset),
-        batch_size=64,
-        num_workers=4,
-        drop_last=True)
+    # args = Args()
+    # train_sampler = RandomSampler
+    # labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS["cifar10"](args, './data')
+    # labeled_trainloader = DataLoader(
+    #     labeled_dataset,
+    #     sampler=train_sampler(labeled_dataset),
+    #     batch_size=2,
+    #     num_workers=4,
+    #     drop_last=True)
 
-    unlabeled_trainloader = DataLoader(
-        unlabeled_dataset,
-        sampler=train_sampler(unlabeled_dataset),
-        batch_size=448,
-        num_workers=4,
-        drop_last=True)
+    # unlabeled_trainloader = DataLoader(
+    #     unlabeled_dataset,
+    #     sampler=train_sampler(unlabeled_dataset),
+    #     batch_size=14,
+    #     num_workers=4,
+    #     drop_last=True)
 
-    test_loader = DataLoader(
-        test_dataset,
-        sampler=SequentialSampler(test_dataset),
-        batch_size=64,
-        num_workers=4)
+    # test_loader = DataLoader(
+    #     test_dataset,
+    #     sampler=SequentialSampler(test_dataset),
+    #     batch_size=2,
+    #     num_workers=4)
 
-    # train_ds = AdjustedCIFAR10(train=True)
-    # test_ds = AdjustedCIFAR10(train=False)
+    # train_ds = tv.datasets.CIFAR10(root="./data", train=True, download=True, transform=tv.transforms.ToTensor())
+    # test_ds = tv.datasets.CIFAR10(root="./data", train=False, download=True, transform=tv.transforms.ToTensor())
+    train_ds = AdjustedCIFAR100(train=True)
+    test_ds = AdjustedCIFAR100(train=False)
 
     # train_ds, validation_ds = torch.utils.data.random_split(
     #     train_ds,
@@ -97,12 +110,22 @@ if __name__ == "__main__":
     #     shuffle=False,
     #     num_workers=0
     # )
-    # test_dl = torch.utils.data.DataLoader(
-    #     test_ds, batch_size=128, shuffle=False, num_workers=0)
 
-    # config.model.params["ckpt_path"] = f"logs/DiffMatchWithSampling_2023-06-06T01-49-32/checkpoints/last.ckpt"
+    # train_ds, validation_ds = torch.utils.data.random_split(
+    #     train_ds,
+    #     [2, len(train_ds)-2],
+    #     generator=torch.Generator().manual_seed(42)
+    # )
+    train_dl = torch.utils.data.DataLoader(
+        train_ds, batch_size=256, shuffle=True, num_workers=16)
+    test_dl = torch.utils.data.DataLoader(
+        test_ds, batch_size=512, shuffle=False, num_workers=16)
 
-    model = DiffMatchFixed(**config.model.get("params", dict()))
+    if checkpoint_path is not None:
+        config.model.params["ckpt_path"] = checkpoint_path
+    # config.model.params["ckpt_path"] = f"logs/JointDiffusionAttention_2023-10-08T22-42-51/checkpoints/last.ckpt"
+
+    model = JointDiffusionAttention(**config.model.get("params", dict()))
     # model = FixMatch()
     # model.supervised_dataloader = train_dl_supervised
 
@@ -134,6 +157,8 @@ if __name__ == "__main__":
         default_modelckpt_cfg["params"]["save_top_k"] = 1
 
     trainer_kwargs["checkpoint_callback"] = True
+    trainer_kwargs["max_steps"] = 8**20
+    # trainer_kwargs["accumulate_grad_batches"] = 2
 
     trainer_kwargs["callbacks"] = [
         pl.callbacks.ModelCheckpoint(**default_modelckpt_cfg["params"]),
@@ -158,10 +183,11 @@ if __name__ == "__main__":
             }
         ),
         # FIDScoreLogger(
-        #     batch_frequency=10000,
+        #     batch_frequency=100000,
         #     samples_amount=10000,
         #     metrics_batch_size=64,
-        #     device=torch.device("cuda")
+        #     device=torch.device("cuda"),
+        #     latent=False
         # ),
         CUDACallback()
     ]
@@ -169,10 +195,11 @@ if __name__ == "__main__":
     trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
     trainer.logdir = logdir
 
+    # torch.autograd.set_detect_anomaly(True)
     trainer.fit(
         model,
-        train_dataloaders=[labeled_trainloader, unlabeled_trainloader],
-        val_dataloaders=test_loader,
+        train_dataloaders=train_dl,
+        val_dataloaders=test_dl,
     )
 
     # from torch.profiler import profile, record_function, ProfilerActivity
