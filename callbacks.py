@@ -19,9 +19,20 @@ from tqdm import tqdm
 
 
 class FIDScoreLogger(Callback):
-    def __init__(self, device, batch_frequency, samples_amount, metrics_batch_size, dims=2048, means_path=None, sigma_path=None, cond=False, latent=True) -> None:
+    def __init__(self,
+                 device,
+                 batch_frequency,
+                 samples_amount,
+                 metrics_batch_size,
+                 train_dl_batch_size,
+                 dims=2048,
+                 means_path=None,
+                 sigma_path=None,
+                 cond=False,
+                 latent=True) -> None:
         super().__init__()
         self.batch_freq = batch_frequency
+        self.batch_real_dl = train_dl_batch_size
         self.samples_amount = samples_amount
         self.logger_log_fid = {
             pl.loggers.WandbLogger: self._wandb,
@@ -51,14 +62,13 @@ class FIDScoreLogger(Callback):
     def get_activations(self, dataloader, img_key):
         self.activation_model.eval()
 
-        pred_arr = np.empty((len(dataloader) * 128, self.dims))
+        pred_arr = np.empty((len(dataloader) * self.batch_real_dl, self.dims))
 
         start_idx = 0
 
         for batch in tqdm(dataloader, desc="Calculating real FID score"):
             batch = batch[img_key].permute(0, 3, 1, 2)
             batch = batch.to(self.device)
-
 
             pred = self.activation_model(batch)[0]
 
@@ -76,22 +86,18 @@ class FIDScoreLogger(Callback):
         return pred_arr
 
     def get_model_statistics(self, dataloader, img_key):
-        # if self.test_mu is None or self.test_sigma is None:
-        #     act = self.get_activations(dataloader, img_key)
-        #     self.test_mu = np.mean(act, axis=0)
-        #     self.test_sigma = np.cov(act, rowvar=False)
-        # return self.test_mu, self.test_sigma
-        return 0, 0
+        if self.test_mu is None or self.test_sigma is None:
+            act = self.get_activations(dataloader, img_key)
+            self.test_mu = np.mean(act, axis=0)
+            self.test_sigma = np.cov(act, rowvar=False)
+        return self.test_mu, self.test_sigma
 
     def _wandb(self, pl_module, score):
         pl_module.logger.experiment.log({"val/FID": score})
 
     @torch.no_grad()
     def log_fid(self, pl_module, batch_idx, trainer):
-        if (pl_module.global_step % self.batch_freq == 0 and
-            # hasattr(pl_module, "sample_log") and
-            # callable(pl_module.sample_log) and
-            self.samples_amount > 0):
+        if (pl_module.global_step % self.batch_freq == 0 and self.samples_amount > 0):
 
             logger = type(pl_module.logger)
 
