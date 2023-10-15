@@ -83,6 +83,38 @@ def get_cifar10_multi(args, root):
     return train_labeled_dataset, train_unlabeled_dataset, test_dataset
 
 
+def get_cifar10_supervised(args, root):
+    transform_val = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=cifar10_mean, std=cifar10_std)
+    ])
+
+    train_dataset = CIFAR10SSL(
+        root, None, train=True,
+        transform=TransformRandAugmentSupervised(mean=cifar10_mean, std=cifar10_std))
+
+    test_dataset = datasets.CIFAR10(
+        root, train=False, transform=transform_val, download=False)
+
+    return train_dataset, test_dataset
+
+
+def get_cifar100_supervised(args, root):
+    transform_val = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=cifar100_mean, std=cifar100_std)
+    ])
+
+    train_dataset = CIFAR100SSL(
+        root, None, train=True,
+        transform=TransformRandAugmentSupervised(mean=cifar100_mean, std=cifar100_std))
+
+    test_dataset = datasets.CIFAR100(
+        root, train=False, transform=transform_val, download=False)
+
+    return train_dataset, test_dataset
+
+
 def get_cifar100(args, root):
 
     transform_labeled = transforms.Compose([
@@ -186,6 +218,23 @@ class TransformMultiFixMatch(object):
         return torch.stack(img, dim=0), torch.stack(weak, dim=0), torch.stack(strong, dim=0)
 
 
+class TransformRandAugmentSupervised(object):
+    def __init__(self, mean, std):
+        self.strong = transforms.Compose([
+            transforms.RandomHorizontalFlip(),
+            transforms.RandomCrop(size=32,
+                                  padding=int(32*0.125),
+                                  padding_mode='reflect'),
+            RandAugmentMC(n=2, m=10)])
+        self.normalize = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=mean, std=std)])
+
+    def __call__(self, x):
+        strong = self.strong(x)
+        return self.normalize(x), self.normalize(strong)
+
+
 class CIFAR10SSL(datasets.CIFAR10):
     def __init__(self, root, indexs, train=True,
                  transform=None, target_transform=None,
@@ -237,5 +286,7 @@ class CIFAR100SSL(datasets.CIFAR100):
 
 
 DATASET_GETTERS = {'cifar10': get_cifar10,
+                   'cifar10_supervised': get_cifar10_supervised,
                    'cifar10_multi': get_cifar10_multi,
-                   'cifar100': get_cifar100}
+                   'cifar100': get_cifar100,
+                   'cifar100_supervised': get_cifar100_supervised}
