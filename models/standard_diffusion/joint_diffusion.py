@@ -1,5 +1,9 @@
+from typing import Optional
+import numpy as np
+from pytorch_lightning.utilities.types import STEP_OUTPUT
 import torch
 import torch.nn as nn
+from einops import repeat
 import kornia as K
 import kornia.augmentation as aug
 from ldm.models.diffusion.ddpm import DDPM
@@ -16,6 +20,7 @@ class JointDiffusionNoisyClassifier(DDPM):
                  classifier_hidden,
                  num_classes,
                  dropout=0,
+                 classification_loss_scale=1,
                  sample_grad_scale=60,
                  classification_key=1,
                  first_stage_key="image",
@@ -31,6 +36,7 @@ class JointDiffusionNoisyClassifier(DDPM):
         )
         self.num_classes = num_classes
         self.classification_key = classification_key
+        self.classification_loss_scale = classification_loss_scale
         self.classifier = nn.Sequential(
             nn.Linear(classifier_in_features, classifier_hidden),
             nn.LeakyReLU(negative_slope=0.2),
@@ -140,7 +146,7 @@ class JointDiffusionNoisyClassifier(DDPM):
 
             loss_classification = nn.functional.cross_entropy(
                 self.batch_class_predictions, self.batch_classes)
-            loss += loss_classification
+            loss += loss_classification * self.classification_loss_scale
             loss_dict.update(
                 {f'{prefix}/loss_classification': loss_classification})
             loss_dict.update({f'{prefix}/loss': loss})
