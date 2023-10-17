@@ -1,0 +1,76 @@
+model:
+  base_learning_rate: 0.0003
+  model_type: diffmatch_attention
+  params:
+    linear_start: 0.0015
+    linear_end: 0.0195
+    log_every_t: 200
+    timesteps: 1000
+    first_stage_key: 0
+    image_size: 32
+    channels: 3
+    monitor: val/loss_ema
+    classification_loss_weight: 0.001
+    batch_size: 64
+
+    attention_config:
+      num_classes: 100
+      channels: 64
+      dim_head: 16
+      context_dims: [128, 128, 128, 128, 128, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256]
+      pool_sizes: [8, 8, 8, 8, 4, 4, 4, 4, 2, 2, 2, 2, null, null, null, null, null,]
+      mlp_size: 1024
+      hidden_size: 1024
+      projection_div: 2
+      dropout: 0.3
+
+    unet_config:
+      target: models.AdjustedUNet
+      params:
+        image_size: 32
+        in_channels: 3
+        out_channels: 3
+        model_channels: 128
+        attention_resolutions: [ 32, 16, 8 ]
+        num_res_blocks: 3
+        channel_mult: [ 1, 2, 2, 2 ]
+        num_heads: 4
+        pool_size: 10000
+
+
+dataloaders:
+  name: cifar100_randaugment
+  train_batches: [ 64 ]
+  val_batch: 256
+  num_workers: 16
+  num_labeled: 10000
+
+
+lightning:
+  trainer:
+    benchmark: True
+    checkpoint_callback: True
+    max_steps: 1000000
+    # accumulate_grad_batches: 2
+
+  callbacks:
+    fid_logger:
+      batch_frequency: 100000
+      samples_amount: 10000
+      metrics_batch_size: 512
+      real_dl_batch_size: 448
+      latent: False
+      mean: [0.5071, 0.4867, 0.4408]
+      std: [0.2675, 0.2565, 0.2761]
+
+    img_logger:
+      batch_frequency: 10000
+      max_images: 10
+      clamp: True
+      increase_log_steps: False
+      log_images_kwargs: {
+          "N": 10,
+          "inpaint": False,
+      }
+      mean: [0.5071, 0.4867, 0.4408]
+      std: [0.2675, 0.2565, 0.2761]
