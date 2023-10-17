@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from einops import rearrange, repeat
+from contextlib import contextmanager
 import kornia as K
 from ldm.models.diffusion.ddpm import DDPM
 from ldm.util import default
@@ -162,13 +163,37 @@ class DiffMatchFixed(DDPM):
         self.min_confidence = min_confidence
         self.mu = mu
         self.batch_size = batch_size
-        self.model_ema = FixMatchEma(self.model, decay=0.999)
         self.img_key = img_key
         self.label_key = label_key
         self.unsup_img_key = unsup_img_key
         self.classification_start = classification_start
         self.classification_loss_weight = classification_loss_weight
         self.scheduler = None
+        if self.use_ema:
+            self.model_ema = FixMatchEma(self, decay=0.999)
+            print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
+
+    @contextmanager
+    def ema_scope(self, context=None):
+        if self.use_ema:
+            self.model_ema.store(self.parameters())
+            self.model_ema.copy_to(self)
+            if context is not None:
+                print(f"{context}: Switched to EMA weights")
+        try:
+            yield None
+        finally:
+            if self.use_ema:
+                self.model_ema.restore(self.parameters())
+                if context is not None:
+                    print(f"{context}: Restored training weights")
+
+    def on_train_batch_end(self, *args, **kwargs):
+        self.scheduler.step()
+        if self.use_ema:
+            self.model_ema(self)
+            # self.model_ema.update(self)
+        return
 
     def configure_optimizers(self):
         no_decay = ['bias', 'bn']
@@ -181,13 +206,13 @@ class DiffMatchFixed(DDPM):
         decay = ['fc']
         grouped_parameters = [
             {'params': [p for n, p in self.named_parameters() if any(
-                nd in n for nd in decay) and not any(nd in n for nd in no_decay)], 'weight_decay': 5e-4},
+                nd in n for nd in decay) and not any(nd in n for nd in no_decay)], 'weight_decay': 0.0},
             {'params': [p for n, p in self.named_parameters() if not any(
                 nd in n for nd in decay) or any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
         optimizer = torch.optim.Adam(
             grouped_parameters,
-            lr=0.0003,
+            lr=self.learning_rate,
             betas=(0.9, 0.999)
         )
 
@@ -237,8 +262,8 @@ class DiffMatchFixed(DDPM):
     def get_train_input(self, batch):
         x = batch[0][self.img_key]
         y = batch[0][self.label_key]
-        weak_img, strong_img = batch[1][0]
-        return x, y, weak_img, strong_img
+        img, weak_img, strong_img = batch[1][0]
+        return x, y, img, weak_img, strong_img
 
     def get_val_input(self, batch):
         x = batch[self.img_key]
@@ -246,8 +271,8 @@ class DiffMatchFixed(DDPM):
         return x, y
 
     def training_step(self, batch, batch_idx):
-        x, y, weak_img, strong_img = self.get_train_input(batch)
-        loss, loss_dict = self(weak_img)
+        x, y, img, weak_img, strong_img = self.get_train_input(batch)
+        loss, loss_dict = self(img)
         if self.classification_start <= 0:
             inputs = interleave(
                 torch.cat((x, weak_img, strong_img)), 2*self.mu+1)
@@ -333,13 +358,6 @@ class DiffMatchFixed(DDPM):
         self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
         self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
 
-    def on_train_batch_end(self, *args, **kwargs):
-        self.scheduler.step()
-        if self.use_ema:
-            self.model_ema(self.model)
-            # self.model_ema.update(self.model)
-        return
-
     def p_mean_variance(self, x, t, clip_denoised: bool):
         model_out, _ = self.model(x, t)
         if self.parameterization == "eps":
@@ -356,7 +374,7 @@ class DiffMatchFixed(DDPM):
     def log_images(self, batch, N=8, n_row=2, sample=True, return_keys=None, **kwargs):
         log = dict()
         if len(batch) == 2:
-            _, _, x, _ = self.get_train_input(batch)
+            _, _, x, _, _ = self.get_train_input(batch)
         else:
             x, _ = self.get_val_input(batch)
         N = min(x.shape[0], N)
@@ -402,6 +420,9 @@ class DiffMatchFixedAttention(DiffMatchFixed):
             ignore_keys = kwargs.get("ignore_keys", [])
             only_model = kwargs.get("load_only_unet", False)
             self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
+        if self.use_ema:
+            self.model_ema = FixMatchEma(self, decay=0.999)
+            print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
 
     def transform_representations(self, representations):
         return representations
@@ -410,14 +431,14 @@ class DiffMatchFixedAttention(DiffMatchFixed):
         no_decay = ['bias', 'bn']
         grouped_parameters = [
             {'params': [p for n, p in self.classifier.named_parameters() if not any(
-                nd in n for nd in no_decay)], 'weight_decay': 5e-4},
+                nd in n for nd in no_decay)], 'weight_decay': 0.0},
             {'params': [p for n, p in self.classifier.named_parameters() if any(
                 nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
         grouped_parameters[1]["params"] = grouped_parameters[1]["params"] + list(self.model.parameters())
         optimizer = torch.optim.Adam(
             grouped_parameters,
-            lr=0.0003,
+            lr=self.learning_rate,
             betas=(0.9, 0.999)
         )
 
@@ -454,6 +475,9 @@ class DiffMatchFixedPooling(DiffMatchFixed):
             ignore_keys = kwargs.get("ignore_keys", [])
             only_model = kwargs.get("load_only_unet", False)
             self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
+        if self.use_ema:
+            self.model_ema = FixMatchEma(self, decay=0.999)
+            print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
 
     def transform_representations(self, representations):
         representations = self.model.diffusion_model.pool_representations(representations)
@@ -466,14 +490,14 @@ class DiffMatchFixedPooling(DiffMatchFixed):
         no_decay = ['bias', 'bn']
         grouped_parameters = [
             {'params': [p for n, p in self.classifier.named_parameters() if not any(
-                nd in n for nd in no_decay)], 'weight_decay': 5e-4},
+                nd in n for nd in no_decay)], 'weight_decay': 0.0},
             {'params': [p for n, p in self.classifier.named_parameters() if any(
                 nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
         grouped_parameters[1]["params"] = grouped_parameters[1]["params"] + list(self.model.parameters())
         optimizer = torch.optim.Adam(
             grouped_parameters,
-            lr=0.0003,
+            lr=self.learning_rate,
             betas=(0.9, 0.999)
         )
 
@@ -496,7 +520,7 @@ class DiffMatchMulti(DiffMatchFixed):
     def __init__(self,
                  min_confidence=0.95,
                  mu=7,
-                 batch_size=64,
+                 batch_size=2,
                  img_key=0,
                  label_key=1,
                  unsup_img_key=0,
@@ -668,7 +692,8 @@ class DiffMatchMulti(DiffMatchFixed):
         # class_emb = torch.diag_embed(
         #     torch.ones(b // self.sample_multi, c, dtype=torch.float)
         # ).view(b, c).to(self.device)
-        class_emb = self.class_emb(out)
+        a = out.detach()
+        class_emb = self.class_emb(a)
         full_emb = emb + class_emb
 
         model_out = self.model.diffusion_model.forward_output_blocks(
@@ -706,3 +731,26 @@ class DiffMatchMulti(DiffMatchFixed):
         loss_dict.update({f'{log_prefix}/loss': loss})
 
         return loss, loss_dict
+
+    def p_mean_variance(self, x, t, clip_denoised: bool):
+        out, emb = self.model.diffusion_model.just_representations(
+            x, t, return_emb=True)
+        class_emb = self.class_emb(out)
+        full_emb = emb + class_emb
+        model_out = self.model.diffusion_model.forward_output_blocks(
+            x,
+            None,
+            full_emb,
+            self.model.diffusion_model.representations
+        )
+        self.model.diffusion_model.representations = []
+
+        if self.parameterization == "eps":
+            x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
+        elif self.parameterization == "x0":
+            x_recon = model_out
+        if clip_denoised:
+            x_recon.clamp_(-1., 1.)
+
+        model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
+        return model_mean, posterior_variance, posterior_log_variance
