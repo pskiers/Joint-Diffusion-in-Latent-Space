@@ -11,35 +11,30 @@ model:
     channels: 3
     monitor: val/loss
 
-    attention_config:
-      num_classes: 100
-      channels: 32
-      dim_head: 32
-      # context_dims: [256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 128, 128, 128, 128, 128]
-      context_dims: [128, 128, 128, 128, 128, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256]
-      pool_sizes: [4, 4, 4, 4, 2, 2, 2, 2, null, null, null, null, null, null, null, null, null,]
-      mlp_size: 2048
-      hidden_size: 1024
-      projection_div: 64
-      dropout: 0.3
-
     unet_config:
-      target: models.AdjustedUNet
+      target: models.Wide_ResNet_UNet
       params:
-        image_size: 32
-        in_channels: 3
+        num_classes: 100
+        repr_channels: [
+          128, 128, 128, 128,
+          256, 256, 256, 256,
+          512, 512, 512, 512, 512
+        ]
+        unet_layer_idx: [ 0, 1, 2, 3 ]
+        decoder_channels_mult: [ 1, 2, 3 ]
+        ds: 9
         out_channels: 3
         model_channels: 128
         attention_resolutions: [ 32, 16, 8 ]
         num_res_blocks: 3
-        channel_mult: [ 1, 2, 2, 2 ]
         num_heads: 4
-        pool_size: 10000
+        dropout: 0.3
+        widen_factor: 8
 
     # sample_grad_scale: 60
-    # classifier_in_features: 3712
-    # classifier_hidden: 1024
-    # num_classes: 10
+    # classifier_in_features: 0  # dummy
+    # classifier_hidden: 0  # dummy
+    # num_classes: 0  # dummy
     # dropout: 0.0
     # classification_key: 1
 

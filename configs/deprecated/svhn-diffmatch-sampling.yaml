@@ -32,9 +32,10 @@ model:
       projection_div: 2
 
     num_classes: 10
-    ddim_steps: 20
-    generation_start: 2
+    ddim_steps: 10
+    generation_start: 1
     generation_batch_size: 10
+    step_per_generation: 10
     sample_grad_scale: 60
     classification_key: 1
     min_confidence: 0.95

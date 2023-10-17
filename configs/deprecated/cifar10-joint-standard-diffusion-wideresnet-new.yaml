@@ -14,11 +14,11 @@ model:
     unet_config:
       target: models.Wide_ResNet_UNet
       params:
-        num_classes: 100
+        num_classes: 10
         repr_channels: [
-          128, 128, 128, 128,
-          256, 256, 256, 256,
-          512, 512, 512, 512, 512
+          32, 32, 32, 32,
+          64, 64, 64, 64,
+          128, 128, 128, 128, 128
         ]
         unet_layer_idx: [ 0, 1, 2, 3 ]
         decoder_channels_mult: [ 1, 2, 3 ]
@@ -29,12 +29,11 @@ model:
         num_res_blocks: 3
         num_heads: 4
         dropout: 0.3
-        widen_factor: 8
 
     # sample_grad_scale: 60
-    classifier_in_features: 0  # dummy
-    classifier_hidden: 0  # dummy
-    num_classes: 0  # dummy
+    # classifier_in_features: 0  # dummy
+    # classifier_hidden: 0  # dummy
+    # num_classes: 0  # dummy
     # dropout: 0.0
     # classification_key: 1
 

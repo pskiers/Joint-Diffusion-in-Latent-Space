@@ -1,0 +1,58 @@
+model:
+  base_learning_rate: 1.0e-04
+  model_type: joint_diffusion_attention
+  params:
+    linear_start: 0.0015
+    linear_end: 0.0195
+    log_every_t: 200
+    timesteps: 1000
+    first_stage_key: 0
+    image_size: 32
+    channels: 3
+    monitor: val/loss
+
+    attention_config:
+      num_classes: 100
+      channels: 128
+      dim_head: 32
+      # context_dims: [256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 128, 128, 128, 128, 128]
+      context_dims: [128, 128, 128, 128, 128, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256]
+      pool_sizes: [8, 8, 8, 8, 4, 4, 4, 4, 2, 2, 2, 2, null, null, null, null, null,]
+      mlp_size: 2048
+      hidden_size: 1024
+      projection_div: null
+      dropout: 0.3
+
+    unet_config:
+      target: models.AdjustedUNet
+      params:
+        image_size: 32
+        in_channels: 3
+        out_channels: 3
+        model_channels: 128
+        attention_resolutions: [ 32, 16, 8 ]
+        num_res_blocks: 3
+        channel_mult: [ 1, 2, 2, 2 ]
+        num_heads: 8
+        pool_size: 10000
+
+    classification_loss_scale: 1
+
+dataloaders:
+  name: cifar100
+  train_batches: [ 2 ]
+  val_batch: 2
+  num_workers: 16
+  num_labeled: null
+
+lightning:
+  callbacks:
+    image_logger:
+      target: main.ImageLogger
+      params:
+        batch_frequency: 5000
+        max_images: 8
+        increase_log_steps: False
+
+  trainer:
+    benchmark: True
