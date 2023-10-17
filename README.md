@@ -3,7 +3,7 @@
 ## Installing necessary libraries
 
 ### A word of caution
-It is recommended highly recommended that one uses the provided installation script. Why? Well, the dependencies inherited from the other repositories are a little problematic to say the least. A **python scrip** ending prematurely with a SEGFAULT, scripts not working when the order of imports in one file is changed - these are just a few problems encountered by the author. However, if you still have not been discouraged then I wish you good luck. To be honest you might need it - even if you use the script - because apparently pytorch changing its version might break it (it did once already, even though an older version of pytorch is supposed to be used). If the installing script does not work then do not hesitate to reach out to me and I will try to solve the problem as soon as possible.
+It is recommended highly recommended that one uses the provided installation script. Why? Well, the dependencies inherited from the other repositories are a little problematic to say the least. A **python scrip** ending prematurely with a SEGFAULT, scripts not working when the order of imports in one file is changed - these are just a few problems encountered by the author. However, if you still have not been discouraged then I wish you good luck. To be honest you might need it anyway - even if you use the script - because apparently pytorch changing its version might break it (it did once already, even though an older version of pytorch is supposed to be used). If the installing script does not work then do not hesitate to reach out to me and I will try to solve the problem as soon as possible.
 
 ### Requirements of the installation script
 Required components before you start the installation:
