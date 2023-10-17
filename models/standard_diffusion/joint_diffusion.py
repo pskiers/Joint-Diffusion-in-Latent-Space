@@ -163,7 +163,8 @@ class JointDiffusionNoisyClassifier(DDPM):
                    return_keys=None,
                    sample_classes=None,
                    **kwargs):
-        self.sample_classes = torch.tensor(sample_classes).to(self.device)
+        if self.gradient_guided_sampling is True:
+            self.sample_classes = torch.tensor(sample_classes).to(self.device)
         return super().log_images(
             batch,
             N,
