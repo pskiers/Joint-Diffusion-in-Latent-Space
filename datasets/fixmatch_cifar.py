@@ -115,6 +115,22 @@ def get_cifar100_supervised(args, root):
     return train_dataset, test_dataset
 
 
+def get_svhn_supervised(args, root):
+    transform_val = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=cifar100_mean, std=cifar100_std)
+    ])
+
+    train_dataset = SVHNSSL(
+        root, None, train=True,
+        transform=TransformRandAugmentSupervised(mean=normal_mean, std=normal_std))
+
+    test_dataset = datasets.SVHN(
+        root, split="test", transform=transform_val, download=True)
+
+    return train_dataset, test_dataset
+
+
 def get_cifar100(args, root):
 
     transform_labeled = transforms.Compose([
@@ -145,6 +161,39 @@ def get_cifar100(args, root):
 
     test_dataset = datasets.CIFAR100(
         root, train=False, transform=transform_val, download=False)
+
+    return train_labeled_dataset, train_unlabeled_dataset, test_dataset
+
+
+def get_svhn(args, root):
+
+    transform_labeled = transforms.Compose([
+        transforms.RandomCrop(size=32,
+                              padding=int(32*0.125),
+                              padding_mode='reflect'),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=normal_mean, std=normal_std)])
+
+    transform_val = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=normal_mean, std=normal_std)])
+
+    base_dataset = datasets.SVHN(
+        root, split="train", download=True)
+
+    train_labeled_idxs, train_unlabeled_idxs = x_u_split(
+        args, base_dataset.labels)
+
+    train_labeled_dataset = SVHNSSL(
+        root, train_labeled_idxs, train=True,
+        transform=transform_labeled)
+
+    train_unlabeled_dataset = SVHNSSL(
+        root, train_unlabeled_idxs, train=True,
+        transform=TransformFixMatch(mean=cifar100_mean, std=cifar100_std))
+
+    test_dataset = datasets.SVHN(
+        root, split="test", transform=transform_val, download=True)
 
     return train_labeled_dataset, train_unlabeled_dataset, test_dataset
 
@@ -190,7 +239,7 @@ class TransformFixMatch(object):
     def __call__(self, x):
         weak = self.weak(x)
         strong = self.strong(x)
-        return self.normalize(weak), self.normalize(strong)
+        return self.normalize(x), self.normalize(weak), self.normalize(strong)
 
 
 class TransformMultiFixMatch(object):
@@ -284,9 +333,35 @@ class CIFAR100SSL(datasets.CIFAR100):
 
         return img, target
 
+class SVHNSSL(datasets.SVHN):
+    def __init__(self, root, indexs, train=True,
+                 transform=None, target_transform=None,
+                 download=False):
+        super().__init__(root, split="train" if train else "test",
+                         transform=transform,
+                         target_transform=target_transform,
+                         download=download)
+        if indexs is not None:
+            self.data = self.data[indexs]
+            self.labels = np.array(self.labels)[indexs]
+
+    def __getitem__(self, index):
+        img, target = self.data[index], self.labels[index]
+        img = Image.fromarray(img.transpose(1, 2, 0))
+
+        if self.transform is not None:
+            img = self.transform(img)
+
+        if self.target_transform is not None:
+            target = self.target_transform(target)
+
+        return img, target
+
 
 DATASET_GETTERS = {'cifar10': get_cifar10,
                    'cifar10_supervised': get_cifar10_supervised,
                    'cifar10_multi': get_cifar10_multi,
                    'cifar100': get_cifar100,
-                   'cifar100_supervised': get_cifar100_supervised}
+                   'cifar100_supervised': get_cifar100_supervised,
+                   'svhn': get_svhn,
+                   'svhn_supervised': get_svhn_supervised}
