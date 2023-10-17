@@ -24,15 +24,19 @@ class FIDScoreLogger(Callback):
                  batch_frequency,
                  samples_amount,
                  metrics_batch_size,
-                 train_dl_batch_size,
+                 real_dl,
+                 real_dl_batch_size,
                  dims=2048,
                  means_path=None,
                  sigma_path=None,
                  cond=False,
-                 latent=True) -> None:
+                 latent=True,
+                 mean=None,
+                 std=None) -> None:
         super().__init__()
         self.batch_freq = batch_frequency
-        self.batch_real_dl = train_dl_batch_size
+        self.batch_real_dl = real_dl_batch_size
+        self.real_dl = real_dl
         self.samples_amount = samples_amount
         self.logger_log_fid = {
             pl.loggers.WandbLogger: self._wandb,
@@ -50,10 +54,19 @@ class FIDScoreLogger(Callback):
 
         block_idx = InceptionV3.BLOCK_INDEX_BY_DIM[dims]
         self.activation_model = InceptionV3([block_idx]).to(device)
+        if (mean is not None) and (std is not None):
+            self.denormalize = torchvision.transforms.Compose(
+                [
+                    torchvision.transforms.Normalize(mean=[0., 0., 0.], std=[1 / s for s in std]),
+                    torchvision.transforms.Normalize(mean=[-m for m in mean], std=[1., 1., 1.]),
+                ]
+            )
+        else:
+            self.denormalize = None
 
     def on_train_start(self, trainer, pl_module):
         if self.test_mu is None or self.test_sigma is None:
-            real_img_dl = trainer.train_dataloader
+            real_img_dl = self.real_dl
             img_key = pl_module.first_stage_key if hasattr(pl_module, "first_stage_key") else 0
 
             self.get_model_statistics(real_img_dl, img_key)
@@ -67,7 +80,13 @@ class FIDScoreLogger(Callback):
         start_idx = 0
 
         for batch in tqdm(dataloader, desc="Calculating real FID score"):
-            batch = batch[img_key].permute(0, 3, 1, 2)
+            batch = batch[img_key]
+            if type(batch) in (list, tuple):
+                batch = batch[0]
+            else:
+                batch = batch.permute(0, 3, 1, 2)  # TODO all dataloaders should output in one format (b,c,w,h)
+            if self.denormalize is not None:
+                batch = self.denormalize(batch)
             batch = batch.to(self.device)
 
             pred = self.activation_model(batch)[0]
@@ -105,7 +124,7 @@ class FIDScoreLogger(Callback):
             if is_train:
                 pl_module.eval()
 
-            real_img_dl = trainer.train_dataloader
+            real_img_dl = self.real_dl
             img_key = pl_module.first_stage_key if hasattr(pl_module, "first_stage_key") else 0
 
             m1, s1 = self.get_model_statistics(real_img_dl, img_key)
@@ -143,9 +162,11 @@ class FIDScoreLogger(Callback):
                 samples = samples_generator.sample(batch_size=self.metrics_batch_size, return_intermediates=False)
         if self.latent:
             x_samples = samples_generator.decode_first_stage(samples)
-            x_samples = x_samples.to(self.device)
         else:
-            x_samples = samples.to(self.device)
+            x_samples = samples
+        if self.denormalize is not None:
+            x_samples = self.denormalize(x_samples)
+        x_samples = x_samples.to(self.device)
 
         pred = self.activation_model(x_samples)[0]
                 # If model output is not scalar, apply global spatial average pooling.
@@ -172,7 +193,7 @@ class FIDScoreLogger(Callback):
 class ImageLogger(Callback):
     def __init__(self, batch_frequency, max_images, clamp=True, increase_log_steps=True,
                  rescale=True, disabled=False, log_on_batch_idx=False, log_first_step=False,
-                 log_images_kwargs=None, log_locally=False):
+                 log_images_kwargs=None, log_locally=False, mean=None, std=None):
         super().__init__()
         self.rescale = rescale
         self.batch_freq = batch_frequency
@@ -190,6 +211,15 @@ class ImageLogger(Callback):
         self.log_images_kwargs = log_images_kwargs if log_images_kwargs else {}
         self.log_first_step = log_first_step
         self.log_locally = log_locally
+        if (mean is not None) and (std is not None):
+            self.denormalize = torchvision.transforms.Compose(
+                [
+                    torchvision.transforms.Normalize(mean=[0., 0., 0.], std=[1 / s for s in std]),
+                    torchvision.transforms.Normalize(mean=[-m for m in mean], std=[1., 1., 1.]),
+                ]
+            )
+        else:
+            self.denormalize = None
 
     @rank_zero_only
     def _wandb(self, pl_module, images, batch_idx, split):
@@ -250,6 +280,8 @@ class ImageLogger(Callback):
                 N = min(images[k].shape[0], self.max_images)
                 images[k] = images[k][:N]
                 if isinstance(images[k], torch.Tensor):
+                    if self.denormalize is not None:
+                        images[k] = self.denormalize(images[k])
                     images[k] = images[k].detach().cpu()
                     if self.clamp:
                         images[k] = torch.clamp(images[k], -1., 1.)
