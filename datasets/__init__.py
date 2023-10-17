@@ -73,7 +73,18 @@ def get_dataloaders(name: str,
         return non_randaugment_dl(
             train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers)
     elif name == "svhn_randaugment":
-        pass
+        if num_labeled is not None:
+            if len(train_batches) != 1:
+                raise ValueError("Need 1 train batch size - supervised batch size; unsupervised bs = train bs * 7")
+            args = RandAugmentArgs(num_labeled=num_labeled, num_classes=10, batch_size=train_batches[0])
+            labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS["svhn"](args, './data')
+            return ssl_randaugment_dl(labeled_dataset, unlabeled_dataset, test_dataset, train_batches[0], val_batch, num_workers)
+        else:
+            if len(train_batches) != 1:
+                raise ValueError("Need 1 train batch size - supervised batch size")
+            args = RandAugmentArgs(num_labeled=num_labeled, num_classes=10, batch_size=train_batches[0])
+            labeled_dataset, test_dataset = DATASET_GETTERS["svhn_supervised"](args, './data')
+            return randaugment_dl(labeled_dataset, unlabeled_dataset, test_dataset, train_batches[0], val_batch, num_workers)
     elif name == "mnist":
         train_ds = AdjustedMNIST(train=True)
         val_ds = AdjustedMNIST(train=False)
@@ -126,7 +137,7 @@ def ssl_randaugment_dl(labeled_dataset, unlabeled_dataset, test_dataset, batch_t
         sampler=SequentialSampler(test_dataset),
         batch_size=batch_val,
         num_workers=num_workers)
-    return (unlabeled_trainloader, labeled_trainloader), test_loader
+    return (labeled_trainloader, unlabeled_trainloader), test_loader
 
 
 def randaugment_dl(labeled_dataset, test_dataset, batch_train, batch_val, num_workers):
@@ -146,12 +157,12 @@ def randaugment_dl(labeled_dataset, test_dataset, batch_train, batch_val, num_wo
 
 
 def non_randaugment_dl(train_ds: torch.utils.data.Dataset,
-                    val_ds: torch.utils.data.Dataset,
-                    num_labeled: int,
-                    train_batches: Tuple[int],
-                    val_batch: int,
-                    num_classes: int,
-                    num_workers: int):
+                       val_ds: torch.utils.data.Dataset,
+                       num_labeled: int,
+                       train_batches: Tuple[int],
+                       val_batch: int,
+                       num_classes: int,
+                       num_workers: int):
     if num_labeled is not None:
         if len(train_batches) != 2:
             raise ValueError("Need 2 train batch sizes - unsupervised and supervised batch size")
@@ -175,7 +186,7 @@ def non_randaugment_dl(train_ds: torch.utils.data.Dataset,
             num_workers=num_workers,
             drop_last=True
         )
-        train_dl = (train_dl_unsupervised, train_dl_supervised)
+        train_dl = (train_dl_supervised, train_dl_unsupervised)
     else:
         if len(train_batches) != 1:
             raise ValueError("Need 1 train batch size - supervised batch size")
