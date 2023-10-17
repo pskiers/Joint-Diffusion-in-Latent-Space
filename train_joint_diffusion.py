@@ -51,7 +51,12 @@ if __name__ == "__main__":
     cfgdir = path.join(logdir, "configs")
 
     trainer_kwargs = dict()
-    trainer_kwargs["logger"] = pl.loggers.WandbLogger(name=nowname, id=nowname)
+    tags = [
+        dl_config["name"],
+        "all labels" if dl_config["num_labeled"] is None else f"{dl_config['num_labeled']} per class",
+        config.model.get("model_type")
+    ]
+    trainer_kwargs["logger"] = pl.loggers.WandbLogger(name=nowname, id=nowname, tags=tags)
 
     # modelcheckpoint - use TrainResult/EvalResult(checkpoint_on=metric) to
     # specify which metric is used to determine best models
