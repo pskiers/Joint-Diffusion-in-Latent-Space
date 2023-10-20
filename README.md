@@ -43,7 +43,7 @@ python train_joint_diffusion.py -p (PATH_TO_CONFIG) -c {PATH_TO CHECKPOINT}
 ## Trouble shooting
 
 ### Training script fails
-Error similar to:
+#### Error similar to:
 >   ...\
 >   File "/home/user/Joint-Diffusion-in-Latent-Space/models/diff_match.py", line 221, in p_losses\
 >   &nbsp;&nbsp;&nbsp;  loss, loss_dict = super().p_losses(x_start, cond, t, noise)\
@@ -59,8 +59,35 @@ In that case, what you need to do is insert line:\
 `t = t.cpu()`\
 in file latent-diffusion/ldm/models/diffusion/ddpm.py, **before line 1030** - just before line `logvar_t = self.logvar[t].to(self.device)`
 
+#### Error ending with:
+> packaging.version.InvalidVersion: Invalid version: '0.10.1,<0.11'
+
+In that case run:
+```
+pip install packaging==21.3
+pip install 'torchmetrics<0.8'
+```
+
+#### Error:
+> AttributeError: module 'torch' has no attribute '_six'
+
+Try running:
+```
+pip install 'torchvision==0.15.1'
+```
+
+#### Error:
+```
+wandb.errors.UsageError: api_key not configured (no-tty). call wandb.login(key=[your_api_key])
+```
+Run:
+```
+wandb login
+```
+and enter your wandb API key
+
 ### Installation script fails
-Error similar to
+#### Error similar to
 ```
 libGL error: MESA-LOADER: failed to open iris: /usr/lib/dri/iris_dri.so: cannot open shared object file
 ```
