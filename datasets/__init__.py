@@ -46,7 +46,7 @@ def get_dataloaders(name: str,
                 raise ValueError("Need 1 train batch size - supervised batch size")
             args = RandAugmentArgs(num_labeled=num_labeled, num_classes=10, batch_size=train_batches[0])
             labeled_dataset, test_dataset = DATASET_GETTERS["cifar10_supervised"](args, './data')
-            return randaugment_dl(labeled_dataset, unlabeled_dataset, test_dataset, train_batches[0], val_batch, num_workers)
+            return randaugment_dl(labeled_dataset, test_dataset, train_batches[0], val_batch, num_workers)
     elif name == "cifar100":
         train_ds = AdjustedCIFAR100(train=True)
         val_ds = AdjustedCIFAR100(train=False)
@@ -65,7 +65,7 @@ def get_dataloaders(name: str,
                 raise ValueError("Need 1 train batch size - supervised batch size")
             args = RandAugmentArgs(num_labeled=num_labeled, num_classes=10, batch_size=train_batches[0])
             labeled_dataset, test_dataset = DATASET_GETTERS["cifar100_supervised"](args, './data')
-            return randaugment_dl(labeled_dataset, unlabeled_dataset, test_dataset, train_batches[0], val_batch, num_workers)
+            return randaugment_dl(labeled_dataset, test_dataset, train_batches[0], val_batch, num_workers)
     elif name == "svhn":
         train_ds = AdjustedSVHN(train="train")
         val_ds = AdjustedSVHN(train="test")
@@ -78,7 +78,7 @@ def get_dataloaders(name: str,
                 raise ValueError("Need 1 train batch size - supervised batch size; unsupervised bs = train bs * 7")
             args = RandAugmentArgs(num_labeled=num_labeled, num_classes=10, batch_size=train_batches[0])
             labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS["svhn"](args, './data')
-            return ssl_randaugment_dl(labeled_dataset, unlabeled_dataset, test_dataset, train_batches[0], val_batch, num_workers)
+            return ssl_randaugment_dl(labeled_dataset, test_dataset, train_batches[0], val_batch, num_workers)
         else:
             if len(train_batches) != 1:
                 raise ValueError("Need 1 train batch size - supervised batch size")

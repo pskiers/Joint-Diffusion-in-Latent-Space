@@ -269,21 +269,23 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
 
 
 class JointDiffusionAugmentations(JointDiffusion):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, augmentations=True, **kwargs):
         super().__init__(*args, **kwargs)
         img_size = self.image_size
-        self.augmentation = K.augmentation.ImageSequential(
-            aug.ColorJitter(0.1, 0.1, 0.1, 0.1, p=0.25),
-            aug.RandomResizedCrop((img_size, img_size), scale=(0.5, 1), p=0.25),
-            aug.RandomRotation((-30, 30), p=0.25),
-            aug.RandomHorizontalFlip(0.5),
-            aug.RandomContrast((0.6, 1.8), p=0.25),
-            aug.RandomSharpness((0.4, 2), p=0.25),
-            aug.RandomBrightness((0.6, 1.8), p=0.25),
-            aug.RandomMixUpV2(p=0.5),
-            # random_apply=(1, 6),
-            aug.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
-        )
+        self.augmentation = None
+        if augmentations is True:
+            self.augmentation = K.augmentation.ImageSequential(
+                aug.ColorJitter(0.1, 0.1, 0.1, 0.1, p=0.25),
+                aug.RandomResizedCrop((img_size, img_size), scale=(0.5, 1), p=0.25),
+                aug.RandomRotation((-30, 30), p=0.25),
+                aug.RandomHorizontalFlip(0.5),
+                aug.RandomContrast((0.6, 1.8), p=0.25),
+                aug.RandomSharpness((0.4, 2), p=0.25),
+                aug.RandomBrightness((0.6, 1.8), p=0.25),
+                aug.RandomMixUpV2(p=0.5),
+                # random_apply=(1, 6),
+                aug.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+            )
         if self.use_ema:
             self.model_ema = LitEma(self)
             print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
@@ -294,12 +296,23 @@ class JointDiffusionAugmentations(JointDiffusion):
             self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
 
     def get_input(self, batch, k):
-        out = super().get_input(batch, k)
-        if self.training:
-            self.x_start = self.augmentation(out)
+        if self.augmentation is not None:
+            out = super().get_input(batch, k)
+            if self.training:
+                self.x_start = self.augmentation(out)
+            else:
+                self.x_start = out
+            return out
         else:
-            self.x_start = out
-        return out
+            if self.training:
+                self.batch_classes = batch[self.classification_key]
+                x = batch[k]
+                self.x_start = x[1]
+                return x[0]
+            else:
+                out = super().get_input(batch, k)
+                self.x_start = out.permute(0, 2, 3, 1)
+                return out.permute(0, 2, 3, 1)
 
 
 class JointDiffusionAttention(JointDiffusionAugmentations):
