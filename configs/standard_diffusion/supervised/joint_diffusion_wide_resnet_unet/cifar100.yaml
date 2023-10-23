@@ -57,10 +57,10 @@ lightning:
     #   batch_frequency: 100000
     #   samples_amount: 10000
     #   metrics_batch_size: 512
-    #   real_dl_batch_size: 448
+    #   real_dl_batch_size: 256
     #   latent: False
-    #   mean: [0.4914, 0.4822, 0.4465]
-    #   std: [0.2471, 0.2435, 0.2616]
+    #   mean: [0.5071, 0.4867, 0.4408]
+    #   std: [0.2675, 0.2565, 0.2761]
 
     img_logger:
       batch_frequency: 10000
@@ -71,5 +71,5 @@ lightning:
           "N": 10,
           "inpaint": False,
       }
-      mean: [0.4914, 0.4822, 0.4465]
-      std: [0.2471, 0.2435, 0.2616]
+      mean: [0.5071, 0.4867, 0.4408]
+      std: [0.2675, 0.2565, 0.2761]

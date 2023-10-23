@@ -84,7 +84,7 @@ def get_dataloaders(name: str,
                 raise ValueError("Need 1 train batch size - supervised batch size")
             args = RandAugmentArgs(num_labeled=num_labeled, num_classes=10, batch_size=train_batches[0])
             labeled_dataset, test_dataset = DATASET_GETTERS["svhn_supervised"](args, './data')
-            return randaugment_dl(labeled_dataset, unlabeled_dataset, test_dataset, train_batches[0], val_batch, num_workers)
+            return randaugment_dl(labeled_dataset, test_dataset, train_batches[0], val_batch, num_workers)
     elif name == "mnist":
         train_ds = AdjustedMNIST(train=True)
         val_ds = AdjustedMNIST(train=False)

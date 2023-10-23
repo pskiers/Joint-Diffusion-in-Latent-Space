@@ -49,14 +49,14 @@ lightning:
     # accumulate_grad_batches: 2
 
   callbacks:
-    fid_logger:
-      batch_frequency: 100000
-      samples_amount: 10000
-      metrics_batch_size: 512
-      real_dl_batch_size: 448
-      latent: False
-      mean: [0.5, 0.5, 0.5]
-      std: [0.5, 0.5, 0.5]
+    # fid_logger:
+    #   batch_frequency: 100000
+    #   samples_amount: 10000
+    #   metrics_batch_size: 512
+    #   real_dl_batch_size: 448
+    #   latent: False
+    #   mean: [0.5, 0.5, 0.5]
+    #   std: [0.5, 0.5, 0.5]
 
     img_logger:
       batch_frequency: 10000
