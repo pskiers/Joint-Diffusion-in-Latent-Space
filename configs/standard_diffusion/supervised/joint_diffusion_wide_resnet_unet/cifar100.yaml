@@ -19,11 +19,11 @@ model:
     unet_config:
       target: models.Wide_ResNet_UNet
       params:
-        num_classes: 10
+        num_classes: 100
         repr_channels: [
-          32, 32, 32, 32,
-          64, 64, 64, 64,
-          128, 128, 128, 128, 128
+          128, 128, 128, 128,
+          256, 256, 256, 256,
+          512, 512, 512, 512, 512
         ]
         unet_layer_idx: [ 0, 1, 2, 3 ]
         decoder_channels_mult: [ 1, 2, 3 ]
@@ -34,10 +34,11 @@ model:
         num_res_blocks: 3
         num_heads: 4
         dropout: 0.3
+        widen_factor: 8
 
 
 dataloaders:
-  name: cifar10_randaugment
+  name: cifar100_randaugment
   train_batches: [ 256 ]
   val_batch: 512
   num_workers: 8

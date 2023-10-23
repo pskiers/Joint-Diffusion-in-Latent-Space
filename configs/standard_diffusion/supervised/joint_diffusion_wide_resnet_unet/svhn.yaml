@@ -37,7 +37,7 @@ model:
 
 
 dataloaders:
-  name: cifar10_randaugment
+  name: svhn_randaugment
   train_batches: [ 256 ]
   val_batch: 512
   num_workers: 8
