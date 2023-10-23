@@ -310,9 +310,12 @@ class JointDiffusionAugmentations(JointDiffusion):
                 self.x_start = x[1]
                 return x[0]
             else:
-                out = super().get_input(batch, k)
-                self.x_start = out.permute(0, 2, 3, 1)
-                return out.permute(0, 2, 3, 1)
+                x = batch[k]
+                if type(batch[k]) in (list, tuple):
+                    x = x[0]
+                self.batch_classes = batch[self.classification_key]
+                self.x_start = x
+                return x
 
 
 class JointDiffusionAttention(JointDiffusionAugmentations):
