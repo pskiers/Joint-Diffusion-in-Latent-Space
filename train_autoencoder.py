@@ -1,44 +1,38 @@
-import tensorflow as tf     # for some reason this is needed to avoid a crash
 from ldm.models.autoencoder import AutoencoderKL
 from omegaconf import OmegaConf
 import argparse
-import torchvision as tv
-import torch
 import pytorch_lightning as pl
-from os import listdir, path
+from datasets import get_dataloaders
+from os import path, environ
+from pathlib import Path
 import datetime
-from datasets import AdjustedMNIST, AdjustedCIFAR10, AdjustedFashionMNIST, AdjustedSVHN, GTSRB
 from callbacks import ImageLogger, CUDACallback, SetupCallback
 
 
 if __name__ == "__main__":
-    config = OmegaConf.load("configs/autoencoder_fashionmnist.yaml")
+    environ["WANDB__SERVICE_WAIT"] = "300"
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--path", "-p", type=Path, required=True, help="path to config file")
+    parser.add_argument("--checkpoint", "-c", type=Path, required=False, help="path to model checkpoint file")
+    args = parser.parse_args()
+    config_path = str(args.path)
+    checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
+
+    config = OmegaConf.load(config_path)
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
     trainer_config = lightning_config.get("trainer", OmegaConf.create())
-    trainer_config["accelerator"] = "ddp"
     trainer_config["gpus"] = 1
-
     trainer_opt = argparse.Namespace(**trainer_config)
     lightning_config.trainer = trainer_config
 
-    config.model.params["image_key"] = 0
+    dl_config = config.pop("dataloaders")
+    train_dls, test_dl = get_dataloaders(**dl_config)
 
-    # train_ds = GTSRB(path="data/gtsrb/train")
-    # test_ds = GTSRB(train=False)
-    train_ds = AdjustedFashionMNIST(train=True)
-    test_ds = AdjustedFashionMNIST(train=False)
-    # train_ds, validation_ds = torch.utils.data.random_split(train_ds, [len(train_ds)-int(0.2*len(train_ds)), int(0.2*len(train_ds))], generator=torch.Generator().manual_seed(42))
-    train_ds, validation_ds = torch.utils.data.random_split(train_ds, [len(train_ds)-len(test_ds), len(test_ds)], generator=torch.Generator().manual_seed(42))
-
-    train_dl = torch.utils.data.DataLoader(train_ds, batch_size=64, shuffle=True, num_workers=0, drop_last=True)
-    valid_dl = torch.utils.data.DataLoader(validation_ds, batch_size=64, shuffle=False, num_workers=0)
-    # test_dl = torch.utils.data.DataLoader(test_ds, batch_size=64, shuffle=False, num_workers=0)
-
-
-    # files = listdir(f"logs/Autoencoder_2023-03-18T21-40-57/checkpoints")
-    # config.model.params["ckpt_path"] = f"logs/Autoencoder_2023-03-18T21-40-57/checkpoints/last.ckpt"
+    if checkpoint_path is not None:
+        config.model.params["ckpt_path"] = checkpoint_path
 
     model = AutoencoderKL(**config.model.get("params", dict()))
     model.learning_rate = config.model.base_learning_rate
@@ -50,7 +44,11 @@ if __name__ == "__main__":
     cfgdir = path.join(logdir, "configs")
 
     trainer_kwargs = dict()
-
+    tags = [
+        dl_config["name"],
+        "all labels" if dl_config["num_labeled"] is None else f"{dl_config['num_labeled']} per class",
+        config.model.get("model_type")
+    ]
     trainer_kwargs["logger"] = pl.loggers.WandbLogger(name=nowname, id=nowname)
 
     # modelcheckpoint - use TrainResult/EvalResult(checkpoint_on=metric) to
@@ -69,19 +67,28 @@ if __name__ == "__main__":
         default_modelckpt_cfg["params"]["monitor"] = model.monitor
         default_modelckpt_cfg["params"]["save_top_k"] = 1
 
-    trainer_kwargs["checkpoint_callback"] = True
-
+    callback_cfg = lightning_config.get("callbacks", OmegaConf.create())
     trainer_kwargs["callbacks"] = [
         pl.callbacks.ModelCheckpoint(**default_modelckpt_cfg["params"]),
-        SetupCallback(resume=False, now=now, logdir=logdir, ckptdir=ckptdir, cfgdir=cfgdir, config=config, lightning_config=lightning_config),
-        ImageLogger(batch_frequency=750, max_images=8, clamp=True, increase_log_steps=False),
+        SetupCallback(
+            resume=False,
+            now=now,
+            logdir=logdir,
+            ckptdir=ckptdir,
+            cfgdir=cfgdir,
+            config=config,
+            lightning_config=lightning_config
+        ),
         CUDACallback()
     ]
+    if (img_logger_cfg := callback_cfg.get("img_logger", None)) is not None:
+        trainer_kwargs["callbacks"].append(ImageLogger(**img_logger_cfg))
 
     trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
     trainer.logdir = logdir
 
-    try:
-        trainer.fit(model=model, train_dataloaders=train_dl, val_dataloaders=valid_dl)
-    except KeyboardInterrupt:
-        pass
+    trainer.fit(
+        model=model,
+        train_dataloaders=train_dls,
+        val_dataloaders=test_dl
+    )
