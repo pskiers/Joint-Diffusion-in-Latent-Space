@@ -4,8 +4,11 @@ from torchvision import transforms
 from einops import rearrange
 import kornia as K
 from .ssl_joint_diffusion import SSLJointLatentDiffusion, SSLJointLatentDiffusionV2
+from .joint_latent_diffusion import JointLatentDiffusion, JointLatentDiffusionAttention
 from ..representation_transformer import RepresentationTransformer
+from ..adjusted_unet import AdjustedUNet
 from ..ddim import DDIMSamplerGradGuided
+from ..utils import FixMatchEma, interleave, de_interleave
 
 
 class LatentDiffMatch(SSLJointLatentDiffusion):
@@ -505,3 +508,197 @@ class LatentDiffMatchWithSampling(LatentDiffMatchV3):
                                            return_x0, score_corrector, corrector_kwargs)
         self.noisy_classifier, self.classifier = self.classifier, self.noisy_classifier
         return out
+
+
+class LatentDiffMatchPooling(JointLatentDiffusion):
+    def __init__(self,
+                 first_stage_config,
+                 cond_stage_config,
+                 classifier_in_features,
+                 classifier_hidden,
+                 num_classes,
+                 min_confidence=0.95,
+                 mu=7,
+                 batch_size=64,
+                 classification_start=0,
+                 dropout=0,
+                 classification_loss_weight=1.0,
+                 classification_key=1,
+                 num_timesteps_cond=None,
+                 cond_stage_key="image",
+                 cond_stage_trainable=False,
+                 concat_mode=True,
+                 cond_stage_forward=None,
+                 conditioning_key=None,
+                 scale_factor=1,
+                 scale_by_std=False,
+                 *args,
+                 **kwargs):
+        super().__init__(
+            first_stage_config,
+            cond_stage_config,
+            classifier_in_features,
+            classifier_hidden,
+            num_classes,
+            dropout,
+            classification_loss_weight,
+            classification_key,
+            False,
+            num_timesteps_cond,
+            cond_stage_key,
+            cond_stage_trainable,
+            concat_mode,
+            cond_stage_forward,
+            conditioning_key,
+            scale_factor,
+            scale_by_std,
+            *args,
+            **kwargs
+        )
+        self.min_confidence = min_confidence
+        self.mu = mu
+        self.batch_size = batch_size
+        self.classification_start = classification_start
+
+    def get_input(self,
+                  batch,
+                  k,
+                  return_first_stage_outputs=False,
+                  force_c_encode=False,
+                  cond_key=None,
+                  return_original_cond=False,
+                  bs=None):
+        if self.training is True:
+            batch = batch[1][0]
+        batch[k] = rearrange(batch[k], 'b c h w -> b h w c')
+        return super().get_input(
+            batch,
+            k,
+            return_first_stage_outputs,
+            force_c_encode,
+            cond_key,
+            return_original_cond,
+            bs
+        )
+
+    def get_train_classification_input(self, batch, k):
+        x = batch[0][k]
+        x = self.to_latent(x, arrange=False)
+
+        y = batch[0][self.classification_key]
+
+        _, weak_img, strong_img = batch[1][0]
+        weak_img = self.to_latent(weak_img, arrange=False)
+        strong_img = self.to_latent(strong_img, arrange=False)
+
+        return x, y, weak_img, strong_img
+
+    def get_valid_classification_input(self, batch, k):
+        x = batch[k]
+        x = self.to_latent(x, arrange=False)
+        y = batch[self.classification_key]
+        return x, y
+
+    def train_classification_step(self, batch, loss):
+        if self.classification_start > 0:
+            self.classification_start -= 0
+            return loss
+
+        loss_dict = {}
+        x, y, weak_img, strong_img = self.get_train_classification_input(
+            batch, self.first_stage_key)
+        t = torch.zeros((x.shape[0]*(2*self.mu+1),), device=self.device).long()
+
+        inputs = interleave(
+            torch.cat((x, weak_img, strong_img)), 2*self.mu+1)
+
+        unet: AdjustedUNet = self.model.diffusion_model
+        representations = unet.just_representations(inputs, t)
+        representations = self.transform_representations(representations)
+        logits = self.classifier(representations)
+
+        logits = de_interleave(logits, 2*self.mu+1)
+        preds_x = logits[:self.batch_size]
+        preds_weak, preds_strong = logits[self.batch_size:].chunk(2)
+        del logits
+
+        loss_classification = nn.functional.cross_entropy(
+            preds_x, y, reduction="mean")
+        loss += loss_classification * self.classification_loss_weight
+        accuracy = torch.sum(torch.argmax(preds_x, dim=1) == y) / len(y)
+        loss_dict.update(
+            {'train/loss_classification': loss_classification})
+        loss_dict.update({'train/loss': loss})
+        loss_dict.update({'train/accuracy': accuracy})
+
+        pseudo_label = torch.softmax(preds_weak.detach(), dim=-1)
+        max_probs, targets_u = torch.max(pseudo_label, dim=-1)
+        mask = max_probs.ge(self.min_confidence).float()
+        ssl_loss = (nn.functional.cross_entropy(
+            preds_strong, targets_u, reduction='none') * mask).mean()
+        loss += ssl_loss * self.classification_loss_weight
+        accuracy = torch.sum(
+            (torch.argmax(preds_strong, dim=1) == targets_u) * mask
+        ) / mask.sum() if mask.sum() > 0 else 0
+        loss_dict.update(
+            {'train/ssl_above_threshold': mask.mean().item()})
+        loss_dict.update({'train/ssl_max_confidence': mask.max().item()})
+        loss_dict.update({'train/loss_ssl_classification': ssl_loss})
+        loss_dict.update({'train/loss': loss})
+        loss_dict.update({'train/ssl_accuracy': accuracy})
+
+        self.log_dict(loss_dict, prog_bar=True,
+                      logger=True, on_step=True, on_epoch=True)
+        return loss
+
+
+class LatentDiffMatchAttention(LatentDiffMatchPooling):
+    def __init__(self,
+                 first_stage_config,
+                 cond_stage_config,
+                 attention_config,
+                 min_confidence=0.95,
+                 mu=7,
+                 batch_size=64,
+                 classification_start=0,
+                 classification_loss_weight=1,
+                 classification_key=1,
+                 num_timesteps_cond=None,
+                 cond_stage_key="image",
+                 cond_stage_trainable=False,
+                 concat_mode=True,
+                 cond_stage_forward=None,
+                 conditioning_key=None,
+                 scale_factor=1,
+                 scale_by_std=False,
+                 *args,
+                 **kwargs):
+        self._init(
+            first_stage_config,
+            cond_stage_config,
+            num_timesteps_cond,
+            cond_stage_key,
+            cond_stage_trainable,
+            concat_mode,
+            cond_stage_forward,
+            conditioning_key,
+            scale_factor,
+            scale_by_std,
+            *args,
+            **kwargs
+        )
+        self.classification_loss_weight = classification_loss_weight
+        self.classification_key = classification_key
+        self.gradient_guided_sampling = False
+        self.augmentations = None
+        self.min_confidence = min_confidence
+        self.mu = mu
+        self.batch_size = batch_size
+        self.classification_start = classification_start
+        self.classifier = RepresentationTransformer(**attention_config)
+
+        self.init_ema()
+        self.init_ckpt(**kwargs)
+
+    def transform_representations(self, representations):
+        return representations

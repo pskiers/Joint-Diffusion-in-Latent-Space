@@ -1,34 +1,133 @@
 import torch
-from .joint_latent_diffusion_noisy_classifier import JointLatentDiffusionNoisyClassifier
+from .joint_latent_diffusion_noisy_classifier import JointLatentDiffusionNoisyClassifier, JointLatentDiffusionNoisyAttention
 from ..representation_transformer import RepresentationTransformer
 
 
 class JointLatentDiffusion(JointLatentDiffusionNoisyClassifier):
-    def __init__(
-            self,
-            first_stage_config,
-            cond_stage_config,
-            classifier_in_features,
-            classifier_hidden,
-            num_classes,
-            classification_key=1,
-            num_timesteps_cond=None,
-            cond_stage_key="image",
-            cond_stage_trainable=False,
-            concat_mode=True,
-            cond_stage_forward=None,
-            conditioning_key=None,
-            scale_factor=1,
-            scale_by_std=False,
-            *args,
-            **kwargs
-    ):
+    def __init__(self,
+                 first_stage_config,
+                 cond_stage_config,
+                 classifier_in_features,
+                 classifier_hidden,
+                 num_classes,
+                 dropout=0,
+                 classification_loss_weight=1.0,
+                 classification_key=1,
+                 augmentations=True,
+                 num_timesteps_cond=None,
+                 cond_stage_key="image",
+                 cond_stage_trainable=False,
+                 concat_mode=True,
+                 cond_stage_forward=None,
+                 conditioning_key=None,
+                 scale_factor=1,
+                 scale_by_std=False,
+                 *args,
+                 **kwargs):
         super().__init__(
             first_stage_config=first_stage_config,
             cond_stage_config=cond_stage_config,
             classifier_in_features=classifier_in_features,
             classifier_hidden=classifier_hidden,
             num_classes=num_classes,
+            dropout=dropout,
+            classification_loss_weight=classification_loss_weight,
+            sample_grad_scale=0,
+            classification_key=classification_key,
+            augmentations=augmentations,
+            num_timesteps_cond=num_timesteps_cond,
+            cond_stage_key=cond_stage_key,
+            cond_stage_trainable=cond_stage_trainable,
+            concat_mode=concat_mode,
+            cond_stage_forward=cond_stage_forward,
+            conditioning_key=conditioning_key,
+            scale_factor=scale_factor,
+            scale_by_std=scale_by_std,
+            *args,
+            **kwargs
+        )
+        # self.x_start = None
+        self.gradient_guided_sampling = False
+
+    def train_classification_step(self, batch, loss):
+        loss_dict = {}
+
+        x, y = self.get_train_classification_input(batch, self.first_stage_key)
+        t = torch.zeros((x.shape[0],), device=self.device).long()
+
+        loss_classification, accuracy = self.do_classification(x, t, y)
+        loss += loss_classification * self.classification_loss_weight
+
+        loss_dict.update({'train/loss_classification': loss_classification})
+        loss_dict.update({'train/loss_full': loss})
+        loss_dict.update({'train/accuracy': accuracy})
+
+        self.log_dict(loss_dict, prog_bar=True,
+                      logger=True, on_step=True, on_epoch=True)
+        return loss
+
+    @torch.no_grad()
+    def validation_step(self, batch, batch_idx):
+        x, y = self.get_valid_classification_input(batch, self.first_stage_key)
+        t = torch.zeros((x.shape[0],), device=self.device).long()
+        x_diff, c = self.get_input(batch, self.first_stage_key)
+
+        loss, loss_dict_no_ema = self(x_diff, c)
+        loss_cls, accuracy = self.do_classification(x, t, y)
+        loss_dict_no_ema.update({'val/loss_classification': loss_cls})
+        loss_dict_no_ema.update({'val/loss_full': loss + loss_cls})
+        loss_dict_no_ema.update({'val/accuracy': accuracy})
+
+        with self.ema_scope():
+            loss, loss_dict_ema = self(x_diff, c)
+            loss_cls, accuracy = self.do_classification(x, t, y)
+            loss_dict_ema.update({'val/loss_classification': loss_cls})
+            loss_dict_ema.update({'val/loss_full': loss + loss_cls})
+            loss_dict_ema.update({'val/accuracy': accuracy})
+            loss_dict_ema = {
+                key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
+
+        self.log_dict(
+            loss_dict_no_ema,
+            prog_bar=False,
+            logger=True,
+            on_step=False,
+            on_epoch=True
+        )
+        self.log_dict(
+            loss_dict_ema,
+            prog_bar=False,
+            logger=True,
+            on_step=False,
+            on_epoch=True
+        )
+
+
+class JointLatentDiffusionAttention(JointLatentDiffusionNoisyAttention):
+    def __init__(self,
+                 first_stage_config,
+                 cond_stage_config,
+                 attention_config,
+                 augmentations=True,
+                 classification_loss_weight=1.0,
+                 classification_key=1,
+                 num_timesteps_cond=None,
+                 cond_stage_key="image",
+                 cond_stage_trainable=False,
+                 concat_mode=True,
+                 cond_stage_forward=None,
+                 conditioning_key=None,
+                 scale_factor=1,
+                 scale_by_std=False,
+                 *args,
+                 **kwargs):
+        super().__init__(
+            first_stage_config=first_stage_config,
+            cond_stage_config=cond_stage_config,
+            attention_config=attention_config,
+            augmentations=augmentations,
+            classification_loss_weight=classification_loss_weight,
+            sample_grad_scale=0,
             classification_key=classification_key,
             num_timesteps_cond=num_timesteps_cond,
             cond_stage_key=cond_stage_key,
@@ -41,75 +140,56 @@ class JointLatentDiffusion(JointLatentDiffusionNoisyClassifier):
             *args,
             **kwargs
         )
-        self.x_start = None
         self.gradient_guided_sampling = False
 
-    def get_input(self, batch, k, return_first_stage_outputs=False, force_c_encode=False, cond_key=None, return_original_cond=False, bs=None):
-        out = super().get_input(batch, k, return_first_stage_outputs, force_c_encode, cond_key, return_original_cond, bs)
-        self.x_start = out[0]
-        return out
+    def train_classification_step(self, batch, loss):
+        loss_dict = {}
 
-    def apply_model(self, x_noisy, t, cond, return_ids=False):
-        if hasattr(self, "split_input_params"):
-            raise NotImplementedError("This feature is not available for this model")
+        x, y = self.get_train_classification_input(batch, self.first_stage_key)
+        t = torch.zeros((x.shape[0],), device=self.device).long()
 
-        x_recon = self.model.diffusion_model.just_reconstruction(x_noisy, t)
-        if self.x_start is not None:
-            representations = self.model.diffusion_model.just_representations(
-                self.x_start,
-                torch.ones(self.x_start.shape[0], device=self.device),
-                pooled=False
-            )
-            representations = self.transform_representations(representations)
-            self.batch_class_predictions = self.classifier(representations)
+        loss_classification, accuracy = self.do_classification(x, t, y)
+        loss += loss_classification * self.classification_loss_weight
 
-        if isinstance(x_recon, tuple) and not return_ids:
-            return x_recon[0]
-        else:
-            return x_recon
+        loss_dict.update({'train/loss_classification': loss_classification})
+        loss_dict.update({'train/loss_full': loss})
+        loss_dict.update({'train/accuracy': accuracy})
 
+        self.log_dict(loss_dict, prog_bar=True,
+                      logger=True, on_step=True, on_epoch=True)
+        return loss
 
-class JointLatentDiffusionAttention(JointLatentDiffusion):
-    def __init__(
-            self,
-            first_stage_config,
-            cond_stage_config,
-            attention_config,
-            classification_key=1,
-            num_timesteps_cond=None,
-            cond_stage_key="image",
-            cond_stage_trainable=False,
-            concat_mode=True,
-            cond_stage_forward=None,
-            conditioning_key=None,
-            scale_factor=1,
-            scale_by_std=False,
-            *args,
-            **kwargs
-        ):
-        super().__init__(
-            first_stage_config,
-            cond_stage_config,
-            0,
-            0,
-            0,
-            classification_key,
-            num_timesteps_cond,
-            cond_stage_key,
-            cond_stage_trainable,
-            concat_mode,
-            cond_stage_forward,
-            conditioning_key,
-            scale_factor,
-            scale_by_std,
-            *args,
-            **kwargs
+    @torch.no_grad()
+    def validation_step(self, batch, batch_idx):
+        x, y = self.get_valid_classification_input(batch, self.first_stage_key)
+        t = torch.zeros((x.shape[0],), device=self.device).long()
+
+        loss, loss_dict_no_ema = self.shared_step(batch)
+        loss_cls, accuracy = self.do_classification(x, t, y)
+        loss_dict_no_ema.update({'val/loss_classification': loss_cls})
+        loss_dict_no_ema.update({'val/loss_full': loss + loss_cls})
+        loss_dict_no_ema.update({'val/accuracy': accuracy})
+
+        with self.ema_scope():
+            loss, loss_dict_ema = self.shared_step(batch)
+            loss_cls, accuracy = self.do_classification(x, t, y)
+            loss_dict_ema.update({'val/loss_classification': loss_cls})
+            loss_dict_ema.update({'val/loss_full': loss + loss_cls})
+            loss_dict_ema.update({'val/accuracy': accuracy})
+            loss_dict_ema = {
+                key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
+
+        self.log_dict(
+            loss_dict_no_ema,
+            prog_bar=False,
+            logger=True,
+            on_step=False,
+            on_epoch=True
         )
-        self.classifier = RepresentationTransformer(**attention_config)
-        if kwargs.get("ckpt_path", None) is not None:
-            ignore_keys = kwargs.get("ignore_keys", [])
-            only_model = kwargs.get("load_only_unet", False)
-            self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
-
-    def transform_representations(self, representations):
-        return representations
+        self.log_dict(
+            loss_dict_ema,
+            prog_bar=False,
+            logger=True,
+            on_step=False,
+            on_epoch=True
+        )
