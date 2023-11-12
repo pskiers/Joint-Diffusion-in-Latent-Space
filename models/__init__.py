@@ -39,5 +39,17 @@ def get_model_class(name: str):
         return DiffMatchFixedAttention
     elif name == "diffmatch_pooling":
         return DiffMatchFixedPooling
+    elif name == "joint_latent_diffusion_noisy_classifier":
+        return JointLatentDiffusionNoisyClassifier
+    elif name == "joint_latent_diffusion_noisy_attention":
+        return JointLatentDiffusionNoisyAttention
+    elif name == "joint_latent_diffusion":
+        return JointLatentDiffusion
+    elif name == "joint_latent_diffusion_attention":
+        return JointLatentDiffusionAttention
+    elif name == "latent_diffmatch_pooling":
+        return LatentDiffMatchPooling
+    elif name == "latent_diffmatch_attention":
+        return LatentDiffMatchAttention
     else:
         raise NotImplementedError(f"Model {name} is not available")
