@@ -27,17 +27,29 @@ Project contains 3 main folders:
 
 ## Training a model
 
-### Training from scratch
+### Training diffusion from scratch
 It is recommended to have a wandb account created. If you do not then it is recommended to create one. To train a model run:
 ```
 python train_joint_diffusion.py -p {PATH_TO_CONFIG}
 ```
 Logs from the run (metrics, losses, generations) will be available at wandb.ai, model checkpoints will be found in the `./logs` folder.
 
-### Training from a checkpoint
+### Training diffusion from a checkpoint
 To resume training from checkpoint run:
 ```
 python train_joint_diffusion.py -p (PATH_TO_CONFIG) -c {PATH_TO CHECKPOINT}
+```
+
+### Training autoencoder from scratch
+To train autoencoder run:
+```
+python train_autoencoder.py -p {PATH_TO_CONFIG}
+```
+
+### Training autoencoder from a checkpoint
+To resume training from checkpoint run:
+```
+python train_autoencoder.py -p (PATH_TO_CONFIG) -c {PATH_TO CHECKPOINT}
 ```
 
 ## Trouble shooting
