@@ -1,0 +1,105 @@
+model:
+  base_learning_rate: 5.0e-05
+  model_type: latent_diffmatch_attention
+  params:
+    linear_start: 0.0015
+    linear_end: 0.0195
+    num_timesteps_cond: 1
+    log_every_t: 200
+    timesteps: 1000
+    first_stage_key: 0
+    image_size: 8
+    channels: 4
+    monitor: val/accuracy_ema
+
+    classification_key: 1
+    classification_loss_weight: 0.001
+
+    min_confidence: 0.95
+    mu: 7
+    batch_size: 64
+    classification_start: 0
+
+    attention_config:
+      num_classes: 10
+      channels: 256
+      dim_head: 32
+      context_dims: [256, 256, 256, 256, 512, 512, 512, 768, 768, 768]
+      pool_sizes: [2, 2, 2, null, null, null, null, null, null, null]
+      mlp_size: 4096
+      hidden_size: 1024
+      projection_div: null
+      dropout: 0.0
+
+    unet_config:
+      target: models.AdjustedUNet
+      params:
+        image_size: 8
+        in_channels: 4
+        out_channels: 4
+        model_channels: 256
+        attention_resolutions: [ 1, 2, 4 ]
+        num_res_blocks: 2
+        channel_mult: [ 1, 2, 3 ]
+        num_head_channels: 32
+        pool_size: 10000
+
+    first_stage_config:
+      target: ldm.models.autoencoder.AutoencoderKL
+      params:
+        embed_dim: 4
+        monitor: "val/rec_loss"
+        ckpt_path: "logs_old/Autoencoder_2023-06-02T13-26-41/checkpoints/epoch=000023.ckpt"
+        ddconfig:
+          double_z: True
+          z_channels: 4
+          resolution: 32
+          in_channels: 3
+          out_ch: 3
+          ch: 128
+          ch_mult: [ 1,2,4 ]  # num_down = len(ch_mult)-1
+          num_res_blocks: 1
+          attn_resolutions: []
+          dropout: 0.0
+        lossconfig:
+          target: torch.nn.Identity
+    cond_stage_config: __is_unconditional__
+
+
+dataloaders:
+  name: svhn_randaugment
+  train_batches: [ 64 ]
+  val_batch: 256
+  num_workers: 16
+  num_labeled: 250
+
+
+lightning:
+  trainer:
+    benchmark: True
+    checkpoint_callback: True
+    max_steps: 1000000
+    # accumulate_grad_batches: 2
+
+  callbacks:
+    fid_logger:
+      batch_frequency: 100000
+      samples_amount: 10000
+      metrics_batch_size: 1024
+      real_dl_batch_size: 256
+      latent: True
+      mean: [0.5, 0.5, 0.5]
+      std: [0.5, 0.5, 0.5]
+
+    img_logger:
+      batch_frequency: 10000
+      max_images: 10
+      clamp: True
+      increase_log_steps: False
+      log_images_kwargs: {
+          "N": 10,
+          "inpaint": False,
+          "sample_classes": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+      }
+      mean: [0.5, 0.5, 0.5]
+      std: [0.5, 0.5, 0.5]
