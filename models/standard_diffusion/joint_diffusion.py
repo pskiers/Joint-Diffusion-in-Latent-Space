@@ -7,10 +7,12 @@ from einops import repeat
 import kornia as K
 import kornia.augmentation as aug
 from ldm.models.diffusion.ddpm import DDPM
+from ldm.modules.diffusionmodules.util import extract_into_tensor
 from ldm.util import default
 from ldm.modules.ema import LitEma
 from contextlib import contextmanager
 from ..representation_transformer import RepresentationTransformer
+from ..adjusted_unet import AdjustedUNet
 
 
 class JointDiffusionNoisyClassifier(DDPM):
@@ -206,7 +208,7 @@ class JointDiffusionNoisyClassifier(DDPM):
 
     @torch.no_grad()
     def guided_apply_model(self, x, t):
-        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'): # TODO refactor this shit
+        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
             return self.apply_model(x, t)
         t_in = t
 
@@ -266,6 +268,36 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
             return x_recon[0]
         else:
             return x_recon
+
+    @torch.no_grad()
+    def guided_apply_model(self, x: torch.Tensor, t):
+        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
+            return self.apply_model(x, t)
+        unet: AdjustedUNet = self.model.diffusion_model
+
+        with torch.enable_grad():
+            x = x.requires_grad_(True)
+            pred_noise = unet.just_reconstruction(
+                x, t, context=None)
+            pred_x_start = (
+                (x - extract_into_tensor(
+                    self.sqrt_one_minus_alphas_cumprod, t, x.shape
+                ) * pred_noise) /
+                extract_into_tensor(self.sqrt_alphas_cumprod, t, x.shape)
+            )
+            representations = unet.just_representations(
+                pred_x_start, t, context=None, pooled=False)
+            pooled_representations = self.transform_representations(
+                representations)
+            pred = self.classifier(pooled_representations)
+
+            x.retain_grad()
+            loss = nn.functional.cross_entropy(
+                pred, self.sample_classes, reduction="sum")
+            loss.backward()
+            model_out = (pred_noise + self.sample_grad_scale * x.grad).detach()
+
+        return model_out
 
 
 class JointDiffusionAugmentations(JointDiffusion):
