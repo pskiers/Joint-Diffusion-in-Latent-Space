@@ -19,37 +19,6 @@ normal_mean = (0.5, 0.5, 0.5)
 normal_std = (0.5, 0.5, 0.5)
 
 
-def ssl_split_cifar10(ds, args, root):
-    transform_labeled = transforms.Compose([
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomCrop(size=32,
-                              padding=int(32*0.125),
-                              padding_mode='reflect'),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=cifar10_mean, std=cifar10_std)
-    ])
-    train_labeled_idxs, train_unlabeled_idxs = x_u_split(
-        args, ds.targets)
-
-    train_labeled_dataset = CIFAR10SSL(
-        root, train_labeled_idxs, train=True,
-        transform=transform_labeled)
-
-    train_unlabeled_dataset = CIFAR10SSL(
-        root, train_unlabeled_idxs, train=True,
-        transform=TransformFixMatch(mean=cifar10_mean, std=cifar10_std))
-    return train_labeled_dataset, train_unlabeled_dataset
-
-
-def get_val_cifar10(root):
-    transform_val = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=cifar10_mean, std=cifar10_std)
-    ])
-    return datasets.CIFAR10(
-        root, train=False, transform=transform_val, download=False)
-
-
 def get_cifar10(args, root):
     transform_labeled = transforms.Compose([
         transforms.RandomHorizontalFlip(),
@@ -194,37 +163,6 @@ def get_cifar100(args, root):
         root, train=False, transform=transform_val, download=False)
 
     return train_labeled_dataset, train_unlabeled_dataset, test_dataset
-
-
-def ssl_split_cifar100(ds, args, root):
-    transform_labeled = transforms.Compose([
-        transforms.RandomHorizontalFlip(),
-        transforms.RandomCrop(size=32,
-                              padding=int(32*0.125),
-                              padding_mode='reflect'),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=cifar100_mean, std=cifar100_std)
-    ])
-    train_labeled_idxs, train_unlabeled_idxs = x_u_split(
-        args, ds.targets)
-
-    train_labeled_dataset = CIFAR100SSL(
-        root, train_labeled_idxs, train=True,
-        transform=transform_labeled)
-
-    train_unlabeled_dataset = CIFAR100SSL(
-        root, train_unlabeled_idxs, train=True,
-        transform=TransformFixMatch(mean=cifar100_mean, std=cifar100_std))
-    return train_labeled_dataset, train_unlabeled_dataset
-
-
-def get_val_cifar100(root):
-    transform_val = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=cifar100_mean, std=cifar100_std)
-    ])
-    return datasets.CIFAR100(
-        root, train=False, transform=transform_val, download=False)
 
 
 def get_svhn(args, root):
@@ -394,6 +332,7 @@ class CIFAR100SSL(datasets.CIFAR100):
             target = self.target_transform(target)
 
         return img, target
+
 
 class SVHNSSL(datasets.SVHN):
     def __init__(self, root, indexs, train=True,

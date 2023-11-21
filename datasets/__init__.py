@@ -1,7 +1,7 @@
 from typing import Tuple, Optional
 from dataclasses import dataclass
 import torch
-from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Subset
 from torchvision import datasets
 
 from .cifar10 import AdjustedCIFAR10
@@ -12,7 +12,7 @@ from .fashionMNIST import AdjustedFashionMNIST
 from .svhn import AdjustedSVHN
 from .gtsrb import GTSRB
 from .utils import equal_labels_random_split, cl_class_split
-from .fixmatch_cifar import DATASET_GETTERS, CIFAR10SSL, CIFAR100SSL, SVHNSSL, ssl_split_cifar10, get_val_cifar10, ssl_split_cifar100, get_val_cifar100
+from .fixmatch_cifar import DATASET_GETTERS
 
 
 @dataclass
@@ -208,41 +208,39 @@ def non_randaugment_dl(train_ds: torch.utils.data.Dataset,
     return train_dl, valid_dl
 
 
-def get_cl_datasets(name: str, num_labeled: int, sup_batch: int, root: str):
+def get_cl_datasets(
+        name: str,
+        num_labeled: int,
+        sup_batch: int,
+):
     if name == "cifar10_randaugment":
         if num_labeled is not None:
             args = RandAugmentArgs(
                 num_labeled=num_labeled, num_classes=10, batch_size=sup_batch)
-            base_dataset = datasets.CIFAR10(
-                root=root, train=True, download=True)
+            labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS["cifar10"](args, './data')
             tasks = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]]
-            tasks_indices = cl_class_split(base_dataset, tasks)
-            tasks_datasets = []
-            for indices in tasks_indices:
-                ds = CIFAR10SSL(root, indices, train=True)
-                train_datasets = ssl_split_cifar10(ds, args, root)
-
-                tasks_datasets.append(train_datasets)
-            val_ds = get_val_cifar10(root)
-            return tasks_datasets, val_ds
+            sup_tasks_indices = cl_class_split(labeled_dataset.targets, tasks)
+            unsup_tasks_indices = cl_class_split(unlabeled_dataset.targets, tasks)
+            tasks_datasets = [
+                (Subset(labeled_dataset, sup_task_idx), Subset(unlabeled_dataset, unsup_task_idx))
+                for sup_task_idx, unsup_task_idx in zip(sup_tasks_indices, unsup_tasks_indices)
+            ]
+            return tasks_datasets, test_dataset, tasks
         else:
             raise NotImplementedError
     elif name == "cifar100_randaugment":
         if num_labeled is not None:
             args = RandAugmentArgs(
                 num_labeled=num_labeled, num_classes=100, batch_size=sup_batch)
-            base_dataset = datasets.CIFAR100(
-                root=root, train=True, download=True)
+            labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS["cifar100"](args, './data')
             tasks = [[j for j in range(i*10, (i+1)*10)] for i in range(10)]
-            tasks_indices = cl_class_split(base_dataset, tasks)
-            tasks_datasets = []
-            for indices in tasks_indices:
-                ds = CIFAR100SSL(root, indices, train=True)
-                train_datasets = ssl_split_cifar100(ds, args, root)
-
-                tasks_datasets.append(train_datasets)
-            val_ds = get_val_cifar100(root)
-            return tasks_datasets, val_ds
+            sup_tasks_indices = cl_class_split(labeled_dataset.targets, tasks)
+            unsup_tasks_indices = cl_class_split(unlabeled_dataset.targets, tasks)
+            tasks_datasets = [
+                (Subset(labeled_dataset, sup_task_idx), Subset(unlabeled_dataset, unsup_task_idx))
+                for sup_task_idx, unsup_task_idx in zip(sup_tasks_indices, unsup_tasks_indices)
+            ]
+            return tasks_datasets, test_dataset, tasks
         else:
             raise NotImplementedError
     else:

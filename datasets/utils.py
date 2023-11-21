@@ -1,4 +1,4 @@
-from typing import Tuple, List
+from typing import Tuple, List, Iterable
 import numpy as np
 import torch
 import torch.utils.data as data
@@ -31,14 +31,15 @@ def equal_labels_random_split(
 
 
 def cl_class_split(
-        dataset: data.Dataset,
+        labels: Iterable,
         tasks_labels: List[List]
 ) -> List[np.ndarray]:
-    tasks_indices = [[] for _ in range(tasks_labels)]
-    for i, (_, label) in enumerate(dataset):
+    tasks_indices = [[] for _ in range(len(tasks_labels))]
+    for i, label in enumerate(labels):
         for j, task_labels in enumerate(tasks_labels):
             if label in task_labels:
                 tasks_indices[j].append(i)
+                break
     return [
         np.array(task_indices)
         for task_indices in tasks_indices
