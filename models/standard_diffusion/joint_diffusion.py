@@ -23,6 +23,7 @@ class JointDiffusionNoisyClassifier(DDPM):
                  num_classes,
                  dropout=0,
                  classification_loss_scale=1,
+                 classification_start=0,
                  sample_grad_scale=60,
                  classification_key=1,
                  first_stage_key="image",
@@ -48,6 +49,7 @@ class JointDiffusionNoisyClassifier(DDPM):
         )
         self.gradient_guided_sampling = True
         self.sample_grad_scale = sample_grad_scale
+        self.classification_start = classification_start
         self.batch_classes = None
         self.batch_class_predictions = None
         self.sample_classes = None
@@ -143,7 +145,7 @@ class JointDiffusionNoisyClassifier(DDPM):
         loss += (self.original_elbo_weight * loss_vlb)
         loss_dict.update({f'{prefix}/loss': loss})
 
-        if self.batch_classes is not None:
+        if (self.batch_classes is not None) and (self.classification_start <= 0):
             prefix = 'train' if self.training else 'val'
 
             loss_classification = nn.functional.cross_entropy(
@@ -155,6 +157,8 @@ class JointDiffusionNoisyClassifier(DDPM):
             accuracy = torch.sum(torch.argmax(
                 self.batch_class_predictions, dim=1) == self.batch_classes) / len(self.batch_classes)
             loss_dict.update({f'{prefix}/accuracy': accuracy})
+        if self.classification_start > 0:
+            self.classification_start -= 1
         return loss, loss_dict
 
     def log_images(self,
