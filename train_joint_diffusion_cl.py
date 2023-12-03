@@ -149,6 +149,8 @@ if __name__ == "__main__":
             trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
             trainer.logdir = logdir
 
+            torch.nn.init.xavier_uniform_(model.classifier[-1].weight[len(prev_tasks):])
+
             trainer.fit(
                 model,
                 train_dataloaders=train_dls,
