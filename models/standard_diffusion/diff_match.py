@@ -7,9 +7,11 @@ from contextlib import contextmanager
 import kornia as K
 from ldm.models.diffusion.ddpm import DDPM
 from ldm.util import default
+from ldm.modules.diffusionmodules.util import extract_into_tensor
 from .ssl_joint_diffusion import SSLJointDiffusion
 from ..representation_transformer import RepresentationTransformer
 from ..utils import FixMatchEma, interleave, de_interleave
+from ..adjusted_unet import AdjustedUNet
 
 
 class DiffMatch(SSLJointDiffusion):
@@ -169,6 +171,7 @@ class DiffMatchFixed(DDPM):
         self.classification_start = classification_start
         self.classification_loss_weight = classification_loss_weight
         self.scheduler = None
+        self.gradient_guided_sampling = False
         if self.use_ema:
             self.model_ema = FixMatchEma(self, decay=0.999)
             print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
@@ -359,16 +362,64 @@ class DiffMatchFixed(DDPM):
         self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
 
     def p_mean_variance(self, x, t, clip_denoised: bool):
-        model_out, _ = self.model(x, t)
+        if self.gradient_guided_sampling is True:
+            return self.grad_guided_p_mean_variance(x, t, clip_denoised)
+        else:
+            model_out = self.apply_model(x, t)
+            if self.parameterization == "eps":
+                x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
+            elif self.parameterization == "x0":
+                x_recon = model_out
+            if clip_denoised:
+                x_recon.clamp_(-1., 1.)
+
+            model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
+            return model_mean, posterior_variance, posterior_log_variance
+
+    def grad_guided_p_mean_variance(self, x, t, clip_denoised: bool):
+        model_out = self.guided_apply_model(x, t)
+
         if self.parameterization == "eps":
             x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
         elif self.parameterization == "x0":
             x_recon = model_out
+        else:
+            raise NotImplementedError()
+
         if clip_denoised:
             x_recon.clamp_(-1., 1.)
-
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
         return model_mean, posterior_variance, posterior_log_variance
+
+    @torch.no_grad()
+    def guided_apply_model(self, x: torch.Tensor, t):
+        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
+            return self.apply_model(x, t)
+        unet: AdjustedUNet = self.model.diffusion_model
+
+        with torch.enable_grad():
+            x = x.requires_grad_(True)
+            pred_noise = unet.just_reconstruction(
+                x, t, context=None)
+            pred_x_start = (
+                (x - extract_into_tensor(
+                    self.sqrt_one_minus_alphas_cumprod, t, x.shape
+                ) * pred_noise) /
+                extract_into_tensor(self.sqrt_alphas_cumprod, t, x.shape)
+            )
+            representations = unet.just_representations(
+                pred_x_start, t, context=None, pooled=False)
+            pooled_representations = self.transform_representations(
+                representations)
+            pred = self.classifier(pooled_representations)
+
+            x.retain_grad()
+            loss = nn.functional.cross_entropy(
+                pred, self.sample_classes, reduction="sum")
+            loss.backward()
+            model_out = (pred_noise + self.sample_grad_scale * x.grad).detach()
+
+        return model_out
 
     @torch.no_grad()
     def log_images(self, batch, N=8, n_row=2, sample=True, return_keys=None, **kwargs):
@@ -471,13 +522,13 @@ class DiffMatchFixedPooling(DiffMatchFixed):
             nn.Dropout(p=dropout),
             nn.Linear(classifier_hidden, num_classes)
         )
+        if self.use_ema:
+            self.model_ema = FixMatchEma(self, decay=0.999)
+            print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
         if kwargs.get("ckpt_path", None) is not None:
             ignore_keys = kwargs.get("ignore_keys", [])
             only_model = kwargs.get("load_only_unet", False)
             self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
-        if self.use_ema:
-            self.model_ema = FixMatchEma(self, decay=0.999)
-            print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
 
     def transform_representations(self, representations):
         representations = self.model.diffusion_model.pool_representations(representations)
