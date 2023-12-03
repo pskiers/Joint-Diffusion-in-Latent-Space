@@ -26,7 +26,7 @@ if __name__ == "__main__":
     checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
 
     config = OmegaConf.load(config_path)
-    # config = OmegaConf.load("configs/standard_diffusion/continual_learning/diffmatch_attention/100_per_class/cifar10.yaml")
+    # config = OmegaConf.load("configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml")
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
@@ -39,7 +39,7 @@ if __name__ == "__main__":
     reply_buff = GenerativeReplay(
         argparse.Namespace(
             batch_size=dl_config["train_batches"][0],
-            sample_batch_size=100,
+            sample_batch_size=1000,
             num_workers=dl_config["num_workers"],
         )
     )
@@ -54,7 +54,7 @@ if __name__ == "__main__":
 
     if checkpoint_path is not None:
         config.model.params["ckpt_path"] = checkpoint_path
-    # config.model.params["ckpt_path"] = "./checkpoint"
+    # config.model.params["ckpt_path"] = "./cl_cifar10.ckpt"
 
     model = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
 
@@ -114,7 +114,7 @@ if __name__ == "__main__":
 
     def generate_samples(batch, labels):
         model.gradient_guided_sampling = True
-        model.sample_grad_scale = 10
+        model.sample_grad_scale = 100
         with torch.no_grad():
             labels = torch.tensor(labels, device=model.device)
             model.sample_classes = labels
@@ -131,16 +131,17 @@ if __name__ == "__main__":
             samples = denormalize(samples)
         model.gradient_guided_sampling = False
         model.sample_classes = None
-        return samples, labels
+        return samples, labels.cpu()
 
     prev_tasks = []
     for i, ((labeled_ds, unlabeled_ds), task) in enumerate(zip(tasks_datasets, tasks)):
         if i == args.task:
+            model.to(torch.device("cuda"))
             train_dls = reply_buff.get_data_for_task(
                 sup_ds=labeled_ds,
                 unsup_ds=unlabeled_ds,
                 prev_tasks=prev_tasks,
-                samples_per_task=2,
+                samples_per_task=500 if dl_config["name"] == "cifar100_randaugment" else 5000,
                 sample_generator=generate_samples,
                 filename=dl_config["name"]
             )
