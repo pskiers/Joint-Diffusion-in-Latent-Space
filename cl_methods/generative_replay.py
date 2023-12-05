@@ -48,7 +48,7 @@ class GenerativeReplay(CLMethod):
             print("Preparing dataset for rehearsal...")
             to_generate = {task: samples_per_task for task in prev_tasks}
             generated_imgs = torch.tensor([])
-            generated_labels = torch.tensor([], dtype=torch.int8)
+            generated_labels = torch.tensor([]).type(torch.LongTensor)
             for task in to_generate.keys():
                 while to_generate[task] > 0:
                     bs = min(self.args.sample_batch_size, to_generate[task])
@@ -58,8 +58,8 @@ class GenerativeReplay(CLMethod):
                     to_generate[task] -= bs
             torch.save(generated_imgs, f"./data/cl/{filename}_imgs.pt")
             torch.save(generated_labels, f"./data/cl/{filename}_labels.pt")
-            # generated_imgs = torch.load("./cifar10_images.pt")
-            # generated_labels = torch.load("./cifar10_labels.pt").type(torch.int8)
+            # generated_imgs = torch.load("./cifar100_randaugment_imgs.pt") if filename == "cifar100_randaugment" else torch.load("./cifar10_randaugment_imgs.pt")
+            # generated_labels = torch.load("./cifar100_randaugment_labels.pt").type(torch.LongTensor) if filename == "cifar100_randaugment" else torch.load("./cifar10_randaugment_labels.pt").type(torch.LongTensor)
             gen_sup_ds = DatasetDummy(
                 generated_imgs,
                 generated_labels,
