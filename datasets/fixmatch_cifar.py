@@ -19,7 +19,7 @@ normal_mean = (0.5, 0.5, 0.5)
 normal_std = (0.5, 0.5, 0.5)
 
 
-def get_cifar10(args, root):
+def get_cifar10(args, root, labels_to_tensor=False):
     transform_labeled = transforms.Compose([
         transforms.RandomHorizontalFlip(),
         transforms.RandomCrop(size=32,
@@ -39,11 +39,13 @@ def get_cifar10(args, root):
 
     train_labeled_dataset = CIFAR10SSL(
         root, train_labeled_idxs, train=True,
-        transform=transform_labeled)
+        transform=transform_labeled,
+        target_transform=lambda x: torch.tensor(x, dtype=torch.int8) if labels_to_tensor else None)
 
     train_unlabeled_dataset = CIFAR10SSL(
         root, train_unlabeled_idxs, train=True,
-        transform=TransformFixMatch(mean=cifar10_mean, std=cifar10_std))
+        transform=TransformFixMatch(mean=cifar10_mean, std=cifar10_std),
+        target_transform=lambda x: torch.tensor(x, dtype=torch.int8) if labels_to_tensor else None)
 
     test_dataset = datasets.CIFAR10(
         root, train=False, transform=transform_val, download=False)
@@ -131,7 +133,7 @@ def get_svhn_supervised(args, root):
     return train_dataset, test_dataset
 
 
-def get_cifar100(args, root):
+def get_cifar100(args, root, labels_to_tensor=False):
 
     transform_labeled = transforms.Compose([
         transforms.RandomHorizontalFlip(),
@@ -153,11 +155,13 @@ def get_cifar100(args, root):
 
     train_labeled_dataset = CIFAR100SSL(
         root, train_labeled_idxs, train=True,
-        transform=transform_labeled)
+        transform=transform_labeled,
+        target_transform=lambda x: torch.tensor(x, dtype=torch.int8) if labels_to_tensor else None)
 
     train_unlabeled_dataset = CIFAR100SSL(
         root, train_unlabeled_idxs, train=True,
-        transform=TransformFixMatch(mean=cifar100_mean, std=cifar100_std))
+        transform=TransformFixMatch(mean=cifar100_mean, std=cifar100_std),
+        target_transform=lambda x: torch.tensor(x, dtype=torch.int8) if labels_to_tensor else None)
 
     test_dataset = datasets.CIFAR100(
         root, train=False, transform=transform_val, download=False)

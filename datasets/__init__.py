@@ -217,7 +217,7 @@ def get_cl_datasets(
         if num_labeled is not None:
             args = RandAugmentArgs(
                 num_labeled=num_labeled, num_classes=10, batch_size=sup_batch)
-            labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS["cifar10"](args, './data')
+            labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS["cifar10"](args, './data', labels_to_tensor=True)
             tasks = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]]
             sup_tasks_indices = cl_class_split(labeled_dataset.targets, tasks)
             unsup_tasks_indices = cl_class_split(unlabeled_dataset.targets, tasks)
@@ -232,7 +232,7 @@ def get_cl_datasets(
         if num_labeled is not None:
             args = RandAugmentArgs(
                 num_labeled=num_labeled, num_classes=100, batch_size=sup_batch)
-            labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS["cifar100"](args, './data')
+            labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS["cifar100"](args, './data', labels_to_tensor=True)
             tasks = [[j for j in range(i*10, (i+1)*10)] for i in range(10)]
             sup_tasks_indices = cl_class_split(labeled_dataset.targets, tasks)
             unsup_tasks_indices = cl_class_split(unlabeled_dataset.targets, tasks)
