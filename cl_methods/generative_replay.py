@@ -58,16 +58,18 @@ class GenerativeReplay(CLMethod):
                     to_generate[task] -= bs
             torch.save(generated_imgs, f"./data/cl/{filename}_imgs.pt")
             torch.save(generated_labels, f"./data/cl/{filename}_labels.pt")
+            # generated_imgs = torch.load("./cifar10_images.pt")
+            # generated_labels = torch.load("./cifar10_labels.pt")
             gen_sup_ds = DatasetDummy(
-                (generated_imgs.numpy() * 255).astype(np.uint8),
-                (generated_labels.numpy() * 255).astype(np.uint8),
+                (generated_imgs.permute((0, 2, 3, 1)).numpy() * 255).astype(np.uint8),
+                generated_labels.numpy().astype(np.uint8),
                 sup_ds.dataset.transform
             )
             joined_sup_ds = ConcatDataset([sup_ds, gen_sup_ds])
 
             gen_unsup_ds = DatasetDummy(
-                (generated_imgs.numpy() * 255).astype(np.uint8),
-                (generated_labels.numpy() * 255).astype(np.uint8),
+                (generated_imgs.permute((0, 2, 3, 1)).numpy() * 255).astype(np.uint8),
+                generated_labels.numpy().astype(np.uint8),
                 unsup_ds.dataset.transform
             )
             joined_unsup_ds = ConcatDataset([unsup_ds, gen_unsup_ds])
