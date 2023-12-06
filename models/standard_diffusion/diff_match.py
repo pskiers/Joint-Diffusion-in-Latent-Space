@@ -2,6 +2,7 @@ import math
 import torch
 import torch.nn as nn
 import numpy as np
+import wandb
 from einops import rearrange, repeat
 from contextlib import contextmanager
 import kornia as K
@@ -342,6 +343,11 @@ class DiffMatchFixed(DDPM):
         accuracy = torch.sum(torch.argmax(preds, dim=1) == y) / len(y)
         loss_dict_no_ema.update({'val/loss': loss})
         loss_dict_no_ema.update({'val/accuracy': accuracy})
+        wandb.log({"val/conf_mat": wandb.plot.confusion_matrix(
+            probs=None,
+            y_true=y.cpu().numpy(),
+            preds=preds.argmax(dim=1).cpu().numpy(),
+        )})
         with self.ema_scope():
             x, y = self.get_val_input(batch)
             _, loss_dict_ema = self(x)
@@ -357,6 +363,11 @@ class DiffMatchFixed(DDPM):
             accuracy = torch.sum(torch.argmax(preds, dim=1) == y) / len(y)
             loss_dict_ema.update({'val/loss': loss})
             loss_dict_ema.update({'val/accuracy': accuracy})
+            wandb.log({"val_ema/conf_mat": wandb.plot.confusion_matrix(
+                probs=None,
+                y_true=y.cpu().numpy(),
+                preds=preds.argmax(dim=1).cpu().numpy(),
+            )})
             loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
         self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
         self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
