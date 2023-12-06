@@ -376,3 +376,29 @@ class JointDiffusionAttention(JointDiffusionAugmentations):
 
     def transform_representations(self, representations):
         return representations
+
+
+class JointDiffusionAttentionDoubleOptims(JointDiffusionAttention):
+    def __init__(self, attention_config, *args, classifier_lr=0.01, **kwargs):
+        super().__init__(attention_config, *args, **kwargs)
+        self.automatic_optimization = False
+        self.learning_rate_classifier = classifier_lr
+
+    def configure_optimizers(self):
+        lr_diffusion = self.learning_rate
+        params_diffusion = list(self.model.parameters())
+        opt_diffusion = torch.optim.AdamW(params_diffusion, lr=lr_diffusion)
+
+        lr_classifier = self.learning_rate_classifier
+        params_classifier = list(self.classifier.parameters())
+        opt_classifier = torch.optim.AdamW(params=params_classifier, lr=lr_classifier)
+        return opt_diffusion, opt_classifier
+
+    def training_step(self, batch, batch_idx):
+        opt_diffusion, opt_classifier = self.optimizers()
+        opt_diffusion.zero_grad()
+        opt_classifier.zero_grad()
+        loss = super().training_step(batch, batch_idx)
+        self.manual_backward(loss)
+        opt_diffusion.step()
+        opt_classifier.step()
