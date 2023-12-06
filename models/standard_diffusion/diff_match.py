@@ -365,7 +365,8 @@ class DiffMatchFixed(DDPM):
         if self.gradient_guided_sampling is True:
             return self.grad_guided_p_mean_variance(x, t, clip_denoised)
         else:
-            model_out = self.apply_model(x, t)
+            unet: AdjustedUNet = self.model.diffusion_model
+            model_out = unet.just_reconstruction(x, t)
             if self.parameterization == "eps":
                 x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
             elif self.parameterization == "x0":
@@ -393,9 +394,9 @@ class DiffMatchFixed(DDPM):
 
     @torch.no_grad()
     def guided_apply_model(self, x: torch.Tensor, t):
-        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
-            return self.apply_model(x, t)
         unet: AdjustedUNet = self.model.diffusion_model
+        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
+            return unet.just_reconstruction(x, t)
 
         with torch.enable_grad():
             x = x.requires_grad_(True)
