@@ -160,6 +160,8 @@ class DiffMatchFixed(DDPM):
                  unsup_img_key=0,
                  classification_start=0,
                  classification_loss_weight=1,
+                 classification_loss_weight_max=1,
+                 classification_loss_weight_increments=0,
                  *args,
                  **kwargs):
         super().__init__(*args, **kwargs)
@@ -171,6 +173,8 @@ class DiffMatchFixed(DDPM):
         self.unsup_img_key = unsup_img_key
         self.classification_start = classification_start
         self.classification_loss_weight = classification_loss_weight
+        self.classification_loss_weight_max = classification_loss_weight_max
+        self.classification_loss_weight_increments = classification_loss_weight_increments
         self.scheduler = None
         self.sampling_method = "unconditional"
         if self.use_ema:
@@ -193,6 +197,10 @@ class DiffMatchFixed(DDPM):
                     print(f"{context}: Restored training weights")
 
     def on_train_batch_end(self, *args, **kwargs):
+        if self.classification_loss_weight_increments > 0 and self.classification_start <= 0:
+            step = (self.classification_loss_weight_max - self.classification_loss_weight) / self.classification_loss_weight_increments
+            self.classification_loss_weight += step
+            self.classification_loss_weight_increments -= 1
         self.scheduler.step()
         if self.use_ema:
             self.model_ema(self)
