@@ -172,7 +172,7 @@ class DiffMatchFixed(DDPM):
         self.classification_start = classification_start
         self.classification_loss_weight = classification_loss_weight
         self.scheduler = None
-        self.gradient_guided_sampling = False
+        self.sampling_method = "unconditional"
         if self.use_ema:
             self.model_ema = FixMatchEma(self, decay=0.999)
             print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
@@ -373,9 +373,11 @@ class DiffMatchFixed(DDPM):
         self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
 
     def p_mean_variance(self, x, t, clip_denoised: bool):
-        if self.gradient_guided_sampling is True:
+        if self.sampling_method == "conditional_to_x":
             return self.grad_guided_p_mean_variance(x, t, clip_denoised)
-        else:
+        elif self.sampling_method == "conditional_to_repr":
+            return self.grad_guided_p_mean_variance(x, t, clip_denoised)
+        elif self.sampling_method == "unconditional":
             unet: AdjustedUNet = self.model.diffusion_model
             model_out = unet.just_reconstruction(x, t)
             if self.parameterization == "eps":
@@ -387,9 +389,14 @@ class DiffMatchFixed(DDPM):
 
             model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
             return model_mean, posterior_variance, posterior_log_variance
+        else:
+            raise NotImplementedError("Sampling method not implemented")
 
     def grad_guided_p_mean_variance(self, x, t, clip_denoised: bool):
-        model_out = self.guided_apply_model(x, t)
+        if self.sampling_method == "conditional_to_x":
+            model_out = self.guided_apply_model(x, t)
+        elif self.sampling_method == "conditional_to_repr":
+            model_out = self.guided_repr_apply_model(x, t)
 
         if self.parameterization == "eps":
             x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
@@ -429,8 +436,44 @@ class DiffMatchFixed(DDPM):
             loss = nn.functional.cross_entropy(
                 pred, self.sample_classes, reduction="sum")
             loss.backward()
-            model_out = (pred_noise + self.sample_grad_scale * x.grad).detach()
+            s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
+            model_out = (pred_noise + s_t * x.grad).detach()
 
+        return model_out
+
+    @torch.no_grad()
+    def guided_repr_apply_model(self, x, t):
+        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
+            return self.apply_model(x, t)
+        t_in = t
+
+        emb = self.model.diffusion_model.get_timestep_embedding(x, t_in, None)
+        unet: AdjustedUNet = self.model.diffusion_model
+
+        with torch.enable_grad():
+            representations = unet.forward_input_blocks(x, None, emb)
+            for h in representations:
+                h.retain_grad()
+
+            pred_noise = unet.forward_output_blocks(x, None, emb, representations)
+            pred_x_start = (
+                (x - extract_into_tensor(
+                    self.sqrt_one_minus_alphas_cumprod, t, x.shape
+                ) * pred_noise) /
+                extract_into_tensor(self.sqrt_alphas_cumprod, t, x.shape)
+            )
+            repr_x0 = unet.just_representations(
+                pred_x_start, t, context=None, pooled=False)
+            pooled_representations = self.transform_representations(
+                repr_x0)
+            class_predictions = self.classifier(pooled_representations)
+            # loss = -torch.log(torch.gather(class_predictions, 1, self.sample_classes.unsqueeze(dim=1))).sum()
+            loss = -nn.functional.cross_entropy(class_predictions, self.sample_classes, reduction="sum")
+            loss.backward()
+            s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
+            representations = [(h + self.sample_grad_scale * h.grad * s_t).detach() for h in representations]
+
+        model_out = unet.forward_output_blocks(x, None, emb, representations)
         return model_out
 
     @torch.no_grad()

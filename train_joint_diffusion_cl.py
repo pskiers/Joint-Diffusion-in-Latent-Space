@@ -113,8 +113,8 @@ if __name__ == "__main__":
         trainer_kwargs["callbacks"].append(FIDScoreLogger(**fid_cfg))
 
     def generate_samples(batch, labels):
-        model.gradient_guided_sampling = True
-        model.sample_grad_scale = 100
+        model.sampling_method = "conditional_to_x"
+        model.sample_grad_scale = 30
         with torch.no_grad():
             labels = torch.tensor(labels, device=model.device)
             model.sample_classes = labels
@@ -129,7 +129,7 @@ if __name__ == "__main__":
                 ]
             )
             samples = denormalize(samples)
-        model.gradient_guided_sampling = False
+        model.sampling_method = "unconditional"
         model.sample_classes = None
         return samples, labels.cpu()
 

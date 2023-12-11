@@ -47,7 +47,7 @@ class JointDiffusionNoisyClassifier(DDPM):
             # nn.ReLU(),
             nn.Linear(classifier_hidden, self.num_classes)
         )
-        self.gradient_guided_sampling = True
+        self.sampling_method = "conditional_to_x"
         self.sample_grad_scale = sample_grad_scale
         self.classification_start = classification_start
         self.batch_classes = None
@@ -169,7 +169,7 @@ class JointDiffusionNoisyClassifier(DDPM):
                    return_keys=None,
                    sample_classes=None,
                    **kwargs):
-        if self.gradient_guided_sampling is True:
+        if self.sampling_method == "conditional_to_x":
             self.sample_classes = torch.tensor(sample_classes).to(self.device)
         return super().log_images(
             batch,
@@ -181,7 +181,7 @@ class JointDiffusionNoisyClassifier(DDPM):
         )
 
     def p_mean_variance(self, x, t, clip_denoised: bool):
-        if self.gradient_guided_sampling is True:
+        if self.sampling_method == "conditional_to_x":
             return self.grad_guided_p_mean_variance(x, t, clip_denoised)
         else:
             model_out = self.apply_model(x, t)
@@ -244,7 +244,7 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.x_start = None
-        self.gradient_guided_sampling = False
+        self.sampling_method = "unconditional"
 
     def get_input(self, batch, k):
         out = super().get_input(batch, k)
