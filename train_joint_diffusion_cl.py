@@ -112,9 +112,11 @@ if __name__ == "__main__":
         fid_cfg["device"] = torch.device("cuda")
         trainer_kwargs["callbacks"].append(FIDScoreLogger(**fid_cfg))
 
+    cl_config = config.pop("cl")
+
     def generate_samples(batch, labels):
-        model.sampling_method = "conditional_to_x"
-        model.sample_grad_scale = 30
+        model.sampling_method = cl_config["sampling_method"]
+        model.sample_grad_scale = cl_config["grad_scale"]
         with torch.no_grad():
             labels = torch.tensor(labels, device=model.device)
             model.sample_classes = labels
@@ -141,9 +143,9 @@ if __name__ == "__main__":
                 sup_ds=labeled_ds,
                 unsup_ds=unlabeled_ds,
                 prev_tasks=prev_tasks,
-                samples_per_task=500 if dl_config["name"] == "cifar100_randaugment" else 5000,
+                samples_per_task=cl_config["samples_per_class"],
                 sample_generator=generate_samples,
-                filename=dl_config["name"]
+                filename=nowname
             )
 
             trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
