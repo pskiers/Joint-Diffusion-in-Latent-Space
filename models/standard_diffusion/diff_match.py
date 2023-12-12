@@ -181,6 +181,10 @@ class DiffMatchFixed(DDPM):
             self.model_ema = FixMatchEma(self, decay=0.999)
             print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
 
+        self.val_labels = torch.tensor([])
+        self.val_preds = torch.tensor([])
+        self.val_preds_ema = torch.tensor([])
+
     @contextmanager
     def ema_scope(self, context=None):
         if self.use_ema:
@@ -351,11 +355,8 @@ class DiffMatchFixed(DDPM):
         accuracy = torch.sum(torch.argmax(preds, dim=1) == y) / len(y)
         loss_dict_no_ema.update({'val/loss': loss})
         loss_dict_no_ema.update({'val/accuracy': accuracy})
-        wandb.log({"val/conf_mat": wandb.plot.confusion_matrix(
-            probs=None,
-            y_true=y.cpu().numpy(),
-            preds=preds.argmax(dim=1).cpu().numpy(),
-        )})
+        self.val_labels = torch.concat([self.val_labels, y.detach().cpu()])
+        self.val_preds = torch.concat([self.val_preds, preds.argmax(dim=1).detach().cpu()])
         with self.ema_scope():
             x, y = self.get_val_input(batch)
             _, loss_dict_ema = self(x)
@@ -371,14 +372,25 @@ class DiffMatchFixed(DDPM):
             accuracy = torch.sum(torch.argmax(preds, dim=1) == y) / len(y)
             loss_dict_ema.update({'val/loss': loss})
             loss_dict_ema.update({'val/accuracy': accuracy})
-            wandb.log({"val_ema/conf_mat": wandb.plot.confusion_matrix(
-                probs=None,
-                y_true=y.cpu().numpy(),
-                preds=preds.argmax(dim=1).cpu().numpy(),
-            )})
+            self.val_preds_ema = torch.concat([self.val_preds_ema, preds.argmax(dim=1).detach().cpu()])
             loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
         self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
         self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
+
+    def on_validation_epoch_end(self) -> None:
+        wandb.log({"val/conf_mat": wandb.plot.confusion_matrix(
+            probs=None,
+            y_true=self.val_labels.numpy(),
+            preds=self.val_preds.numpy(),
+        )})
+        wandb.log({"val/conf_mat_ema": wandb.plot.confusion_matrix(
+            probs=None,
+            y_true=self.val_labels.numpy(),
+            preds=self.val_preds_ema.numpy(),
+        )})
+        self.val_labels = torch.tensor([])
+        self.val_preds = torch.tensor([])
+        self.val_preds_ema = torch.tensor([])
 
     def p_mean_variance(self, x, t, clip_denoised: bool):
         if self.sampling_method == "conditional_to_x":
@@ -907,6 +919,8 @@ class DiffMatchFixedPoolingDoubleOptims(DiffMatchFixedPooling):
         return opt_diffusion, opt_classifier
 
     def training_step(self, batch, batch_idx):
+        if batch_idx > 0:
+            return
         opt_diffusion, opt_classifier = self.optimizers()
         loss = super().training_step(batch, batch_idx) / self.accumulate_grad_batches
         self.manual_backward(loss)
