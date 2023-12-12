@@ -327,8 +327,8 @@ class DiffMatchFixed(DDPM):
         else:
             self.classification_start -= 1
 
-        lr = self.optimizers().param_groups[0]['lr']
-        self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        # lr = self.optimizers().param_groups[0]['lr']
+        # self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         self.log_dict(loss_dict, prog_bar=True,
                       logger=True, on_step=True, on_epoch=True)
         self.log("global_step", self.global_step,
@@ -868,3 +868,50 @@ class DiffMatchMulti(DiffMatchFixed):
 
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
         return model_mean, posterior_variance, posterior_log_variance
+
+
+class DiffMatchFixedPoolingDoubleOptims(DiffMatchFixedPooling):
+    def __init__(self, *args, classifier_lr=0.01, accumulate_grad_batches=1, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.automatic_optimization = False
+        self.accumulate_grad_batches = accumulate_grad_batches
+        self.learning_rate_classifier = classifier_lr
+
+    def configure_optimizers(self):
+        lr_diffusion = self.learning_rate
+        params_diffusion = list(self.model.parameters())
+        opt_diffusion = torch.optim.AdamW(params_diffusion, lr=lr_diffusion)
+
+        lr_classifier = self.learning_rate_classifier
+        params_classifier = list(self.classifier.parameters())
+        opt_classifier = torch.optim.Adam(
+            params_classifier,
+            lr=lr_classifier,
+            betas=(0.9, 0.999)
+        )
+        opt_classifier = torch.optim.AdamW(params=params_classifier, lr=lr_classifier)
+
+        def _lr_lambda(current_step):
+            num_warmup_steps = 0
+            num_training_steps = 2**20
+            num_cycles = 7./16.
+
+            if current_step < num_warmup_steps:
+                return float(current_step) / float(max(1, num_warmup_steps))
+            no_progress = float(current_step - num_warmup_steps) / \
+                float(max(1, num_training_steps - num_warmup_steps))
+            return max(0., math.cos(math.pi * num_cycles * no_progress))
+
+        self.scheduler = torch.optim.lr_scheduler.LambdaLR(opt_classifier, _lr_lambda, -1)
+
+        return opt_diffusion, opt_classifier
+
+    def training_step(self, batch, batch_idx):
+        opt_diffusion, opt_classifier = self.optimizers()
+        loss = super().training_step(batch, batch_idx) / self.accumulate_grad_batches
+        self.manual_backward(loss)
+        if (batch_idx + 1) % self.accumulate_grad_batches:
+            opt_diffusion.step()
+            opt_classifier.step()
+            opt_diffusion.zero_grad()
+            opt_classifier.zero_grad()

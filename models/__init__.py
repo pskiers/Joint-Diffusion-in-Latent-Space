@@ -41,6 +41,8 @@ def get_model_class(name: str):
         return DiffMatchFixedAttention
     elif name == "diffmatch_pooling":
         return DiffMatchFixedPooling
+    elif name == "diffmatch_pooling_2_optims":
+        return DiffMatchFixedPoolingDoubleOptims
     elif name == "joint_latent_diffusion_noisy_classifier":
         return JointLatentDiffusionNoisyClassifier
     elif name == "joint_latent_diffusion_noisy_attention":
