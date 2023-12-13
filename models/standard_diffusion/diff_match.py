@@ -919,8 +919,6 @@ class DiffMatchFixedPoolingDoubleOptims(DiffMatchFixedPooling):
         return opt_diffusion, opt_classifier
 
     def training_step(self, batch, batch_idx):
-        if batch_idx > 0:
-            return
         opt_diffusion, opt_classifier = self.optimizers()
         loss = super().training_step(batch, batch_idx) / self.accumulate_grad_batches
         self.manual_backward(loss)
