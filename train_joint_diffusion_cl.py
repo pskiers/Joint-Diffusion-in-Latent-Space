@@ -39,7 +39,7 @@ if __name__ == "__main__":
     reply_buff = GenerativeReplay(
         argparse.Namespace(
             batch_size=dl_config["train_batches"][0],
-            sample_batch_size=1000,
+            sample_batch_size=500,
             num_workers=dl_config["num_workers"],
         )
     )
@@ -82,6 +82,7 @@ if __name__ == "__main__":
             "filename": "{epoch:06}",
             "verbose": True,
             "save_last": True,
+            "mode": "max"
         }
     }
     if hasattr(model, "monitor"):
@@ -151,8 +152,15 @@ if __name__ == "__main__":
             trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
             trainer.logdir = logdir
 
-            torch.nn.init.xavier_uniform_(model.classifier[-1].weight[len(prev_tasks):])
-
+            weight_reinit = cl_config.get("weight_reinit", "none")
+            if weight_reinit == "none":
+                pass
+            elif weight_reinit == "unused classes":
+                torch.nn.init.xavier_uniform_(model.classifier[-1].weight[len(prev_tasks):])
+            elif weight_reinit == "classifier":
+                for layer in model.classifier:
+                    if hasattr(layer, "weight"):
+                        torch.nn.init.xavier_uniform_(layer.weight)
             trainer.fit(
                 model,
                 train_dataloaders=train_dls,
