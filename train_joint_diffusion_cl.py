@@ -18,12 +18,18 @@ if __name__ == "__main__":
     environ["WANDB__SERVICE_WAIT"] = "300"
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--path", "-p", type=Path, required=True, help="path to config file")
-    parser.add_argument("--checkpoint", "-c", type=Path, required=False, help="path to model checkpoint file")
-    parser.add_argument("--task", "-t", type=int, required=True, help="task id")
+    parser.add_argument(
+        "--path", "-p", type=Path, required=True, help="path to config file")
+    parser.add_argument("--checkpoint", "-c", type=Path,
+                        required=False, help="path to model checkpoint file")
+    parser.add_argument("--task", "-t", type=int,
+                        required=True, help="task id")
+    parser.add_argument("--learned", "-l", type=int,
+                        required=False, help="Learned tasks", nargs="+")
     args = parser.parse_args()
     config_path = str(args.path)
-    checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
+    checkpoint_path = str(
+        args.checkpoint) if args.checkpoint is not None else None
 
     config = OmegaConf.load(config_path)
     # config = OmegaConf.load("configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml")
@@ -56,7 +62,8 @@ if __name__ == "__main__":
         config.model.params["ckpt_path"] = checkpoint_path
     # config.model.params["ckpt_path"] = "./cl_cifar10.ckpt"
 
-    model = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
+    model = get_model_class(config.model.get("model_type"))(
+        **config.model.get("params", dict()))
 
     model.learning_rate = config.model.base_learning_rate
 
@@ -72,7 +79,8 @@ if __name__ == "__main__":
         "all labels" if dl_config["num_labeled"] is None else f"{dl_config['num_labeled']} per class",
         config.model.get("model_type")
     ]
-    trainer_kwargs["logger"] = pl.loggers.WandbLogger(name=nowname, id=nowname, tags=tags)
+    trainer_kwargs["logger"] = pl.loggers.WandbLogger(
+        name=nowname, id=nowname, tags=tags)
 
     # modelcheckpoint - use TrainResult/EvalResult(checkpoint_on=metric) to
     # specify which metric is used to determine best models
@@ -127,8 +135,10 @@ if __name__ == "__main__":
             std = dl_config["std"]
             denormalize = transforms.Compose(
                 [
-                    transforms.Normalize(mean=[0., 0., 0.], std=[1 / s for s in std]),
-                    transforms.Normalize(mean=[-m for m in mean], std=[1., 1., 1.]),
+                    transforms.Normalize(mean=[0., 0., 0.], std=[
+                                         1 / s for s in std]),
+                    transforms.Normalize(
+                        mean=[-m for m in mean], std=[1., 1., 1.]),
                 ]
             )
             samples = denormalize(samples)
@@ -149,14 +159,16 @@ if __name__ == "__main__":
                 filename=nowname
             )
 
-            trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
+            trainer = pl.Trainer.from_argparse_args(
+                trainer_opt, **trainer_kwargs)
             trainer.logdir = logdir
 
             weight_reinit = cl_config.get("weight_reinit", "none")
             if weight_reinit == "none":
                 pass
             elif weight_reinit == "unused classes":
-                torch.nn.init.xavier_uniform_(model.classifier[-1].weight[len(prev_tasks):])
+                torch.nn.init.xavier_uniform_(
+                    model.classifier[-1].weight[len(prev_tasks):])
             elif weight_reinit == "classifier":
                 for layer in model.classifier:
                     if hasattr(layer, "weight"):
@@ -166,4 +178,5 @@ if __name__ == "__main__":
                 train_dataloaders=train_dls,
                 val_dataloaders=test_dl,
             )
-        prev_tasks.extend(task)
+        elif i in args.learned:
+            prev_tasks.extend(task)
