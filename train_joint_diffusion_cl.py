@@ -30,6 +30,8 @@ if __name__ == "__main__":
     config_path = str(args.path)
     checkpoint_path = str(
         args.checkpoint) if args.checkpoint is not None else None
+    if args.learned is None:
+        args.learned = []
 
     config = OmegaConf.load(config_path)
     # config = OmegaConf.load("configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml")
