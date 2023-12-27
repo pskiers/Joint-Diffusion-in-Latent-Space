@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from omegaconf import OmegaConf
 import argparse
 import torch
@@ -17,24 +16,32 @@ from cl_methods.generative_replay import GenerativeReplay
 if __name__ == "__main__":
     environ["WANDB__SERVICE_WAIT"] = "300"
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--path", "-p", type=Path, required=True, help="path to config file")
-    parser.add_argument("--checkpoint", "-c", type=Path,
-                        required=False, help="path to model checkpoint file")
-    parser.add_argument("--task", "-t", type=int,
-                        required=True, help="task id")
-    parser.add_argument("--learned", "-l", type=int,
-                        required=False, help="Learned tasks", nargs="+")
-    args = parser.parse_args()
-    config_path = str(args.path)
-    checkpoint_path = str(
-        args.checkpoint) if args.checkpoint is not None else None
-    if args.learned is None:
-        args.learned = []
+    # parser = argparse.ArgumentParser()
+    # parser.add_argument(
+    #     "--path", "-p", type=Path, required=True, help="path to config file")
+    # parser.add_argument("--checkpoint", "-c", type=Path,
+    #                     required=False, help="path to model checkpoint file")
+    # parser.add_argument("--task", "-t", type=int,
+    #                     required=True, help="task id")
+    # parser.add_argument("--learned", "-l", type=int,
+    #                     required=False, help="Learned tasks", nargs="+")
+    # parser.add_argument("--new", "-n", type=Path, required=False, help="Ckpt to new task data generator")
+    # parser.add_argument("--old", "-o", type=Path, required=False, help="Ckpt to old tasks data generator")
+    # args = parser.parse_args()
+    # config_path = str(args.path)
+    # checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
+    checkpoint_path = "./cl_cifar10.ckpt"
+    # old_generator_path = str(args.old) if args.old is not None else None
+    old_generator_path = "./cl_cifar10.ckpt"
+    # new_generator_path = str(args.new) if args.new is not None else None
+    new_generator_path = "./cl_cifar10.ckpt"
+    # task = args.task
+    current_task = 1
+    # tasks_learned = args.learned if args.learned is not None else []
+    tasks_learned = [0]
 
-    config = OmegaConf.load(config_path)
-    # config = OmegaConf.load("configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml")
+    # config = OmegaConf.load(config_path)
+    config = OmegaConf.load("configs/standard_diffusion/continual_learning/joint_diffusion_pooling/cifar10.yaml")
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
@@ -66,6 +73,16 @@ if __name__ == "__main__":
 
     model = get_model_class(config.model.get("model_type"))(
         **config.model.get("params", dict()))
+    new_generator = None
+    if new_generator_path is not None:
+        config.model.params["ckpt_path"] = new_generator_path
+        new_generator = get_model_class(config.model.get("model_type"))(
+            **config.model.get("params", dict()))
+    old_generator = model
+    if old_generator_path is not None:
+        config.model.params["ckpt_path"] = old_generator_path
+        old_generator = get_model_class(config.model.get("model_type"))(
+            **config.model.get("params", dict()))
 
     model.learning_rate = config.model.base_learning_rate
 
@@ -125,13 +142,13 @@ if __name__ == "__main__":
 
     cl_config = config.pop("cl")
 
-    def generate_samples(batch, labels):
-        model.sampling_method = cl_config["sampling_method"]
-        model.sample_grad_scale = cl_config["grad_scale"]
+    def generate_old_samples(batch, labels):
+        old_generator.sampling_method = cl_config["sampling_method"]
+        old_generator.sample_grad_scale = cl_config["grad_scale"]
         with torch.no_grad():
-            labels = torch.tensor(labels, device=model.device)
-            model.sample_classes = labels
-            samples = model.sample(batch_size=batch)
+            labels = torch.tensor(labels, device=old_generator.device)
+            old_generator.sample_classes = labels
+            samples = old_generator.sample(batch_size=batch)
             samples = samples.cpu()
             mean = dl_config["mean"]
             std = dl_config["std"]
@@ -144,22 +161,57 @@ if __name__ == "__main__":
                 ]
             )
             samples = denormalize(samples)
-        model.sampling_method = "unconditional"
-        model.sample_classes = None
+        old_generator.sampling_method = "unconditional"
+        old_generator.sample_classes = None
         return samples, labels.cpu()
+
+    new_samples_generate = None
+    if new_generator is not None:
+        def generate_new_samples(batch, labels):
+            new_generator.sampling_method = cl_config["sampling_method"]
+            new_generator.sample_grad_scale = cl_config["grad_scale"]
+            with torch.no_grad():
+                labels = torch.tensor(labels, device=new_generator.device)
+                new_generator.sample_classes = labels
+                samples = new_generator.sample(batch_size=batch)
+                samples = samples.cpu()
+                mean = dl_config["mean"]
+                std = dl_config["std"]
+                denormalize = transforms.Compose(
+                    [
+                        transforms.Normalize(mean=[0., 0., 0.], std=[
+                                            1 / s for s in std]),
+                        transforms.Normalize(
+                            mean=[-m for m in mean], std=[1., 1., 1.]),
+                    ]
+                )
+                samples = denormalize(samples)
+            new_generator.sampling_method = "unconditional"
+            new_generator.sample_classes = None
+            return samples, labels.cpu()
+
+        new_samples_generate = generate_new_samples
 
     prev_tasks = []
     for i, ((labeled_ds, unlabeled_ds), task) in enumerate(zip(tasks_datasets, tasks)):
-        if i == args.task:
-            model.to(torch.device("cuda"))
+        if i == current_task:
+            old_generator.to(torch.device("cuda"))
+            if new_generator is not None:
+                new_generator.to(torch.device("cuda"))
             train_dls = reply_buff.get_data_for_task(
                 sup_ds=labeled_ds,
                 unsup_ds=unlabeled_ds,
                 prev_tasks=prev_tasks,
                 samples_per_task=cl_config["samples_per_class"],
-                sample_generator=generate_samples,
+                old_sample_generator=generate_old_samples,
+                new_sample_generator=new_samples_generate,
+                current_task=task,
                 filename=nowname
             )
+            if new_generator is not None:
+                del new_generator
+            if old_generator != model:
+                del old_generator
 
             trainer = pl.Trainer.from_argparse_args(
                 trainer_opt, **trainer_kwargs)
@@ -180,5 +232,5 @@ if __name__ == "__main__":
                 train_dataloaders=train_dls,
                 val_dataloaders=test_dl,
             )
-        elif i in args.learned:
+        elif i in tasks_learned:
             prev_tasks.extend(task)
