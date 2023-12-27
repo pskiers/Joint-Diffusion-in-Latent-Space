@@ -16,32 +16,32 @@ from cl_methods.generative_replay import GenerativeReplay
 if __name__ == "__main__":
     environ["WANDB__SERVICE_WAIT"] = "300"
 
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument(
-    #     "--path", "-p", type=Path, required=True, help="path to config file")
-    # parser.add_argument("--checkpoint", "-c", type=Path,
-    #                     required=False, help="path to model checkpoint file")
-    # parser.add_argument("--task", "-t", type=int,
-    #                     required=True, help="task id")
-    # parser.add_argument("--learned", "-l", type=int,
-    #                     required=False, help="Learned tasks", nargs="+")
-    # parser.add_argument("--new", "-n", type=Path, required=False, help="Ckpt to new task data generator")
-    # parser.add_argument("--old", "-o", type=Path, required=False, help="Ckpt to old tasks data generator")
-    # args = parser.parse_args()
-    # config_path = str(args.path)
-    # checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
-    checkpoint_path = "./cl_cifar10.ckpt"
-    # old_generator_path = str(args.old) if args.old is not None else None
-    old_generator_path = "./cl_cifar10.ckpt"
-    # new_generator_path = str(args.new) if args.new is not None else None
-    new_generator_path = "./cl_cifar10.ckpt"
-    # task = args.task
-    current_task = 1
-    # tasks_learned = args.learned if args.learned is not None else []
-    tasks_learned = [0]
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--path", "-p", type=Path, required=True, help="path to config file")
+    parser.add_argument("--checkpoint", "-c", type=Path,
+                        required=False, help="path to model checkpoint file")
+    parser.add_argument("--task", "-t", type=int,
+                        required=True, help="task id")
+    parser.add_argument("--learned", "-l", type=int,
+                        required=False, help="Learned tasks", nargs="+")
+    parser.add_argument("--new", "-n", type=Path, required=False, help="Ckpt to new task data generator")
+    parser.add_argument("--old", "-o", type=Path, required=False, help="Ckpt to old tasks data generator")
+    args = parser.parse_args()
+    config_path = str(args.path)
+    checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
+    # checkpoint_path = "./cl_cifar10.ckpt"
+    old_generator_path = str(args.old) if args.old is not None else None
+    # old_generator_path = "./cl_cifar10.ckpt"
+    new_generator_path = str(args.new) if args.new is not None else None
+    # new_generator_path = "./cl_cifar10.ckpt"
+    current_task = args.task
+    # current_task = 1
+    tasks_learned = args.learned if args.learned is not None else []
+    # tasks_learned = [0]
 
-    # config = OmegaConf.load(config_path)
-    config = OmegaConf.load("configs/standard_diffusion/continual_learning/joint_diffusion_pooling/cifar10.yaml")
+    config = OmegaConf.load(config_path)
+    # config = OmegaConf.load("configs/standard_diffusion/continual_learning/joint_diffusion_pooling/cifar10.yaml")
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
