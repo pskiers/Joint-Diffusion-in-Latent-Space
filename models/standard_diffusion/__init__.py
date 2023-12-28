@@ -1,3 +1,3 @@
-from .joint_diffusion import JointDiffusionNoisyClassifier, JointDiffusion, JointDiffusionAttention, JointDiffusionAugmentations
+from .joint_diffusion import JointDiffusionNoisyClassifier, JointDiffusion, JointDiffusionAttention, JointDiffusionAugmentations, JointDiffusionAttentionDoubleOptims
 from .ssl_joint_diffusion import SSLJointDiffusion, SSLJointDiffusionAttention
-from .diff_match import DiffMatch, DiffMatchAttention, DiffMatchFixed, DiffMatchFixedPooling, DiffMatchFixedAttention, DiffMatchMulti
+from .diff_match import DiffMatch, DiffMatchAttention, DiffMatchFixed, DiffMatchFixedPooling, DiffMatchFixedAttention, DiffMatchMulti, DiffMatchFixedPoolingDoubleOptims

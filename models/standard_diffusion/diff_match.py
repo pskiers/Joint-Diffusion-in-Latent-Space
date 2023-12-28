@@ -2,14 +2,17 @@ import math
 import torch
 import torch.nn as nn
 import numpy as np
+import wandb
 from einops import rearrange, repeat
 from contextlib import contextmanager
 import kornia as K
 from ldm.models.diffusion.ddpm import DDPM
 from ldm.util import default
+from ldm.modules.diffusionmodules.util import extract_into_tensor
 from .ssl_joint_diffusion import SSLJointDiffusion
 from ..representation_transformer import RepresentationTransformer
 from ..utils import FixMatchEma, interleave, de_interleave
+from ..adjusted_unet import AdjustedUNet
 
 
 class DiffMatch(SSLJointDiffusion):
@@ -157,6 +160,8 @@ class DiffMatchFixed(DDPM):
                  unsup_img_key=0,
                  classification_start=0,
                  classification_loss_weight=1,
+                 classification_loss_weight_max=1,
+                 classification_loss_weight_increments=0,
                  *args,
                  **kwargs):
         super().__init__(*args, **kwargs)
@@ -168,10 +173,17 @@ class DiffMatchFixed(DDPM):
         self.unsup_img_key = unsup_img_key
         self.classification_start = classification_start
         self.classification_loss_weight = classification_loss_weight
+        self.classification_loss_weight_max = classification_loss_weight_max
+        self.classification_loss_weight_increments = classification_loss_weight_increments
         self.scheduler = None
+        self.sampling_method = "unconditional"
         if self.use_ema:
             self.model_ema = FixMatchEma(self, decay=0.999)
             print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
+
+        self.val_labels = torch.tensor([])
+        self.val_preds = torch.tensor([])
+        self.val_preds_ema = torch.tensor([])
 
     @contextmanager
     def ema_scope(self, context=None):
@@ -189,6 +201,10 @@ class DiffMatchFixed(DDPM):
                     print(f"{context}: Restored training weights")
 
     def on_train_batch_end(self, *args, **kwargs):
+        if self.classification_loss_weight_increments > 0 and self.classification_start <= 0:
+            step = (self.classification_loss_weight_max - self.classification_loss_weight) / self.classification_loss_weight_increments
+            self.classification_loss_weight += step
+            self.classification_loss_weight_increments -= 1
         self.scheduler.step()
         if self.use_ema:
             self.model_ema(self)
@@ -315,8 +331,8 @@ class DiffMatchFixed(DDPM):
         else:
             self.classification_start -= 1
 
-        lr = self.optimizers().param_groups[0]['lr']
-        self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        # lr = self.optimizers().param_groups[0]['lr']
+        # self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         self.log_dict(loss_dict, prog_bar=True,
                       logger=True, on_step=True, on_epoch=True)
         self.log("global_step", self.global_step,
@@ -339,6 +355,8 @@ class DiffMatchFixed(DDPM):
         accuracy = torch.sum(torch.argmax(preds, dim=1) == y) / len(y)
         loss_dict_no_ema.update({'val/loss': loss})
         loss_dict_no_ema.update({'val/accuracy': accuracy})
+        self.val_labels = torch.concat([self.val_labels, y.detach().cpu()])
+        self.val_preds = torch.concat([self.val_preds, preds.argmax(dim=1).detach().cpu()])
         with self.ema_scope():
             x, y = self.get_val_input(batch)
             _, loss_dict_ema = self(x)
@@ -354,21 +372,129 @@ class DiffMatchFixed(DDPM):
             accuracy = torch.sum(torch.argmax(preds, dim=1) == y) / len(y)
             loss_dict_ema.update({'val/loss': loss})
             loss_dict_ema.update({'val/accuracy': accuracy})
+            self.val_preds_ema = torch.concat([self.val_preds_ema, preds.argmax(dim=1).detach().cpu()])
             loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
         self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
         self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
 
+    def on_validation_epoch_end(self) -> None:
+        wandb.log({"val/conf_mat": wandb.plot.confusion_matrix(
+            probs=None,
+            y_true=self.val_labels.numpy(),
+            preds=self.val_preds.numpy(),
+        )})
+        wandb.log({"val/conf_mat_ema": wandb.plot.confusion_matrix(
+            probs=None,
+            y_true=self.val_labels.numpy(),
+            preds=self.val_preds_ema.numpy(),
+        )})
+        self.val_labels = torch.tensor([])
+        self.val_preds = torch.tensor([])
+        self.val_preds_ema = torch.tensor([])
+
     def p_mean_variance(self, x, t, clip_denoised: bool):
-        model_out, _ = self.model(x, t)
+        if self.sampling_method == "conditional_to_x":
+            return self.grad_guided_p_mean_variance(x, t, clip_denoised)
+        elif self.sampling_method == "conditional_to_repr":
+            return self.grad_guided_p_mean_variance(x, t, clip_denoised)
+        elif self.sampling_method == "unconditional":
+            unet: AdjustedUNet = self.model.diffusion_model
+            model_out = unet.just_reconstruction(x, t)
+            if self.parameterization == "eps":
+                x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
+            elif self.parameterization == "x0":
+                x_recon = model_out
+            if clip_denoised:
+                x_recon.clamp_(-1., 1.)
+
+            model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
+            return model_mean, posterior_variance, posterior_log_variance
+        else:
+            raise NotImplementedError("Sampling method not implemented")
+
+    def grad_guided_p_mean_variance(self, x, t, clip_denoised: bool):
+        if self.sampling_method == "conditional_to_x":
+            model_out = self.guided_apply_model(x, t)
+        elif self.sampling_method == "conditional_to_repr":
+            model_out = self.guided_repr_apply_model(x, t)
+
         if self.parameterization == "eps":
             x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
         elif self.parameterization == "x0":
             x_recon = model_out
+        else:
+            raise NotImplementedError()
+
         if clip_denoised:
             x_recon.clamp_(-1., 1.)
-
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
         return model_mean, posterior_variance, posterior_log_variance
+
+    @torch.no_grad()
+    def guided_apply_model(self, x: torch.Tensor, t):
+        unet: AdjustedUNet = self.model.diffusion_model
+        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
+            return unet.just_reconstruction(x, t)
+
+        with torch.enable_grad():
+            x = x.requires_grad_(True)
+            pred_noise = unet.just_reconstruction(
+                x, t, context=None)
+            pred_x_start = (
+                (x - extract_into_tensor(
+                    self.sqrt_one_minus_alphas_cumprod, t, x.shape
+                ) * pred_noise) /
+                extract_into_tensor(self.sqrt_alphas_cumprod, t, x.shape)
+            )
+            representations = unet.just_representations(
+                pred_x_start, t, context=None, pooled=False)
+            pooled_representations = self.transform_representations(
+                representations)
+            pred = self.classifier(pooled_representations)
+
+            x.retain_grad()
+            loss = nn.functional.cross_entropy(
+                pred, self.sample_classes, reduction="sum")
+            loss.backward()
+            s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
+            model_out = (pred_noise + s_t * x.grad).detach()
+
+        return model_out
+
+    @torch.no_grad()
+    def guided_repr_apply_model(self, x, t):
+        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
+            return self.apply_model(x, t)
+        t_in = t
+
+        emb = self.model.diffusion_model.get_timestep_embedding(x, t_in, None)
+        unet: AdjustedUNet = self.model.diffusion_model
+
+        with torch.enable_grad():
+            representations = unet.forward_input_blocks(x, None, emb)
+            for h in representations:
+                h.retain_grad()
+
+            pred_noise = unet.forward_output_blocks(x, None, emb, representations)
+            pred_x_start = (
+                (x - extract_into_tensor(
+                    self.sqrt_one_minus_alphas_cumprod, t, x.shape
+                ) * pred_noise) /
+                extract_into_tensor(self.sqrt_alphas_cumprod, t, x.shape)
+            )
+            repr_x0 = unet.just_representations(
+                pred_x_start, t, context=None, pooled=False)
+            pooled_representations = self.transform_representations(
+                repr_x0)
+            class_predictions = self.classifier(pooled_representations)
+            # loss = -torch.log(torch.gather(class_predictions, 1, self.sample_classes.unsqueeze(dim=1))).sum()
+            loss = -nn.functional.cross_entropy(class_predictions, self.sample_classes, reduction="sum")
+            loss.backward()
+            s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
+            representations = [(h + self.sample_grad_scale * h.grad * s_t).detach() for h in representations]
+
+        model_out = unet.forward_output_blocks(x, None, emb, representations)
+        return model_out
 
     @torch.no_grad()
     def log_images(self, batch, N=8, n_row=2, sample=True, return_keys=None, **kwargs):
@@ -471,13 +597,13 @@ class DiffMatchFixedPooling(DiffMatchFixed):
             nn.Dropout(p=dropout),
             nn.Linear(classifier_hidden, num_classes)
         )
+        if self.use_ema:
+            self.model_ema = FixMatchEma(self, decay=0.999)
+            print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
         if kwargs.get("ckpt_path", None) is not None:
             ignore_keys = kwargs.get("ignore_keys", [])
             only_model = kwargs.get("load_only_unet", False)
             self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
-        if self.use_ema:
-            self.model_ema = FixMatchEma(self, decay=0.999)
-            print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
 
     def transform_representations(self, representations):
         representations = self.model.diffusion_model.pool_representations(representations)
@@ -754,3 +880,50 @@ class DiffMatchMulti(DiffMatchFixed):
 
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
         return model_mean, posterior_variance, posterior_log_variance
+
+
+class DiffMatchFixedPoolingDoubleOptims(DiffMatchFixedPooling):
+    def __init__(self, *args, classifier_lr=0.01, accumulate_grad_batches=1, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.automatic_optimization = False
+        self.accumulate_grad_batches = accumulate_grad_batches
+        self.learning_rate_classifier = classifier_lr
+
+    def configure_optimizers(self):
+        lr_diffusion = self.learning_rate
+        params_diffusion = list(self.model.parameters())
+        opt_diffusion = torch.optim.AdamW(params_diffusion, lr=lr_diffusion)
+
+        lr_classifier = self.learning_rate_classifier
+        params_classifier = list(self.classifier.parameters())
+        opt_classifier = torch.optim.Adam(
+            params_classifier,
+            lr=lr_classifier,
+            betas=(0.9, 0.999)
+        )
+        opt_classifier = torch.optim.AdamW(params=params_classifier, lr=lr_classifier)
+
+        def _lr_lambda(current_step):
+            num_warmup_steps = 0
+            num_training_steps = 2**20
+            num_cycles = 7./16.
+
+            if current_step < num_warmup_steps:
+                return float(current_step) / float(max(1, num_warmup_steps))
+            no_progress = float(current_step - num_warmup_steps) / \
+                float(max(1, num_training_steps - num_warmup_steps))
+            return max(0., math.cos(math.pi * num_cycles * no_progress))
+
+        self.scheduler = torch.optim.lr_scheduler.LambdaLR(opt_classifier, _lr_lambda, -1)
+
+        return opt_diffusion, opt_classifier
+
+    def training_step(self, batch, batch_idx):
+        opt_diffusion, opt_classifier = self.optimizers()
+        loss = super().training_step(batch, batch_idx) / self.accumulate_grad_batches
+        self.manual_backward(loss)
+        if (batch_idx + 1) % self.accumulate_grad_batches:
+            opt_diffusion.step()
+            opt_classifier.step()
+            opt_diffusion.zero_grad()
+            opt_classifier.zero_grad()

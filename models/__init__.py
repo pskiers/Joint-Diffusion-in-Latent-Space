@@ -27,6 +27,8 @@ def get_model_class(name: str):
         return JointDiffusion
     elif name == "joint_diffusion_attention":
         return JointDiffusionAttention
+    elif name == "joint_diffusion_attention_2_optims":
+        return JointDiffusionAttentionDoubleOptims
     elif name == "joint_diffusion_augmentations":
         return JointDiffusionAugmentations
     elif name == "ssl_joint_diffusion":
@@ -39,6 +41,8 @@ def get_model_class(name: str):
         return DiffMatchFixedAttention
     elif name == "diffmatch_pooling":
         return DiffMatchFixedPooling
+    elif name == "diffmatch_pooling_2_optims":
+        return DiffMatchFixedPoolingDoubleOptims
     elif name == "joint_latent_diffusion_noisy_classifier":
         return JointLatentDiffusionNoisyClassifier
     elif name == "joint_latent_diffusion_noisy_attention":

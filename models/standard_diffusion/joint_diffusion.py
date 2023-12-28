@@ -47,7 +47,7 @@ class JointDiffusionNoisyClassifier(DDPM):
             # nn.ReLU(),
             nn.Linear(classifier_hidden, self.num_classes)
         )
-        self.gradient_guided_sampling = True
+        self.sampling_method = "conditional_to_x"
         self.sample_grad_scale = sample_grad_scale
         self.classification_start = classification_start
         self.batch_classes = None
@@ -169,7 +169,7 @@ class JointDiffusionNoisyClassifier(DDPM):
                    return_keys=None,
                    sample_classes=None,
                    **kwargs):
-        if self.gradient_guided_sampling is True:
+        if self.sampling_method == "conditional_to_x":
             self.sample_classes = torch.tensor(sample_classes).to(self.device)
         return super().log_images(
             batch,
@@ -181,7 +181,7 @@ class JointDiffusionNoisyClassifier(DDPM):
         )
 
     def p_mean_variance(self, x, t, clip_denoised: bool):
-        if self.gradient_guided_sampling is True:
+        if self.sampling_method == "conditional_to_x":
             return self.grad_guided_p_mean_variance(x, t, clip_denoised)
         else:
             model_out = self.apply_model(x, t)
@@ -244,7 +244,7 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.x_start = None
-        self.gradient_guided_sampling = False
+        self.sampling_method = "unconditional"
 
     def get_input(self, batch, k):
         out = super().get_input(batch, k)
@@ -376,3 +376,29 @@ class JointDiffusionAttention(JointDiffusionAugmentations):
 
     def transform_representations(self, representations):
         return representations
+
+
+class JointDiffusionAttentionDoubleOptims(JointDiffusionAttention):
+    def __init__(self, attention_config, *args, classifier_lr=0.01, **kwargs):
+        super().__init__(attention_config, *args, **kwargs)
+        self.automatic_optimization = False
+        self.learning_rate_classifier = classifier_lr
+
+    def configure_optimizers(self):
+        lr_diffusion = self.learning_rate
+        params_diffusion = list(self.model.parameters())
+        opt_diffusion = torch.optim.AdamW(params_diffusion, lr=lr_diffusion)
+
+        lr_classifier = self.learning_rate_classifier
+        params_classifier = list(self.classifier.parameters())
+        opt_classifier = torch.optim.AdamW(params=params_classifier, lr=lr_classifier)
+        return opt_diffusion, opt_classifier
+
+    def training_step(self, batch, batch_idx):
+        opt_diffusion, opt_classifier = self.optimizers()
+        opt_diffusion.zero_grad()
+        opt_classifier.zero_grad()
+        loss = super().training_step(batch, batch_idx)
+        self.manual_backward(loss)
+        opt_diffusion.step()
+        opt_classifier.step()
