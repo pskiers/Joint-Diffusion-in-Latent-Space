@@ -45,7 +45,7 @@ model:
       params:
         embed_dim: 4
         monitor: "val/rec_loss"
-        ckpt_path: "logs_old/Autoencoder_2023-06-02T13-26-41/checkpoints/epoch=000023.ckpt"
+        ckpt_path: "logs/Autoencoder_2023-12-29T17-18-15/checkpoints/epoch=000127.ckpt" #"logs_old/Autoencoder_2023-06-02T13-26-41/checkpoints/epoch=000023.ckpt"
         ddconfig:
           double_z: True
           z_channels: 4
