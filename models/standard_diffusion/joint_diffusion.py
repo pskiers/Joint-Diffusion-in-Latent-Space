@@ -3,6 +3,7 @@ import numpy as np
 from pytorch_lightning.utilities.types import STEP_OUTPUT
 import torch
 import torch.nn as nn
+import wandb
 from einops import repeat
 import kornia as K
 import kornia.augmentation as aug
@@ -64,6 +65,8 @@ class JointDiffusionNoisyClassifier(DDPM):
             ignore_keys = kwargs.get("ignore_keys", [])
             only_model = kwargs.get("load_only_unet", False)
             self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
+        self.val_labels = torch.tensor([])
+        self.val_preds = torch.tensor([])
 
     def configure_optimizers(self):
         lr = self.learning_rate
@@ -157,9 +160,22 @@ class JointDiffusionNoisyClassifier(DDPM):
             accuracy = torch.sum(torch.argmax(
                 self.batch_class_predictions, dim=1) == self.batch_classes) / len(self.batch_classes)
             loss_dict.update({f'{prefix}/accuracy': accuracy})
+            if prefix == "val":
+                self.val_labels = torch.concat([self.val_labels, self.batch_classes.detach().cpu()])
+                self.val_preds = torch.concat([self.val_preds, self.batch_class_predictions.argmax(dim=1).detach().cpu()])
+
         if self.classification_start > 0:
             self.classification_start -= 1
         return loss, loss_dict
+
+    def on_validation_epoch_end(self) -> None:
+        wandb.log({"val/conf_mat": wandb.plot.confusion_matrix(
+            probs=None,
+            y_true=self.val_labels.numpy(),
+            preds=self.val_preds.numpy(),
+        )})
+        self.val_labels = torch.tensor([])
+        self.val_preds = torch.tensor([])
 
     def log_images(self,
                    batch,
