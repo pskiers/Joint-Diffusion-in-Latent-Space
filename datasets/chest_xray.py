@@ -16,6 +16,7 @@ class ChestXRay(torch.utils.data.Dataset):
             image_list = [(item, 1) for item in glob(os.path.join(self.data_path, 'train', 'PNEUMONIA')+'/*jpeg')] + \
                 [(item, 0) for item in glob(os.path.join(self.data_path, 'train', 'NORMAL')+'/*jpeg')]
             random.Random(455455).shuffle(image_list)
+            #image_list = image_list[:17] # TODO remove
             self.split_idx = int(0.1*len(image_list))
             
             if mode =='val':
@@ -41,6 +42,7 @@ class ChestXRay(torch.utils.data.Dataset):
                 [(item, 0) for item in glob(os.path.join(self.data_path, 'test', 'NORMAL')+'/*jpeg')]
             
             random.Random(455455).shuffle(image_list)
+            #image_list = image_list[:16] # TODO remove
             self.final_image_list = image_list
 
             self.transform = tv.transforms.Compose([
@@ -66,4 +68,4 @@ class ChestXRay(torch.utils.data.Dataset):
 
 if __name__ == "__main__":
     ds = ChestXRay()
-    print(ds[1][0].shape)
+    print(len(ds))

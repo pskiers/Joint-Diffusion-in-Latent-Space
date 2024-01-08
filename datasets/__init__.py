@@ -102,7 +102,7 @@ def get_dataloaders(name: str,
     elif name == "fashion_mnist":
         train_ds = AdjustedFashionMNIST(train=True)
         val_ds = AdjustedFashionMNIST(train=False)
-        num_labeled = 10
+        num_classes = 10
         return non_randaugment_dl(
             train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers)
     else:
