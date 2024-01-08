@@ -17,6 +17,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--path", "-p", type=Path, required=True, help="path to config file")
     parser.add_argument("--checkpoint", "-c", type=Path, required=False, help="path to model checkpoint file")
+    parser.add_argument("--prefix", "-pref", type=str, required=False, help="prefix to experiment")
     args = parser.parse_args()
     config_path = str(args.path)
     checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
@@ -45,7 +46,7 @@ if __name__ == "__main__":
     model.learning_rate = config.model.base_learning_rate
 
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-    nowname = model.__class__.__name__ + "_" + now
+    nowname = args.prefix + "_" + model.__class__.__name__ + "_" + now
     logdir = path.join("logs", nowname)
     ckptdir = path.join(logdir, "checkpoints")
     cfgdir = path.join(logdir, "configs")
