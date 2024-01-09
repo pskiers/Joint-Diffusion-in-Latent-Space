@@ -79,7 +79,7 @@ def get_dataloaders(name: str,
                 raise ValueError("Need 1 train batch size - supervised batch size; unsupervised bs = train bs * 7")
             args = RandAugmentArgs(num_labeled=num_labeled, num_classes=10, batch_size=train_batches[0])
             labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS["svhn"](args, './data')
-            return ssl_randaugment_dl(labeled_dataset, test_dataset, train_batches[0], val_batch, num_workers)
+            return ssl_randaugment_dl(labeled_dataset, unlabeled_dataset, test_dataset, train_batches[0], val_batch, num_workers)
         else:
             if len(train_batches) != 1:
                 raise ValueError("Need 1 train batch size - supervised batch size")
