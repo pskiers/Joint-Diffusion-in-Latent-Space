@@ -8,15 +8,17 @@ from PIL import Image
 class ChestXRay(torch.utils.data.Dataset):
     def __init__(self, mode='train') -> None:
         super().__init__()
-        self.data_path = "/home/jk/Joint-Diffusion-in-Latent-Space/chest_xray"
+        self.data_path = "/home/jk/Joint-Diffusion-in-Latent-Space/chest_xray_nih"
 
         assert mode in ['val', 'train', 'test']
+
         if mode in ['val', 'train']:
+
             
-            image_list = [(item, 1) for item in glob(os.path.join(self.data_path, 'train', 'PNEUMONIA')+'/*jpeg')] + \
-                [(item, 0) for item in glob(os.path.join(self.data_path, 'train', 'NORMAL')+'/*jpeg')]
+            with open(os.path.join(self.data_path, "train_val_list.txt")) as file:
+                image_list = [(os.path.join(self.data_path,'images',line.rstrip()),0) for line in file]
             random.Random(455455).shuffle(image_list)
-            #image_list = image_list[:17] # TODO remove
+            image_list = image_list[:20000] # TODO remove
             self.split_idx = int(0.0*len(image_list))
             
             if mode =='val':
@@ -38,11 +40,11 @@ class ChestXRay(torch.utils.data.Dataset):
                     ])
             
         elif mode == 'test':
-            image_list = [(item, 1) for item in glob(os.path.join(self.data_path, 'test', 'PNEUMONIA')+'/*jpeg')] + \
-                [(item, 0) for item in glob(os.path.join(self.data_path, 'test', 'NORMAL')+'/*jpeg')]
+            with open(os.path.join(self.data_path, "test_list.txt")) as file:
+                image_list = [(os.path.join(self.data_path, "images", line.rstrip()),0) for line in file]
             
             random.Random(455455).shuffle(image_list)
-            #image_list = image_list[:16] # TODO remove
+            image_list = image_list[:5000] # TODO remove
             self.final_image_list = image_list
 
             self.transform = tv.transforms.Compose([

@@ -6,7 +6,7 @@ from torchvision import datasets
 
 from .cifar10 import AdjustedCIFAR10
 from .cifar100 import AdjustedCIFAR100
-from .chest_xray import ChestXRay
+from .chest_xray_nih import ChestXRay
 from .mnist import AdjustedMNIST
 from .cleba import AdjustedCelbA
 from .fashionMNIST import AdjustedFashionMNIST

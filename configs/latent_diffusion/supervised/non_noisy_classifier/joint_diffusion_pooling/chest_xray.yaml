@@ -32,7 +32,7 @@ model:
         num_res_blocks: 2
         channel_mult: [ 1, 2, 3 ]
         num_head_channels: 32
-        pool_size: 12000 #10000
+        pool_size: 20000 #10000
 
     first_stage_config:
       target: ldm.models.autoencoder.AutoencoderKL
