@@ -27,7 +27,7 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
               **kwargs):
         kwargs.pop("ckpt_path", None)
         kwargs.pop("ignore_keys", [])
-        kwargs.update({"use_ema": False})
+        #kwargs.update({"use_ema": False})
         super().__init__(
             first_stage_config,
             cond_stage_config,
