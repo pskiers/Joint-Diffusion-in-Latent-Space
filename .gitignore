@@ -139,3 +139,4 @@ dmypy.json
 
 # data
 chest_xray/
+chest_xray_nih/
