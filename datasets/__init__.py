@@ -6,7 +6,8 @@ from torchvision import datasets
 
 from .cifar10 import AdjustedCIFAR10
 from .cifar100 import AdjustedCIFAR100
-from .chest_xray_nih import ChestXRay
+from .chest_xray_nih import ChestXRay_nih
+from .chest_xray import ChestXRay
 from .mnist import AdjustedMNIST
 from .cleba import AdjustedCelbA
 from .fashionMNIST import AdjustedFashionMNIST
@@ -36,9 +37,9 @@ def get_dataloaders(name: str,
         num_classes = 10
         return non_randaugment_dl(
             train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers)
-    elif name=='chest_xray':
-        train_ds = ChestXRay(mode='train')
-        val_ds = ChestXRay(mode='test')
+    elif name=='chest_xray_nih':
+        train_ds = ChestXRay_nih(mode='train')
+        val_ds = ChestXRay_nih(mode='test')
         num_classes = 2
         return non_randaugment_dl(
             train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers)

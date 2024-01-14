@@ -5,7 +5,7 @@ from glob import glob
 import os
 from PIL import Image
 
-class ChestXRay(torch.utils.data.Dataset):
+class ChestXRay_nih(torch.utils.data.Dataset):
     def __init__(self, mode='train') -> None:
         super().__init__()
         self.data_path = "/home/jk/Joint-Diffusion-in-Latent-Space/chest_xray_nih"
@@ -16,9 +16,9 @@ class ChestXRay(torch.utils.data.Dataset):
 
             
             with open(os.path.join(self.data_path, "train_val_list.txt")) as file:
-                image_list = [(os.path.join(self.data_path,'images',line.rstrip()),0) for line in file]
+                image_list = [(os.path.join(self.data_path,'images',line.rstrip()),1) for line in file]
             random.Random(455455).shuffle(image_list)
-            image_list = image_list[:20000] # TODO remove
+            image_list = image_list[:30000] # TODO remove
             self.split_idx = int(0.0*len(image_list))
             
             if mode =='val':
@@ -41,7 +41,7 @@ class ChestXRay(torch.utils.data.Dataset):
             
         elif mode == 'test':
             with open(os.path.join(self.data_path, "test_list.txt")) as file:
-                image_list = [(os.path.join(self.data_path, "images", line.rstrip()),0) for line in file]
+                image_list = [(os.path.join(self.data_path, "images", line.rstrip()),1) for line in file]
             
             random.Random(455455).shuffle(image_list)
             image_list = image_list[:5000] # TODO remove
@@ -69,5 +69,5 @@ class ChestXRay(torch.utils.data.Dataset):
   
 
 if __name__ == "__main__":
-    ds = ChestXRay()
+    ds = ChestXRay_nih()
     print(len(ds))
