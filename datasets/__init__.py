@@ -8,6 +8,7 @@ from .cifar10 import AdjustedCIFAR10
 from .cifar100 import AdjustedCIFAR100
 from .chest_xray_nih import ChestXRay_nih
 from .chest_xray import ChestXRay
+from .chest_xray_nih_64 import ChestXRay_nih_64
 from .mnist import AdjustedMNIST
 from .cleba import AdjustedCelbA
 from .fashionMNIST import AdjustedFashionMNIST
@@ -40,6 +41,12 @@ def get_dataloaders(name: str,
     elif name=='chest_xray_nih':
         train_ds = ChestXRay_nih(mode='train')
         val_ds = ChestXRay_nih(mode='test')
+        num_classes = 2
+        return non_randaugment_dl(
+            train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers)
+    elif name=='chest_xray_nih_64':
+        train_ds = ChestXRay_nih_64(mode='train')
+        val_ds = ChestXRay_nih_64(mode='test')
         num_classes = 2
         return non_randaugment_dl(
             train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers)
