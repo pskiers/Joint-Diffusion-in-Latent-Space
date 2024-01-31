@@ -1,5 +1,5 @@
 model:
-  base_learning_rate: 4.5e-5
+  base_learning_rate: 4.5e-6
   target: ldm.models.autoencoder.AutoencoderKL
   params:
     monitor: "val/rec_loss"
@@ -20,16 +20,16 @@ model:
       in_channels: 1
       out_ch: 1
       ch: 128
-      ch_mult: [1,2,4]  # num_down = len(ch_mult)-1
-      num_res_blocks: 1
+      ch_mult: [1,2,4,4]  # num_down = len(ch_mult)-1
+      num_res_blocks: 2
       attn_resolutions: []
       dropout: 0.0
 
 dataloaders:
-  name: chest_xray
+  name: chest_xray_nih
   train_batches: [ 16 ]
   val_batch: 32
-  num_workers: 16
+  num_workers: 8
   num_labeled: null
 
 
@@ -38,16 +38,18 @@ lightning:
     benchmark: True
     checkpoint_callback: True
     max_steps: 1000000
+    gpus: [0,1]
+    strategy: "ddp"
     # accumulate_grad_batches: 2
 
   callbacks:
     img_logger:
-      batch_frequency: 10000
-      max_images: 10
+      batch_frequency: 3000
+      max_images: 20
       clamp: True
       increase_log_steps: False
       log_images_kwargs: {
           "N": 10,
           "inpaint": False,
-          "sample_classes": [0, 1]
+          "sample_classes": [0, 1, 2, 3, 4,5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
       }
