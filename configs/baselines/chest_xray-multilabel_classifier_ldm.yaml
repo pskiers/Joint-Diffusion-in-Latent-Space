@@ -1,0 +1,75 @@
+model:
+  base_learning_rate: 0.0001
+  model_type: multilabel_classifier_on_ldm
+  params:
+    linear_start: 0.0015
+    linear_end: 0.0195
+    num_timesteps_cond: 1
+    log_every_t: 200
+    timesteps: 1000
+    first_stage_key: 0
+    image_size: 32
+    channels: 4
+    monitor: val/auroc_ema
+
+    classification_key: 1
+    classification_loss_weight: 0.001
+    augmentations: False
+
+    classifier_in_features: 6528
+    classifier_hidden: 2048 #REMEMBER TO CHANGE IT
+    num_classes: 15
+    dropout: 0.0
+
+    unet_config:
+      target: models.AdjustedUNet
+      params:
+        image_size: 32
+        in_channels: 4
+        out_channels: 4
+        model_channels: 192
+        attention_resolutions: [ 1,2,4 ]
+        num_res_blocks: 2
+        channel_mult: [ 1, 2, 4, 4]
+        num_head_channels: 32
+        pool_size: 20000 #10000
+
+    first_stage_config:
+      target: ldm.models.autoencoder.AutoencoderKL
+      params:
+        embed_dim: 4
+        monitor: "val/rec_loss"
+        ckpt_path: "/home/jk/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_all_randomresizedcrop_Autoencoder_2024-01-17T13-15-27/checkpoints/epoch=000025.ckpt"
+        ddconfig:
+          double_z: True
+          z_channels: 4
+          resolution: 256
+          in_channels: 1
+          out_ch: 1
+          ch: 128
+          ch_mult: [ 1,2,4,4 ]  # num_down = len(ch_mult)-1
+          num_res_blocks: 2
+          attn_resolutions: []
+          dropout: 0.0
+        lossconfig:
+          target: torch.nn.Identity
+    cond_stage_config: __is_unconditional__
+
+
+dataloaders:
+  name: chest_xray_nih
+  train_batches: [ 128 ]
+  val_batch: 256
+  num_workers: 8
+  num_labeled: null
+  pin_memory: True
+
+
+lightning:
+  trainer:
+    benchmark: True
+    checkpoint_callback: True
+    max_steps: 1000000
+    gpus: [2]
+    strategy: ddp
+    # accumulate_grad_batches: 

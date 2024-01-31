@@ -7,7 +7,6 @@ from .standard_diffusion import *
 from .wide_resnet_unet import *
 from .wide_resnet import *
 
-
 def get_model_class(name: str):
     if name == "attention_on_latent_diffusion":
         return AttentionOnLatentDiffusion
@@ -53,6 +52,8 @@ def get_model_class(name: str):
         return JointLatentDiffusionMultilabel
     elif name == "multilabel_classifier":
         return MultilabelClassifier
+    elif name == "multilabel_classifier_on_ldm":
+        return MultilabelClassifierOnLatentDiffusion
     elif name == "joint_latent_diffusion_attention":
         return JointLatentDiffusionAttention
     elif name == "latent_diffmatch_pooling":
