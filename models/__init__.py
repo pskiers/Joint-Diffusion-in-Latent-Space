@@ -49,6 +49,10 @@ def get_model_class(name: str):
         return JointLatentDiffusionNoisyAttention
     elif name == "joint_latent_diffusion":
         return JointLatentDiffusion
+    elif name == "joint_latent_diffusion_multilabel":
+        return JointLatentDiffusionMultilabel
+    elif name == "multilabel_classifier":
+        return MultilabelClassifier
     elif name == "joint_latent_diffusion_attention":
         return JointLatentDiffusionAttention
     elif name == "latent_diffmatch_pooling":

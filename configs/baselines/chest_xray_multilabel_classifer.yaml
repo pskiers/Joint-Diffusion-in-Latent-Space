@@ -1,0 +1,49 @@
+model:
+  model_type: multilabel_classifier
+  params:
+    classifier_test_mode: "encoder_resnet"
+    image_size: 32
+    channels: 4
+    monitor: val/auroc
+    in_features: 2048 # encoder+resnet18 512, resnet50 2048, linear 4096
+    num_classes: 15
+    dropout: 0.2
+    learning_rate: 0.0001
+
+    first_stage_config:
+      target: ldm.models.autoencoder.AutoencoderKL
+      params:
+        embed_dim: 4
+        monitor: "val/rec_loss"
+        ckpt_path: "/home/jk/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_all_randomresizedcrop_Autoencoder_2024-01-17T13-15-27/checkpoints/epoch=000025.ckpt"
+        ddconfig:
+          double_z: True
+          z_channels: 4
+          resolution: 256
+          in_channels: 1
+          out_ch: 1
+          ch: 128
+          ch_mult: [ 1,2,4,4 ]  # num_down = len(ch_mult)-1
+          num_res_blocks: 2
+          attn_resolutions: []
+          dropout: 0.0
+        lossconfig:
+          target: torch.nn.Identity
+
+
+dataloaders:
+  name: chest_xray_nih
+  train_batches: [ 196 ]
+  val_batch: 256
+  num_workers: 16
+  num_labeled: null
+  pin_memory: True
+
+
+lightning:
+  trainer:
+    benchmark: True
+    checkpoint_callback: True
+    max_steps: 1000000
+    gpus: [0,1,2]
+    # accumulate_grad_batches: 2
