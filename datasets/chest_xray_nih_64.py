@@ -18,7 +18,7 @@ class ChestXRay_nih_64(torch.utils.data.Dataset):
             with open(os.path.join(self.data_path, "train_val_list.txt")) as file:
                 image_list = [(os.path.join(self.data_path,'images',line.rstrip()),1) for line in file]
             random.Random(455455).shuffle(image_list)
-            image_list = image_list[:50000] # TODO remove
+            image_list = image_list[:30000] # TODO remove
             self.split_idx = int(0.0*len(image_list))
             
             if mode =='val':

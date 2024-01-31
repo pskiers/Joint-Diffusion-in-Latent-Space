@@ -1,0 +1,91 @@
+model:
+  base_learning_rate: 5.0e-06
+  model_type: joint_latent_diffusion
+  params:
+    linear_start: 0.0015
+    linear_end: 0.0195
+    num_timesteps_cond: 1
+    log_every_t: 200
+    timesteps: 1000
+    first_stage_key: 0
+    image_size: 8
+    channels: 4
+    monitor: val/accuracy_ema
+
+    classification_key: 1
+    classification_loss_weight: 0.001
+    augmentations: False
+
+    classifier_in_features: 5632
+    classifier_hidden: 1 #REMEMBER TO CHANGE IT
+    num_classes: 2
+    dropout: 0.0
+
+    unet_config:
+      target: models.AdjustedUNet
+      params:
+        image_size: 8
+        in_channels: 4
+        out_channels: 4
+        model_channels: 256
+        attention_resolutions: [ 4,2,1 ]
+        num_res_blocks: 2
+        channel_mult: [ 1, 2, 4 ]
+        num_head_channels: 32
+        pool_size: 10000 #10000
+
+    first_stage_config:
+      target: ldm.models.autoencoder.AutoencoderKL
+      params:
+        embed_dim: 4
+        monitor: "val/rec_loss"
+        ckpt_path: "/home/jk/Joint-Diffusion-in-Latent-Space/logs/50k_nih64_compvis_f8_Autoencoder_2024-01-15T23-37-31/checkpoints/epoch=000077.ckpt"
+        ddconfig:
+          double_z: True
+          z_channels: 4
+          resolution: 64
+          in_channels: 1
+          out_ch: 1
+          ch: 128
+          ch_mult: [ 1,2,4,4 ]  # num_down = len(ch_mult)-1
+          num_res_blocks: 2
+          attn_resolutions: []
+          dropout: 0.0
+        lossconfig:
+          target: torch.nn.Identity
+    cond_stage_config: __is_unconditional__
+
+
+dataloaders:
+  name: chest_xray_nih_64
+  train_batches: [ 128 ]
+  val_batch: 256
+  num_workers: 8
+  num_labeled: null
+
+
+lightning:
+  trainer:
+    benchmark: True
+    checkpoint_callback: True
+    max_steps: 1000000
+    # accumulate_grad_batches: 2
+
+  callbacks:
+    # fid_logger:
+    #   batch_frequency: 100000
+    #   samples_amount: 10000
+    #   metrics_batch_size: 1024
+    #   real_dl_batch_size: 256
+    #   latent: True
+
+    img_logger:
+      batch_frequency: 5000
+      max_images: 10
+      clamp: True
+      increase_log_steps: False
+      log_images_kwargs: {
+          "N": 10,
+          "inpaint": False,
+          "sample_classes": [0, 1]
+      }
