@@ -23,12 +23,10 @@ if __name__ == "__main__":
     checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
 
     config = OmegaConf.load(config_path)
-    # config = OmegaConf.load("configs/standard_diffusion/semi-supervised/diffmatch_wide_resnet_unet/25_per_class/svhn.yaml")
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
     trainer_config = lightning_config.get("trainer", OmegaConf.create())
-    trainer_config["gpus"] = 1
     trainer_opt = argparse.Namespace(**trainer_config)
     lightning_config.trainer = trainer_config
 
@@ -37,11 +35,8 @@ if __name__ == "__main__":
 
     if checkpoint_path is not None:
         config.model.params["ckpt_path"] = checkpoint_path
-    # config.model.params["ckpt_path"] = f"logs/JointDiffusionAttention_2023-10-08T22-42-51/checkpoints/last.ckpt"
 
     model = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
-
-    # model.supervised_dataloader = train_dl_supervised
 
     model.learning_rate = config.model.base_learning_rate
 
@@ -59,8 +54,6 @@ if __name__ == "__main__":
     ]
     trainer_kwargs["logger"] = pl.loggers.WandbLogger(name=nowname, id=nowname, tags=tags)
 
-    # modelcheckpoint - use TrainResult/EvalResult(checkpoint_on=metric) to
-    # specify which metric is used to determine best models
     default_modelckpt_cfg = {
         "params": {
             "dirpath": ckptdir,
