@@ -31,7 +31,8 @@ def get_dataloaders(name: str,
                     train_batches: Tuple[int],
                     val_batch: int,
                     num_workers: int,
-                    num_labeled: Optional[int] = None):
+                    num_labeled: Optional[int] = None,
+                    pin_memory: bool = False):
     if name == "cifar10":
         train_ds = AdjustedCIFAR10(train=True)
         val_ds = AdjustedCIFAR10(train=False)
@@ -178,7 +179,8 @@ def non_randaugment_dl(train_ds: torch.utils.data.Dataset,
                        train_batches: Tuple[int],
                        val_batch: int,
                        num_classes: int,
-                       num_workers: int):
+                       num_workers: int,
+                       pin_memory: bool = False):
     if num_labeled is not None:
         if len(train_batches) != 2:
             raise ValueError("Need 2 train batch sizes - unsupervised and supervised batch size")
@@ -211,14 +213,16 @@ def non_randaugment_dl(train_ds: torch.utils.data.Dataset,
             batch_size=train_batches[0],
             shuffle=True,
             num_workers=num_workers,
-            drop_last=True
+            drop_last=True,
+            pin_memory=pin_memory
         )
 
     valid_dl = torch.utils.data.DataLoader(
         val_ds,
         batch_size=val_batch,
         shuffle=False,
-        num_workers=num_workers
+        num_workers=num_workers,
+        pin_memory=pin_memory
     )
     return train_dl, valid_dl
 
