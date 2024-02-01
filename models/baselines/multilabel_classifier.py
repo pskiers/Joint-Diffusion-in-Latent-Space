@@ -61,7 +61,8 @@ class MultilabelClassifier(pl.LightningModule):
         self.learning_rate = learning_rate
 
         self.instantiate_modules()
-        self.auroc = AUROC(num_classes=num_classes-1)
+        self.auroc_train = AUROC(num_classes=num_classes-1)
+        self.auroc_val = AUROC(num_classes=num_classes-1)
         if monitor is not None:
             self.monitor = monitor
 
@@ -94,7 +95,7 @@ class MultilabelClassifier(pl.LightningModule):
                 nn.Linear(self.in_features, self.in_features//8),
                 nn.LeakyReLU(negative_slope=0.2),
                 nn.Dropout(p=self.dropout),
-                nn.Linear(self.in_features//8, self.num_classes)
+                nn.Linear(self.in_features//8, self.num_classes),
                 )
         else:
             print('TEST NOT IMPLEMENTED')
@@ -138,7 +139,8 @@ class MultilabelClassifier(pl.LightningModule):
 
         loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float())
         accuracy = accuracy_score(y.cpu(), y_pred.cpu()>=0.5)
-
+        self.auroc_train.update(y_pred[:,:-1], y[:,:-1])
+        self.log('train/auroc', self.auroc_train, on_step=False, on_epoch=True)
         loss_dict.update({'train/loss_classification': loss})
         loss_dict.update({'train/accuracy': accuracy})
 
@@ -154,9 +156,9 @@ class MultilabelClassifier(pl.LightningModule):
 
         loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float())
         accuracy = accuracy_score(y.cpu(), y_pred.cpu()>=0.5)
-        self.auroc.update(y_pred[:,:-1], y[:,:-1])
+        self.auroc_val.update(y_pred[:,:-1], y[:,:-1])
 
-        self.log('val/auroc', self.auroc, on_step=False, on_epoch=True)
+        self.log('val/auroc', self.auroc_val, on_step=False, on_epoch=True)
         loss_dict = {"val/loss": loss, "val/accuracy": accuracy}
         self.log_dict(loss_dict, prog_bar=True, logger=True, on_step=True, on_epoch=True)
         self.log("global_step", self.global_step,
