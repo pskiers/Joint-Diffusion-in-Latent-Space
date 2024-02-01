@@ -42,6 +42,7 @@ if __name__ == "__main__":
     model = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
 
     model.learning_rate = config.model.base_learning_rate
+    model.weight_decay = config.model.weight_decay
 
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     nowname = args.prefix + "_" + model.__class__.__name__ + "_" + now
@@ -69,6 +70,7 @@ if __name__ == "__main__":
         print(f"Monitoring {model.monitor} as checkpoint metric.")
         default_modelckpt_cfg["params"]["monitor"] = model.monitor
         default_modelckpt_cfg["params"]["save_top_k"] = 1
+        default_modelckpt_cfg["params"]["mode"] = "max"
 
     callback_cfg = lightning_config.get("callbacks", OmegaConf.create())
     trainer_kwargs["callbacks"] = [

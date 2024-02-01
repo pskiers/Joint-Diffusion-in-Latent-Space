@@ -6,6 +6,7 @@ from ldm.modules.diffusionmodules.util import timestep_embedding
 import importlib
 from ldm.modules.distributions.distributions import normal_kl, DiagonalGaussianDistribution
 from sklearn.metrics import accuracy_score
+from torch.optim.lr_scheduler import LambdaLR
 
 def disabled_train(self, mode=True):
     """Overwrite model.train with this function to make sure train/eval mode
@@ -71,13 +72,41 @@ class MultilabelClassifierOnLatentDiffusion(JointLatentDiffusionMultilabel):
             **kwargs
             )
 
+    def configure_optimizers(self):
+            lr = self.learning_rate
+            weight_decay = self.weight_decay
+            params = list(self.model.parameters())
+            if self.cond_stage_trainable:
+                print(f"{self.__class__.__name__}: Also optimizing conditioner params!")
+                params = params + list(self.cond_stage_model.parameters())
+            if self.learn_logvar:
+                print('Diffusion model optimizing logvar')
+                params.append(self.logvar)
+            opt = torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
+            if self.use_scheduler:
+                assert 'target' in self.scheduler_config
+                scheduler = instantiate_from_config(self.scheduler_config)
+
+                print("Setting up LambdaLR scheduler...")
+                scheduler = [
+                    {
+                        'scheduler': LambdaLR(opt, lr_lambda=scheduler.schedule),
+                        'interval': 'step',
+                        'frequency': 1
+                    }]
+                return [opt], scheduler
+            return opt
+    
     def training_step(self, batch, batch_idx):
         loss_dict = {}
 
         x, y = self.get_train_classification_input(batch, self.first_stage_key)
         t = torch.zeros((x.shape[0],), device=self.device).long()
 
-        loss_classification, accuracy, _ = self.do_classification(x, t, y)
+        loss_classification, accuracy, y_pred = self.do_classification(x, t, y)
+
+        self.auroc_train.update(y_pred[:,:-1], y[:,:-1])
+        self.log('train/auroc', self.auroc_train, on_step=False, on_epoch=True)
 
         loss_dict.update({'train/loss_classification': loss_classification})
         loss_dict.update({'train/accuracy': accuracy})
@@ -102,8 +131,8 @@ class MultilabelClassifierOnLatentDiffusion(JointLatentDiffusionMultilabel):
         with self.ema_scope():
             loss_dict_ema = {}
             loss_cls, accuracy, y_pred = self.do_classification(x, t, y)
-            self.auroc(y_pred[:,:-1], y[:,:-1])
-            self.log('val/auroc_ema', self.auroc, on_step=False, on_epoch=True)
+            self.auroc_val.update(y_pred[:,:-1], y[:,:-1])
+            self.log('val/auroc_ema', self.auroc_val, on_step=False, on_epoch=True)
 
             loss_dict_ema.update({'val/loss_classification': loss_cls})
             loss_dict_ema.update({'val/accuracy': accuracy})
