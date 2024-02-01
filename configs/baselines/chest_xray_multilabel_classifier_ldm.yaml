@@ -1,5 +1,6 @@
 model:
   base_learning_rate: 0.0001
+  weight_decay: 0.00001
   model_type: multilabel_classifier_on_ldm
   params:
     linear_start: 0.0015
@@ -13,13 +14,13 @@ model:
     monitor: val/auroc_ema
 
     classification_key: 1
-    classification_loss_weight: 0.001
+    classification_loss_weight: 1
     augmentations: False
 
     classifier_in_features: 6528
     classifier_hidden: 2048 #REMEMBER TO CHANGE IT
     num_classes: 15
-    dropout: 0.0
+    dropout: 0.3
 
     unet_config:
       target: models.AdjustedUNet
