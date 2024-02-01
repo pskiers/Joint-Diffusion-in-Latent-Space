@@ -92,11 +92,12 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
         self.num_classes = num_classes
         self.classification_key = classification_key
         self.classifier = nn.Sequential(
-            nn.Linear(classifier_in_features, classifier_hidden),
-            nn.LeakyReLU(negative_slope=0.2),
-            nn.Dropout(p=dropout),
-            nn.Linear(classifier_hidden, self.num_classes)
+            nn.Linear(classifier_in_features, classifier_in_features//8),
+                nn.LeakyReLU(negative_slope=0.2),
+                nn.Dropout(p=self.dropout),
+                nn.Linear(classifier_in_features//8, self.num_classes)
         )
+
         self.gradient_guided_sampling = True
         self.classification_loss_weight = classification_loss_weight
         self.sample_grad_scale = sample_grad_scale
