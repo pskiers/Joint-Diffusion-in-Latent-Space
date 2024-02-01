@@ -52,7 +52,11 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         )
         # self.x_start = None
         self.gradient_guided_sampling = False
-        self.auroc = AUROC(num_classes=num_classes-1)
+        self.auroc_train = AUROC(num_classes=num_classes-1)
+        self.auroc_val = AUROC(num_classes=num_classes-1)
+        
+        # counts from https://www.mdpi.com/2075-4426/13/10/1426 ->parametrize it!!!
+        self.BCEweights = torch.Tensor([39.4, 43.6, 47.7, 492.9, 20.1, 7.4, 18.4, 65.5, 8.7, 23.0, 32.1, 16.7, 77.4, 4.6, 0.9]).to(self.device)
 
     def do_classification(self, x, t, y):
         unet: AdjustedUNet = self.model.diffusion_model
@@ -60,7 +64,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         representations = self.transform_representations(representations)
         y_pred = self.classifier(representations)
 
-        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float())
+        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float(), pos_weight=self.BCEweights)
         accuracy = accuracy_score(y.cpu(), y_pred.cpu()>=0.5)
         return loss, accuracy, y_pred
 
@@ -71,13 +75,14 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         x, y = self.get_train_classification_input(batch, self.first_stage_key)
         t = torch.zeros((x.shape[0],), device=self.device).long()
 
-        loss_classification, accuracy, _ = self.do_classification(x, t, y)
+        loss_classification, accuracy, y_pred = self.do_classification(x, t, y)
         loss += loss_classification * self.classification_loss_weight
 
+        self.auroc_train.update(y_pred[:,:-1], y[:,:-1])
+        self.log('train/auroc', self.auroc_train, on_step=False, on_epoch=True)
         loss_dict.update({'train/loss_classification': loss_classification})
         loss_dict.update({'train/loss_full': loss})
         loss_dict.update({'train/accuracy': accuracy})
-
         self.log_dict(loss_dict, prog_bar=True,
                       logger=True, on_step=True, on_epoch=True)
 
@@ -101,8 +106,8 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             loss, loss_dict_ema = self(x_diff, c)
             loss_cls, accuracy, y_pred = self.do_classification(x, t, y)
 
-            self.auroc(y_pred[:,:-1], y[:,:-1])
-            self.log('val/auroc_ema', self.auroc, on_step=True, on_epoch=True)
+            self.auroc_val.update(y_pred[:,:-1], y[:,:-1])
+            self.log('val/auroc_ema', self.auroc_val, on_step=False, on_epoch=True)
 
             loss_dict_ema.update({'val/loss_classification': loss_cls})
             loss_dict_ema.update({'val/loss_full': loss + loss_cls})
