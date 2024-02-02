@@ -11,9 +11,15 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
 class ChestXRay_nih(torch.utils.data.Dataset):
-    def __init__(self, mode='train') -> None:
+    def __init__(self, mode='train', training_platform: string = 'plgrid') -> None:
         super().__init__()
-        data_path = "/home/jk/Joint-Diffusion-in-Latent-Space/chest_xray_nih"
+
+        assert training_platform in ['plgrid', 'local_sano',]
+        if training_platform=='plgrid':
+            data_path = f"{os.environ['SCRATCH']}/Joint-Diffusion-in-Latent-Space/chest_xray_nih"
+        elif training_platform=='local_sano':
+            data_path = "/home/jk/Joint-Diffusion-in-Latent-Space/chest_xray_nih"
+        
         df = pd.read_csv(os.path.join(data_path, "Data_Entry_2017.csv"))[["Image Index", "Finding Labels"]]
         df = pd.concat([df.drop("Finding Labels", axis=1), df["Finding Labels"].str.get_dummies('|')], axis=1)
         df.rename(columns=lambda x: x.replace(" ", "_").lower(), inplace=True)
