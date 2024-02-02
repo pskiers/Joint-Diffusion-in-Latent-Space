@@ -56,15 +56,14 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         self.auroc_val = AUROC(num_classes=num_classes-1)
         
         # counts from https://www.mdpi.com/2075-4426/13/10/1426 ->parametrize it!!!
-        self.BCEweights = torch.Tensor([39.4, 43.6, 47.7, 492.9, 20.1, 7.4, 18.4, 65.5, 8.7, 23.0, 32.1, 16.7, 77.4, 4.6, 0.9]).to(self.device)
-
+        self.BCEweights = torch.Tensor([39.4, 43.6, 47.7, 492.9, 20.1, 7.4, 18.4, 65.5, 8.7, 23.0, 32.1, 16.7, 77.4, 4.6, 0.9])
     def do_classification(self, x, t, y):
         unet: AdjustedUNet = self.model.diffusion_model
         representations = unet.just_representations(x, t, pooled=False)
         representations = self.transform_representations(representations)
         y_pred = self.classifier(representations)
 
-        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float(), pos_weight=self.BCEweights)
+        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float(), pos_weight=self.BCEweights.to(self.device))
         accuracy = accuracy_score(y.cpu(), y_pred.cpu()>=0.5)
         return loss, accuracy, y_pred
 
