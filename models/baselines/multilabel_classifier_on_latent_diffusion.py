@@ -6,7 +6,7 @@ from ldm.modules.diffusionmodules.util import timestep_embedding
 import importlib
 from ldm.modules.distributions.distributions import normal_kl, DiagonalGaussianDistribution
 from sklearn.metrics import accuracy_score
-from torch.optim.lr_scheduler import LambdaLR
+from torch.optim.lr_scheduler import LambdaLR, OneCycleLR
 
 def disabled_train(self, mode=True):
     """Overwrite model.train with this function to make sure train/eval mode
@@ -83,18 +83,28 @@ class MultilabelClassifierOnLatentDiffusion(JointLatentDiffusionMultilabel):
                 print('Diffusion model optimizing logvar')
                 params.append(self.logvar)
             opt = torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
-            if self.use_scheduler:
-                assert 'target' in self.scheduler_config
-                scheduler = instantiate_from_config(self.scheduler_config)
+            # if self.use_scheduler:
+            #     assert 'target' in self.scheduler_config
+            #     scheduler = instantiate_from_config(self.scheduler_config)
 
-                print("Setting up LambdaLR scheduler...")
+            #     print("Setting up LambdaLR scheduler...")
+            #     scheduler = [
+            #         {
+            #             'scheduler': LambdaLR(opt, lr_lambda=scheduler.schedule),
+            #             'interval': 'step',
+            #             'frequency': 1
+            #         }]
+            #     return [opt], scheduler
+            
+            if True:
+                print("Setting up OneCycleLR scheduler...")
                 scheduler = [
                     {
-                        'scheduler': LambdaLR(opt, lr_lambda=scheduler.schedule),
-                        'interval': 'step',
-                        'frequency': 1
+                        'scheduler': OneCycleLR(opt, max_lr=1e-3, total_steps=self.trainer.max_steps),
+
                     }]
                 return [opt], scheduler
+
             return opt
     
     def training_step(self, batch, batch_idx):
