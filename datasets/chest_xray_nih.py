@@ -11,12 +11,12 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
 class ChestXRay_nih(torch.utils.data.Dataset):
-    def __init__(self, mode='train', training_platform: string = 'plgrid') -> None:
+    def __init__(self, mode='train', training_platform: str = 'plgrid') -> None:
         super().__init__()
 
         assert training_platform in ['plgrid', 'local_sano',]
         if training_platform=='plgrid':
-            data_path = f"{os.environ['SCRATCH']}/Joint-Diffusion-in-Latent-Space/chest_xray_nih"
+            data_path = f"{os.environ['SCRATCH']}/chest_xray_nih"
         elif training_platform=='local_sano':
             data_path = "/home/jk/Joint-Diffusion-in-Latent-Space/chest_xray_nih"
         
@@ -72,7 +72,7 @@ class ChestXRay_nih(torch.utils.data.Dataset):
             
         elif mode == 'test':
             with open(os.path.join(data_path, "test_list.txt")) as file:
-                image_list = [line.rstrip() for line in file]   
+                image_list = [line.rstrip() for line in file] 
             df = df[df["image_index"].isin(image_list)]
             df["image_path"] = data_path+"/images256/"+df["image_index"]
             df.drop(columns=["image_index"], inplace=True)
