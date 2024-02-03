@@ -40,7 +40,7 @@ model:
       params:
         embed_dim: 4
         monitor: "val/rec_loss"
-        ckpt_path: "/home/jk/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_all_randomresizedcrop_Autoencoder_2024-01-17T13-15-27/checkpoints/epoch=000025.ckpt"
+        ckpt_path: "/net/pr2/projects/plgrid/plggsano/plgjoaxkal_storage/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_nihAll_maxstron_aug_Autoencoder_2024-01-30T22-29-08/checkpoints/epoch=000028.ckpt"
         ddconfig:
           double_z: True
           z_channels: 4
@@ -59,9 +59,9 @@ model:
 
 dataloaders:
   name: chest_xray_nih
-  train_batches: [ 128 ]
-  val_batch: 256
-  num_workers: 8
+  train_batches: [ 64 ]
+  val_batch: 64
+  num_workers: 1
   num_labeled: null
   pin_memory: True
 
@@ -71,6 +71,6 @@ lightning:
     benchmark: True
     checkpoint_callback: True
     max_steps: 1000000
-    gpus: [2]
+    gpus: -1
     strategy: ddp
     # accumulate_grad_batches: 
