@@ -32,7 +32,8 @@ def get_dataloaders(name: str,
                     val_batch: int,
                     num_workers: int,
                     num_labeled: Optional[int] = None,
-                    pin_memory: bool = False):
+                    pin_memory: bool = False,
+                    persistent_workers: bool = False):
     if name == "cifar10":
         train_ds = AdjustedCIFAR10(train=True)
         val_ds = AdjustedCIFAR10(train=False)
@@ -44,7 +45,8 @@ def get_dataloaders(name: str,
         val_ds = ChestXRay_nih(mode='test')
         num_classes = 2
         return non_randaugment_dl(
-            train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers)
+            train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers, 
+            pin_memory=pin_memory, persistent_workers=persistent_workers)
     elif name=='chest_xray_nih_64':
         train_ds = ChestXRay_nih_64(mode='train')
         val_ds = ChestXRay_nih_64(mode='test')
@@ -180,7 +182,8 @@ def non_randaugment_dl(train_ds: torch.utils.data.Dataset,
                        val_batch: int,
                        num_classes: int,
                        num_workers: int,
-                       pin_memory: bool = False):
+                       pin_memory: bool = False,
+                       persistent_workers: bool =False):
     if num_labeled is not None:
         if len(train_batches) != 2:
             raise ValueError("Need 2 train batch sizes - unsupervised and supervised batch size")
@@ -214,7 +217,8 @@ def non_randaugment_dl(train_ds: torch.utils.data.Dataset,
             shuffle=True,
             num_workers=num_workers,
             drop_last=True,
-            pin_memory=pin_memory
+            pin_memory=pin_memory,
+            persistent_workers = persistent_workers
         )
 
     valid_dl = torch.utils.data.DataLoader(
@@ -222,7 +226,8 @@ def non_randaugment_dl(train_ds: torch.utils.data.Dataset,
         batch_size=val_batch,
         shuffle=False,
         num_workers=num_workers,
-        pin_memory=pin_memory
+        pin_memory=pin_memory,
+        persistent_workers = persistent_workers
     )
     return train_dl, valid_dl
 
