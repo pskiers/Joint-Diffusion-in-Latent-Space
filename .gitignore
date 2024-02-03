@@ -143,3 +143,6 @@ chest_xray_nih/
 
 #auxiliary files
 trash.ipynb
+
+#plgrid out files
+_job_outputs/
