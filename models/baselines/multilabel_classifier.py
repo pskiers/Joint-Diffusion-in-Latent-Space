@@ -48,6 +48,7 @@ class MultilabelClassifier(pl.LightningModule):
             monitor,
             dropout: float =0,
             learning_rate: float=0.00001,
+            weight_decay: float = 0,
             classifier_test_mode: str = "encoder_resnet",
         ) -> None:
         super().__init__()
@@ -59,6 +60,7 @@ class MultilabelClassifier(pl.LightningModule):
         self.dropout = dropout
         self.first_stage_config = first_stage_config
         self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
 
         self.instantiate_modules()
         self.auroc_train = AUROC(num_classes=num_classes-1)
@@ -88,10 +90,12 @@ class MultilabelClassifier(pl.LightningModule):
                 )
         elif self.classifier_test_mode == "resnet":
             self.resnet = resnet50()
-            self.resnet.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=2, bias=False)
+            self.resnet.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+            #for smaller imgs #self.resnet.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=2, bias=False)
             self.resnet.maxpool = nn.Identity()
             self.num_classes = self.num_classes
             self.resnet.fc = nn.Sequential(
+                nn.Dropout(p=self.dropout),
                 nn.Linear(self.in_features, self.in_features//8),
                 nn.LeakyReLU(negative_slope=0.2),
                 nn.Dropout(p=self.dropout),
@@ -126,10 +130,12 @@ class MultilabelClassifier(pl.LightningModule):
         elif self.classifier_test_mode == "encoder_linear":
             out = self.encode_first_stage(imgs)
             out = self.fc(out)
+        elif self.classifier_test_mode == "resnet":
+            out = self.resnet(imgs)
         return out
     
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        return torch.optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay = self.weight_decay)
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}
