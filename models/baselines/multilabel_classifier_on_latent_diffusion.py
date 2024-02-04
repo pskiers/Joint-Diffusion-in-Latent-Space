@@ -82,6 +82,7 @@ class MultilabelClassifierOnLatentDiffusion(JointLatentDiffusionMultilabel):
             if self.learn_logvar:
                 print('Diffusion model optimizing logvar')
                 params.append(self.logvar)
+            #TODO parametrize
             #opt = torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
             opt = torch.optim.AdamW([
                 {'params':[*self.first_stage_model.parameters()], 'lr' : lr/50},
@@ -110,6 +111,10 @@ class MultilabelClassifierOnLatentDiffusion(JointLatentDiffusionMultilabel):
             #     return [opt], scheduler
 
             return opt
+
+    # override to allow encoder finetuning. TODO parametrize
+    def instantiate_first_stage(self, config):
+        self.first_stage_model = instantiate_from_config(config)
     
     def training_step(self, batch, batch_idx):
         loss_dict = {}
