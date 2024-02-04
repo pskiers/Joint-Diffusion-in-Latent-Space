@@ -82,28 +82,32 @@ class MultilabelClassifierOnLatentDiffusion(JointLatentDiffusionMultilabel):
             if self.learn_logvar:
                 print('Diffusion model optimizing logvar')
                 params.append(self.logvar)
-            opt = torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
-            # if self.use_scheduler:
-            #     assert 'target' in self.scheduler_config
-            #     scheduler = instantiate_from_config(self.scheduler_config)
+            #opt = torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
+            opt = torch.optim.AdamW([
+                {'params':[*self.first_stage_model.parameters()], 'lr' : lr/50},
+                {'params':[*self.model.parameters()], 'lr':lr, 'weight_decay':weight_decay}
+                ])
+            if self.use_scheduler:
+                assert 'target' in self.scheduler_config
+                scheduler = instantiate_from_config(self.scheduler_config)
 
-            #     print("Setting up LambdaLR scheduler...")
-            #     scheduler = [
-            #         {
-            #             'scheduler': LambdaLR(opt, lr_lambda=scheduler.schedule),
-            #             'interval': 'step',
-            #             'frequency': 1
-            #         }]
-            #     return [opt], scheduler
-            
-            if True:
-                print("Setting up OneCycleLR scheduler...")
+                print("Setting up LambdaLR scheduler...")
                 scheduler = [
                     {
-                        'scheduler': OneCycleLR(opt, max_lr=1e-3, total_steps=self.trainer.max_steps),
-
+                        'scheduler': LambdaLR(opt, lr_lambda=scheduler.schedule),
+                        'interval': 'step',
+                        'frequency': 1
                     }]
                 return [opt], scheduler
+            
+            # if True:
+            #     print("Setting up OneCycleLR scheduler...")
+            #     scheduler = [
+            #         {
+            #             'scheduler': OneCycleLR(opt, max_lr=1e-3, total_steps=self.trainer.max_steps),
+
+            #         }]
+            #     return [opt], scheduler
 
             return opt
     
