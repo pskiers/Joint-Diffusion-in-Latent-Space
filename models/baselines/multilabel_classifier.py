@@ -96,10 +96,10 @@ class MultilabelClassifier(pl.LightningModule):
             self.num_classes = self.num_classes
             self.resnet.fc = nn.Sequential(
                 nn.Dropout(p=self.dropout),
-                nn.Linear(self.in_features, self.in_features//8),
-                nn.LeakyReLU(negative_slope=0.2),
-                nn.Dropout(p=self.dropout),
-                nn.Linear(self.in_features//8, self.num_classes),
+                # nn.Linear(self.in_features, self.in_features//8),
+                # nn.LeakyReLU(negative_slope=0.2),
+                # nn.Dropout(p=self.dropout),
+                nn.Linear(self.in_features, self.num_classes),
                 )
         else:
             print('TEST NOT IMPLEMENTED')

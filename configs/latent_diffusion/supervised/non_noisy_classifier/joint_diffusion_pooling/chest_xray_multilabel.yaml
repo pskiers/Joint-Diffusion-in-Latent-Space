@@ -1,5 +1,6 @@
 model:
-  base_learning_rate: 5.0e-06
+  base_learning_rate: 0.00001
+  weight_decay: 0.001
   model_type: joint_latent_diffusion_multilabel
   params:
     linear_start: 0.0015
@@ -13,13 +14,13 @@ model:
     monitor: val/auroc_ema
 
     classification_key: 1
-    classification_loss_weight: 0.001
+    classification_loss_weight: 0.1
     augmentations: False
 
-    classifier_in_features: 6528
-    classifier_hidden: 2048 #REMEMBER TO CHANGE IT
+    classifier_in_features: 18048
+    classifier_hidden: 2048 #now calculated in code
     num_classes: 15
-    dropout: 0.0
+    dropout: 0.3
 
     unet_config:
       target: models.AdjustedUNet
@@ -32,14 +33,14 @@ model:
         num_res_blocks: 2
         channel_mult: [ 1, 2, 4, 4]
         num_head_channels: 32
-        pool_size: 20000 #10000
+        pool_size: 8 #10000
 
     first_stage_config:
       target: ldm.models.autoencoder.AutoencoderKL
       params:
         embed_dim: 4
         monitor: "val/rec_loss"
-        ckpt_path: "/home/jk/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_all_randomresizedcrop_Autoencoder_2024-01-17T13-15-27/checkpoints/epoch=000025.ckpt"
+        ckpt_path: "/net/pr2/projects/plgrid/plggsano/plgjoaxkal_storage/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_nihAll_maxstron_aug_Autoencoder_2024-01-30T22-29-08/checkpoints/epoch=000028.ckpt"
         ddconfig:
           double_z: True
           z_channels: 4
@@ -58,19 +59,22 @@ model:
 
 dataloaders:
   name: chest_xray_nih
-  train_batches: [ 128 ]
+  train_batches: [ 64 ]
   val_batch: 128
-  num_workers: 16
+  num_workers: 4
   num_labeled: null
   pin_memory: True
+  persistent_workers: True
+
 
 
 lightning:
   trainer:
     benchmark: True
     checkpoint_callback: True
-    max_steps: 1000000
-    gpus: [0,1,2]
+    max_steps: 100000
+    gpus: -1
+    strategy: ddp
     # accumulate_grad_batches: 2
       
     img_logger:

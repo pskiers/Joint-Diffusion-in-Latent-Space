@@ -2,14 +2,14 @@ model:
   model_type: multilabel_classifier
   params:
     classifier_test_mode: "resnet"
-    image_size: 32
-    channels: 4
+    image_size: 256 # 32 for latent
+    channels: 1
     monitor: val/auroc
     in_features: 2048 # encoder+resnet18 512, resnet50 2048, linear 4096
     num_classes: 15
-    dropout: 0.2
-    learning_rate: 0.0001
-    weight_decay: 0.001
+    dropout: 0.3
+    learning_rate: 0.0003
+    weight_decay: 0.0001
 
     first_stage_config:
       target: ldm.models.autoencoder.AutoencoderKL
