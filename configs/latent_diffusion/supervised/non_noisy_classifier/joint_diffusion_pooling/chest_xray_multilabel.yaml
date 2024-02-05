@@ -1,4 +1,5 @@
 model:
+  logdir: /net/tscratch/people/plgjoaxkal/Joint-Diffusion-in-Latent-Space/
   base_learning_rate: 5.0e-05
   weight_decay: 0.0001
   model_type: joint_latent_diffusion_multilabel
@@ -17,7 +18,7 @@ model:
     classification_loss_weight: 0.01
     augmentations: False
 
-    classifier_in_features: 18048
+    classifier_in_features: 26240
     classifier_hidden: 2048 #now calculated in code
     num_classes: 15
     dropout: 0.3
@@ -28,20 +29,21 @@ model:
         image_size: 32
         in_channels: 4
         out_channels: 4
-        model_channels: 192
-        attention_resolutions: [ 1,2,4 ]
+        model_channels: 320
+        attention_resolutions: [ 4,2,1 ]
         num_res_blocks: 2
-        channel_mult: [ 1, 2, 4, 4]
-        num_head_channels: 32
+        channel_mult: [ 1, 2, 4]
+        #num_head_channels: 32
         pool_size: 8 #10000
+        num_head_channels: 32
 
     first_stage_config:
       target: ldm.models.autoencoder.AutoencoderKL
       params:
         embed_dim: 4
         monitor: "val/rec_loss"
-        #ckpt_path: "/net/pr2/projects/plgrid/plggsano/plgjoaxkal_storage/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_nihAll_maxstron_aug_Autoencoder_2024-01-30T22-29-08/checkpoints/epoch=000028.ckpt"
-        ckpt_path: "logs/compvis32x32x4_nihAll_maxstron_aug_Autoencoder_2024-01-30T22-29-08/checkpoints/epoch=000028.ckpt"
+        ckpt_path: "/net/pr2/projects/plgrid/plggsano/plgjoaxkal_storage/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_nihAll_maxstron_aug_Autoencoder_2024-01-30T22-29-08/checkpoints/epoch=000028.ckpt"
+        #ckpt_path: "logs/compvis32x32x4_nihAll_maxstron_aug_Autoencoder_2024-01-30T22-29-08/checkpoints/epoch=000028.ckpt"
         ddconfig:
           double_z: True
           z_channels: 4
@@ -60,13 +62,14 @@ model:
 
 dataloaders:
   name: chest_xray_nih
-  train_batches: [ 196 ] #96 for RAM40, 196 for RAM80
-  val_batch: 196
+  train_batches: [ 64 ] #96 for RAM40, 196 for RAM80
+  val_batch: 64
   num_workers: 4
   num_labeled: null
   pin_memory: True
   persistent_workers: True
-  training_platform: local_sano
+  #training_platform: local_sano
+  training_platform: plgrid
 
 
 

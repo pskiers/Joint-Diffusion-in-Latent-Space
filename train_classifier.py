@@ -42,7 +42,7 @@ if __name__ == "__main__":
 
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     nowname = args.prefix + "_" + model.__class__.__name__ + "_" + now
-    logdir = path.join("logs", nowname)
+    logdir = path.join(config.model.logdir,"logs", nowname)
     ckptdir = path.join(logdir, "checkpoints")
     cfgdir = path.join(logdir, "configs")
 

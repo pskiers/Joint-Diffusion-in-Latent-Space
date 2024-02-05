@@ -1,6 +1,7 @@
 model:
+  logdir: /net/tscratch/people/plgjoaxkal/Joint-Diffusion-in-Latent-Space/
   base_learning_rate: 0.0001
-  weight_decay: 0.001
+  weight_decay: 0.0001
   model_type: multilabel_classifier_on_ldm
   params:
     linear_start: 0.0015
@@ -17,7 +18,7 @@ model:
     classification_loss_weight: 1
     augmentations: False
 
-    classifier_in_features: 18048
+    classifier_in_features: 24064 #18048
     classifier_hidden: 2048 #now calculated in code
     num_classes: 15
     dropout: 0.3
@@ -28,7 +29,7 @@ model:
         image_size: 32
         in_channels: 4
         out_channels: 4
-        model_channels: 192
+        model_channels: 256
         attention_resolutions: [ 1,2,4 ]
         num_res_blocks: 2
         channel_mult: [ 1, 2, 4, 4]
@@ -40,7 +41,8 @@ model:
       params:
         embed_dim: 4
         monitor: "val/rec_loss"
-        ckpt_path: "/net/pr2/projects/plgrid/plggsano/plgjoaxkal_storage/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_nihAll_maxstron_aug_Autoencoder_2024-01-30T22-29-08/checkpoints/epoch=000028.ckpt"
+        #ckpt_path: "/net/pr2/projects/plgrid/plggsano/plgjoaxkal_storage/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_nihAll_maxstron_aug_Autoencoder_2024-01-30T22-29-08/checkpoints/epoch=000028.ckpt"
+        ckpt_path: "/net/pr2/projects/plgrid/plggsano/plgjoaxkal_storage/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_all_randomresizedcrop_Autoencoder_2024-01-17T13-15-27/checkpoints/epoch=000025.ckpt"
         ddconfig:
           double_z: True
           z_channels: 4

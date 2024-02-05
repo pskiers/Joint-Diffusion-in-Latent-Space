@@ -1,4 +1,5 @@
 model:
+  logdir: /net/tscratch/people/plgjoaxkal/Joint-Diffusion-in-Latent-Space/
   model_type: multilabel_classifier
   params:
     classifier_test_mode: "resnet"
