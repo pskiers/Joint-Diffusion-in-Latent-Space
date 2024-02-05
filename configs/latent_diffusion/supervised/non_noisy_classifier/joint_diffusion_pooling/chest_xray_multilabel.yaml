@@ -14,7 +14,7 @@ model:
     monitor: val/auroc_ema
 
     classification_key: 1
-    classification_loss_weight: 0.1
+    classification_loss_weight: 0.01
     augmentations: False
 
     classifier_in_features: 18048
@@ -60,8 +60,8 @@ model:
 
 dataloaders:
   name: chest_xray_nih
-  train_batches: [ 64 ]
-  val_batch: 128
+  train_batches: [ 196 ] #96 for RAM40, 196 for RAM80
+  val_batch: 196
   num_workers: 4
   num_labeled: null
   pin_memory: True
