@@ -40,7 +40,8 @@ model:
       params:
         embed_dim: 4
         monitor: "val/rec_loss"
-        ckpt_path: "/net/pr2/projects/plgrid/plggsano/plgjoaxkal_storage/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_nihAll_maxstron_aug_Autoencoder_2024-01-30T22-29-08/checkpoints/epoch=000028.ckpt"
+        #ckpt_path: "/net/pr2/projects/plgrid/plggsano/plgjoaxkal_storage/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_nihAll_maxstron_aug_Autoencoder_2024-01-30T22-29-08/checkpoints/epoch=000028.ckpt"
+        ckpt_path: "logs/compvis32x32x4_nihAll_maxstron_aug_Autoencoder_2024-01-30T22-29-08/checkpoints/epoch=000028.ckpt"
         ddconfig:
           double_z: True
           z_channels: 4
@@ -65,6 +66,7 @@ dataloaders:
   num_labeled: null
   pin_memory: True
   persistent_workers: True
+  training_platform: local_sano
 
 
 
@@ -77,6 +79,7 @@ lightning:
     strategy: ddp
     # accumulate_grad_batches: 2
       
+  callbacks:
     img_logger:
       batch_frequency: 5000
       max_images: 10

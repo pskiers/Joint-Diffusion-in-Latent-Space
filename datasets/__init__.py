@@ -33,7 +33,8 @@ def get_dataloaders(name: str,
                     num_workers: int,
                     num_labeled: Optional[int] = None,
                     pin_memory: bool = False,
-                    persistent_workers: bool = False):
+                    persistent_workers: bool = False,
+                    training_platform: str = 'plgrid'):
     if name == "cifar10":
         train_ds = AdjustedCIFAR10(train=True)
         val_ds = AdjustedCIFAR10(train=False)
@@ -41,8 +42,8 @@ def get_dataloaders(name: str,
         return non_randaugment_dl(
             train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers)
     elif name=='chest_xray_nih':
-        train_ds = ChestXRay_nih(mode='train')
-        val_ds = ChestXRay_nih(mode='test')
+        train_ds = ChestXRay_nih(mode='train', training_platform = training_platform)
+        val_ds = ChestXRay_nih(mode='test', training_platform = training_platform)
         num_classes = 2
         return non_randaugment_dl(
             train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers, 
