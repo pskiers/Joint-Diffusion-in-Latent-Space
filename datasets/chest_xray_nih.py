@@ -9,9 +9,10 @@ import cv2
 import numpy as np
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+from torchvision import datasets, models, transforms
 
 class ChestXRay_nih(torch.utils.data.Dataset):
-    def __init__(self, mode='train', training_platform: str = 'plgrid',  img_size = 256, min_augmentation_ratio: int = 0.8) -> None:
+    def __init__(self, mode='train', training_platform: str = 'plgrid',  img_size = 256, min_augmentation_ratio: int = 0.8, auto_aug = False) -> None:
         super().__init__()
 
         assert training_platform in ['plgrid', 'local_sano',]
@@ -49,12 +50,24 @@ class ChestXRay_nih(torch.utils.data.Dataset):
                 ])
             elif mode =='train':
                 self.final_image_df = df[self.split_idx:]
-                self.transform = A.Compose([
-                    A.RandomResizedCrop(width=img_size, height=img_size, scale=(min_augmentation_ratio, 1.0), ratio=(0.75, 1.33)),
-                    A.Rotate(15),
-                    A.HorizontalFlip(p=0.5),
-                    A.Normalize(mean=0.5, std=0.5),
-                ])
+
+                if auto_aug:
+
+                    transforms.Compose([
+                        transforms.RandomHorizontalFlip(),
+                        transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.IMAGENET),
+                        transforms.Resize(img_size),
+                        transforms.ToTensor(),
+                        transforms.Normalize(0.5, 0.5),
+
+                    ])
+                else:
+                    self.transform = A.Compose([
+                        A.RandomResizedCrop(width=img_size, height=img_size, scale=(min_augmentation_ratio, 1.0), ratio=(0.75, 1.33)),
+                        A.Rotate(15),
+                        A.HorizontalFlip(p=0.5),
+                        A.Normalize(mean=0.5, std=0.5),
+                    ])
             
         elif mode == 'test':
             with open(os.path.join(data_path, "test_list.txt")) as file:

@@ -31,6 +31,7 @@ dataloaders:
   train_batches: [ 3 ]
   val_batch: 3
   min_augmentation_ratio: 8
+  auto_augment: False
   num_workers: 8
   num_labeled: null
   persistent_workers: True

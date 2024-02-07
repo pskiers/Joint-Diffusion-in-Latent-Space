@@ -68,6 +68,7 @@ dataloaders:
   train_batches: [ 1 ] #96 for RAM40, 196 for RAM80
   val_batch: 1
   min_augmentation_ratio: 8
+  auto_augment: False
   num_workers: 6
   num_labeled: null
   pin_memory: True

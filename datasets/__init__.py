@@ -35,7 +35,8 @@ def get_dataloaders(name: str,
                     pin_memory: bool = False,
                     persistent_workers: bool = False,
                     training_platform: str = 'plgrid',
-                     min_augmentation_ratio:str = 0.8):
+                     min_augmentation_ratio:str = 0.8,
+                     auto_augment = False):
     if name == "cifar10":
         train_ds = AdjustedCIFAR10(train=True)
         val_ds = AdjustedCIFAR10(train=False)
@@ -45,9 +46,10 @@ def get_dataloaders(name: str,
     elif name=='chest_xray_nih':
         train_ds = ChestXRay_nih(mode='train', 
                                  training_platform = training_platform, 
-                                 min_augmentation_ratio=min_augmentation_ratio)
-        val_ds = ChestXRay_nih(mode='test', training_platform = training_platform)
-        num_classes = 2
+                                 min_augmentation_ratio=min_augmentation_ratio,
+                                 auto_augment = auto_augment)
+        val_ds = ChestXRay_nih(mode='test', training_platform = training_platform, auto_augment = auto_augment)
+        num_classes = 15
         return non_randaugment_dl(
             train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers, 
             pin_memory=pin_memory, persistent_workers=persistent_workers)
