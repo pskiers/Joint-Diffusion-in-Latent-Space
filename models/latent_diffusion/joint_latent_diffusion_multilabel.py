@@ -26,6 +26,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
                  conditioning_key=None,
                  scale_factor=1,
                  scale_by_std=False,
+                 weights=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                  *args,
                  **kwargs):
         super().__init__(
@@ -56,9 +57,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         self.auroc_val = AUROC(num_classes=num_classes-1)
         
         # counts from https://www.mdpi.com/2075-4426/13/10/1426 ->parametrize it!!!
-        #self.BCEweights = torch.Tensor([39.4, 43.6, 47.7, 492.9, 20.1, 7.4, 18.4, 65.5, 8.7, 23.0, 32.1, 16.7, 77.4, 4.6, 0.9])
-        #self.BCEweights = torch.Tensor([3.67, 3.78, 3.86, 6.2, 3.0, 2.0, 2.91, 4.18, 2.16, 3.14, 3.47, 2.82, 4.35, 1.53, 0.5])
-        self.BCEweights = torch.Tensor([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
+        self.BCEweights = torch.Tensor(weights)
      
     
     def do_classification(self, x, t, y):

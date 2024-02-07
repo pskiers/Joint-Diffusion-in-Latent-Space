@@ -1,8 +1,9 @@
 model:
-  logdir: /net/tscratch/people/plgjoaxkal/Joint-Diffusion-in-Latent-Space/
+  logdir: .
   base_learning_rate: 0.0001
   weight_decay: 0.0001
   model_type: multilabel_classifier_on_ldm
+
   params:
     linear_start: 0.0015
     linear_end: 0.0195
@@ -13,6 +14,10 @@ model:
     image_size: 32
     channels: 4
     monitor: val/auroc_ema
+    weights: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    # weights: [3.67, 3.78, 3.86, 6.2, 3.0, 2.0, 2.91, 4.18, 2.16, 3.14, 3.47, 2.82, 4.35, 1.53, 0.5]
+    ft_enc: True
+
 
     classification_key: 1
     classification_loss_weight: 1
@@ -41,8 +46,9 @@ model:
       params:
         embed_dim: 4
         monitor: "val/rec_loss"
+        ckpt_path: "/home/jk/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_all_randomresizedcrop_Autoencoder_2024-01-17T13-15-27/checkpoints/epoch=000025.ckpt"
         #ckpt_path: "/net/pr2/projects/plgrid/plggsano/plgjoaxkal_storage/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_nihAll_maxstron_aug_Autoencoder_2024-01-30T22-29-08/checkpoints/epoch=000028.ckpt"
-        ckpt_path: "/net/pr2/projects/plgrid/plggsano/plgjoaxkal_storage/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_all_randomresizedcrop_Autoencoder_2024-01-17T13-15-27/checkpoints/epoch=000025.ckpt"
+        #ckpt_path: "/net/pr2/projects/plgrid/plggsano/plgjoaxkal_storage/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_all_randomresizedcrop_Autoencoder_2024-01-17T13-15-27/checkpoints/epoch=000025.ckpt"
         ddconfig:
           double_z: True
           z_channels: 4
@@ -61,13 +67,15 @@ model:
 
 dataloaders:
   name: chest_xray_nih
-  train_batches: [ 96 ]
-  val_batch: 128
+  train_batches: [ 1 ]
+  val_batch: 1
+  min_augmentation_ratio: 8
   num_workers: 12
   num_labeled: null
   pin_memory: True
   persistent_workers: True
-
+  training_platform: local_sano
+  #training_platform: plgrid
 
 lightning:
   trainer:
@@ -75,5 +83,5 @@ lightning:
     checkpoint_callback: True
     max_steps: 100000
     gpus: -1
-    strategy: ddp
+    accelerator: ddp
     # accumulate_grad_batches: 

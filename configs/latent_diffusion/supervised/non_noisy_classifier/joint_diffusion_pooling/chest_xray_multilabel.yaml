@@ -1,5 +1,5 @@
 model:
-  logdir: /net/tscratch/people/plgjoaxkal/Joint-Diffusion-in-Latent-Space/
+  logdir: home/jk/Joint-Diffusion-in-Latent-Space/
   base_learning_rate: 5.0e-05
   weight_decay: 0.0001
   model_type: joint_latent_diffusion_multilabel
@@ -13,6 +13,8 @@ model:
     image_size: 32
     channels: 4
     monitor: val/auroc_ema
+    weights: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    # weights: [3.67, 3.78, 3.86, 6.2, 3.0, 2.0, 2.91, 4.18, 2.16, 3.14, 3.47, 2.82, 4.35, 1.53, 0.5]
 
     classification_key: 1
     classification_loss_weight: 0.01
@@ -42,7 +44,8 @@ model:
       params:
         embed_dim: 4
         monitor: "val/rec_loss"
-        ckpt_path: "/net/pr2/projects/plgrid/plggsano/plgjoaxkal_storage/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_all_randomresizedcrop_Autoencoder_2024-01-17T13-15-27/checkpoints/epoch=000025.ckpt"
+        ckpt_path: "logs/compvis32x32x4_all_randomresizedcrop_Autoencoder_2024-01-17T13-15-27/checkpoints/epoch=000025.ckpt"
+        #ckpt_path: "/net/pr2/projects/plgrid/plggsano/plgjoaxkal_storage/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_all_randomresizedcrop_Autoencoder_2024-01-17T13-15-27/checkpoints/epoch=000025.ckpt"
         #ckpt_path: "logs/compvis32x32x4_nihAll_maxstron_aug_Autoencoder_2024-01-30T22-29-08/checkpoints/epoch=000028.ckpt"
         ddconfig:
           double_z: True
@@ -62,14 +65,15 @@ model:
 
 dataloaders:
   name: chest_xray_nih
-  train_batches: [ 64 ] #96 for RAM40, 196 for RAM80
-  val_batch: 64
-  num_workers: 4
+  train_batches: [ 1 ] #96 for RAM40, 196 for RAM80
+  val_batch: 1
+  min_augmentation_ratio: 8
+  num_workers: 6
   num_labeled: null
   pin_memory: True
   persistent_workers: True
-  #training_platform: local_sano
-  training_platform: plgrid
+  training_platform: local_sano
+  #training_platform: plgrid
 
 
 
@@ -79,7 +83,7 @@ lightning:
     checkpoint_callback: True
     max_steps: 100000
     gpus: -1
-    strategy: ddp
+    accelerator: ddp
     # accumulate_grad_batches: 2
       
   callbacks:

@@ -50,6 +50,9 @@ class MultilabelClassifier(pl.LightningModule):
             learning_rate: float=0.00001,
             weight_decay: float = 0,
             classifier_test_mode: str = "encoder_resnet",
+            weights=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ft_enc = False,
+
         ) -> None:
         super().__init__()
 
@@ -61,10 +64,13 @@ class MultilabelClassifier(pl.LightningModule):
         self.first_stage_config = first_stage_config
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
+        self.ft_enc = ft_enc
 
         self.instantiate_modules()
         self.auroc_train = AUROC(num_classes=num_classes-1)
         self.auroc_val = AUROC(num_classes=num_classes-1)
+        self.BCEweights = torch.Tensor(weights)
+
         if monitor is not None:
             self.monitor = monitor
 
@@ -96,9 +102,6 @@ class MultilabelClassifier(pl.LightningModule):
             self.num_classes = self.num_classes
             self.resnet.fc = nn.Sequential(
                 nn.Dropout(p=self.dropout),
-                # nn.Linear(self.in_features, self.in_features//8),
-                # nn.LeakyReLU(negative_slope=0.2),
-                # nn.Dropout(p=self.dropout),
                 nn.Linear(self.in_features, self.num_classes),
                 )
         else:
@@ -107,11 +110,13 @@ class MultilabelClassifier(pl.LightningModule):
 
     def instantiate_first_stage(self, config):
         model = instantiate_from_config(config)
-        self.first_stage_model = model.eval()
-        self.first_stage_model.train = disabled_train
-        for param in self.first_stage_model.parameters():
-            param.requires_grad = False
-    
+        self.first_stage_model = model
+        if not self.ft_enc:
+            self.first_stage_model.eval()
+            self.first_stage_model.train = disabled_train
+            for param in self.first_stage_model.parameters():
+                param.requires_grad = False
+        
     @torch.no_grad()
     def encode_first_stage(self, x):
         encoder_posterior = self.first_stage_model.encode(x)
@@ -143,7 +148,7 @@ class MultilabelClassifier(pl.LightningModule):
         x = x.unsqueeze(1)
         y_pred = self(x)
 
-        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float())
+        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float(), pos_weight=self.BCEweights.to(self.device))
         accuracy = accuracy_score(y.cpu(), y_pred.cpu()>=0.5)
         self.auroc_train.update(y_pred[:,:-1], y[:,:-1])
         self.log('train/auroc', self.auroc_train, on_step=False, on_epoch=True)

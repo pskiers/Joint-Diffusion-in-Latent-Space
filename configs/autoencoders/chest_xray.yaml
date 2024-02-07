@@ -1,3 +1,4 @@
+logdir: .
 model:
   base_learning_rate: 4.5e-6
   target: ldm.models.autoencoder.AutoencoderKL
@@ -27,10 +28,14 @@ model:
 
 dataloaders:
   name: chest_xray_nih
-  train_batches: [ 16 ]
-  val_batch: 32
+  train_batches: [ 3 ]
+  val_batch: 3
+  min_augmentation_ratio: 8
   num_workers: 8
   num_labeled: null
+  persistent_workers: True
+  training_platform: local_sano
+
 
 
 lightning:
@@ -38,13 +43,13 @@ lightning:
     benchmark: True
     checkpoint_callback: True
     max_steps: 1000000
-    gpus: [0,1]
-    strategy: "ddp"
+    gpus: -1
+    accelerator: "ddp"
     # accumulate_grad_batches: 2
 
   callbacks:
     img_logger:
-      batch_frequency: 3000
+      batch_frequency: 2
       max_images: 20
       clamp: True
       increase_log_steps: False

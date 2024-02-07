@@ -11,7 +11,7 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
 class ChestXRay_nih(torch.utils.data.Dataset):
-    def __init__(self, mode='train', training_platform: str = 'plgrid') -> None:
+    def __init__(self, mode='train', training_platform: str = 'plgrid',  min_augmentation_ratio: int = 0.8) -> None:
         super().__init__()
 
         assert training_platform in ['plgrid', 'local_sano',]
@@ -64,7 +64,7 @@ class ChestXRay_nih(torch.utils.data.Dataset):
 
                 # very strong
                 self.transform = A.Compose([
-                    A.RandomResizedCrop(width=256, height=256,scale=(0.3, 1.0), ratio=(0.75, 1.33)),
+                    A.RandomResizedCrop(width=256, height=256,scale=(min_augmentation_ratio, 1.0), ratio=(0.75, 1.33)),
                     A.Rotate(15),
                     A.HorizontalFlip(p=0.5),
                     A.Normalize(mean=0.5, std=0.5),

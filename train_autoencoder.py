@@ -41,7 +41,7 @@ if __name__ == "__main__":
 
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     nowname = args.prefix + "_Autoencoder_" + now
-    logdir = path.join("logs", nowname)
+    logdir = path.join(config.logdir, "logs", nowname)
     ckptdir = path.join(logdir, "checkpoints")
     cfgdir = path.join(logdir, "configs")
 

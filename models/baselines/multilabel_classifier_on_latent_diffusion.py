@@ -48,8 +48,11 @@ class MultilabelClassifierOnLatentDiffusion(JointLatentDiffusionMultilabel):
                  conditioning_key=None,
                  scale_factor=1,
                  scale_by_std=False,
+                 weights= [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+                 ft_enc = False,
                  *args,
                  **kwargs):
+        self.ft_enc = ft_enc
         super().__init__(
             first_stage_config=first_stage_config,
             cond_stage_config=cond_stage_config,
@@ -68,6 +71,7 @@ class MultilabelClassifierOnLatentDiffusion(JointLatentDiffusionMultilabel):
             conditioning_key=conditioning_key,
             scale_factor=scale_factor,
             scale_by_std=scale_by_std,
+            weights=weights,
             *args,
             **kwargs
             )
@@ -82,12 +86,17 @@ class MultilabelClassifierOnLatentDiffusion(JointLatentDiffusionMultilabel):
             if self.learn_logvar:
                 print('Diffusion model optimizing logvar')
                 params.append(self.logvar)
-            #TODO parametrize
-            #opt = torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
-            opt = torch.optim.AdamW([
-                #{'params':[*self.first_stage_model.parameters()], 'lr' : lr/50},
-                {'params':[*self.model.parameters()], 'lr':lr, 'weight_decay':weight_decay}
-                ])
+            
+            if self.ft_enc:
+                opt = torch.optim.AdamW([
+                    {'params':[*self.first_stage_model.parameters()], 'lr' : lr/50},
+                    {'params':[*self.model.parameters()], 'lr':lr, 'weight_decay':weight_decay}
+                    ])
+            else:
+                opt = torch.optim.AdamW([
+                    {'params':[*self.model.parameters()], 'lr':lr, 'weight_decay':weight_decay}
+                    ])
+                
             if self.use_scheduler:
                 assert 'target' in self.scheduler_config
                 scheduler = instantiate_from_config(self.scheduler_config)
@@ -112,9 +121,13 @@ class MultilabelClassifierOnLatentDiffusion(JointLatentDiffusionMultilabel):
 
             return opt
 
-    # override to allow encoder finetuning. TODO parametrize
-    # def instantiate_first_stage(self, config):
-    #     self.first_stage_model = instantiate_from_config(config)
+    # override to allow encoder finetuning.
+    def instantiate_first_stage(self, config):
+        if not self.ft_enc:
+            #UNFREEZE ENCODER"
+            super().instantiate_first_stage(config)
+        else:
+            self.first_stage_model = instantiate_from_config(config)
     
     def training_step(self, batch, batch_idx):
         loss_dict = {}
