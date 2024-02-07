@@ -42,7 +42,7 @@ dataloaders:
   train_batches: [ 1 ]
   val_batch: 1
   min_augmentation_ratio: 8
-  auto_augment: False
+  auto_augment: True
   num_workers: 4
   num_labeled: null
   pin_memory: True

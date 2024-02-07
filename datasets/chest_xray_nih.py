@@ -10,10 +10,12 @@ import numpy as np
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from torchvision import datasets, models, transforms
+import PIL
 
 class ChestXRay_nih(torch.utils.data.Dataset):
-    def __init__(self, mode='train', training_platform: str = 'plgrid',  img_size = 256, min_augmentation_ratio: int = 0.8, auto_aug = False) -> None:
+    def __init__(self, mode='train', training_platform: str = 'local_sano',  img_size = 256, min_augmentation_ratio: int = 0.8, auto_augment = False) -> None:
         super().__init__()
+        self.auto_augment = auto_augment if mode=='train' else False
 
         assert training_platform in ['plgrid', 'local_sano',]
         if training_platform=='plgrid':
@@ -51,9 +53,8 @@ class ChestXRay_nih(torch.utils.data.Dataset):
             elif mode =='train':
                 self.final_image_df = df[self.split_idx:]
 
-                if auto_aug:
-
-                    transforms.Compose([
+                if self.auto_augment:
+                    self.transform = transforms.Compose([
                         transforms.RandomHorizontalFlip(),
                         transforms.AutoAugment(policy=transforms.AutoAugmentPolicy.IMAGENET),
                         transforms.Resize(img_size),
@@ -90,15 +91,22 @@ class ChestXRay_nih(torch.utils.data.Dataset):
     def __getitem__(self, index):
 
         img_path = self.final_image_df.loc[index, 'image_path']
-        image = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-        image = image.astype(np.uint8)
-        image_transformed = self.transform(image=image)
-        image = image_transformed["image"]
-        image = torch.from_numpy(image)
-        return image, self.final_image_df.loc[index, [*self.labels, "no_finding"]].to_numpy(dtype=int)
+        if self.auto_augment:
+            image = PIL.Image.open(img_path)
+            image = image.convert('L')
+            image_transformed = self.transform(image)
+
+        else:
+            image = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+            image = image.astype(np.uint8)
+            image_transformed = self.transform(image=image)
+            image_transformed = image_transformed["image"]
+            image_transformed = torch.from_numpy(image_transformed)
+
+        return image_transformed, self.final_image_df.loc[index, [*self.labels, "no_finding"]].to_numpy(dtype=int)
         
   
 
 if __name__ == "__main__":
-    ds = ChestXRay_nih()
+    ds = ChestXRay_nih(auto_augment=False)
     print(ds[1])

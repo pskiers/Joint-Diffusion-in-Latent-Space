@@ -48,7 +48,7 @@ def get_dataloaders(name: str,
                                  training_platform = training_platform, 
                                  min_augmentation_ratio=min_augmentation_ratio,
                                  auto_augment = auto_augment)
-        val_ds = ChestXRay_nih(mode='test', training_platform = training_platform, auto_augment = auto_augment)
+        val_ds = ChestXRay_nih(mode='test', training_platform = training_platform)
         num_classes = 15
         return non_randaugment_dl(
             train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers, 
