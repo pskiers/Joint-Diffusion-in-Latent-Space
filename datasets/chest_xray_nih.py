@@ -11,7 +11,7 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
 class ChestXRay_nih(torch.utils.data.Dataset):
-    def __init__(self, mode='train', training_platform: str = 'plgrid',  min_augmentation_ratio: int = 0.8) -> None:
+    def __init__(self, mode='train', training_platform: str = 'plgrid',  img_size = 256, min_augmentation_ratio: int = 0.8) -> None:
         super().__init__()
 
         assert training_platform in ['plgrid', 'local_sano',]
@@ -44,27 +44,13 @@ class ChestXRay_nih(torch.utils.data.Dataset):
                 self.final_image_df = df[:self.split_idx]
 
                 self.transform = A.Compose([
-                    #A.Resize(256,256),
+                    A.Resize(img_size, img_size),
                     A.Normalize(mean=0.5, std=0.5),
                 ])
             elif mode =='train':
                 self.final_image_df = df[self.split_idx:]
-
-                # self.transform = A.Compose([
-                #     A.RandomResizedCrop(width=256, height=256,scale=(0.9, 1.0), ratio=(0.9, 1.1)),
-                #     A.HorizontalFlip(p=0.5),
-                #     A.Normalize(mean=0.5, std=0.5),
-                # ])
-
-                ## strong
-                # self.transform = A.Compose([
-                #     A.RandomResizedCrop(width=256, height=256,scale=(0.5, 1.0), ratio=(0.9, 1.1)),
-                #     A.Normalize(mean=0.5, std=0.5),
-                # ])
-
-                # very strong
                 self.transform = A.Compose([
-                    A.RandomResizedCrop(width=256, height=256,scale=(min_augmentation_ratio, 1.0), ratio=(0.75, 1.33)),
+                    A.RandomResizedCrop(width=img_size, height=img_size, scale=(min_augmentation_ratio, 1.0), ratio=(0.75, 1.33)),
                     A.Rotate(15),
                     A.HorizontalFlip(p=0.5),
                     A.Normalize(mean=0.5, std=0.5),
@@ -79,7 +65,7 @@ class ChestXRay_nih(torch.utils.data.Dataset):
             self.final_image_df = df.sample(frac=1, random_state=45654).reset_index(drop=True)
 
             self.transform = A.Compose([
-                    #A.Resize(256,256),
+                    A.Resize(img_size,img_size),
                     A.Normalize(mean=0.5, std=0.5),
                 ])
 
