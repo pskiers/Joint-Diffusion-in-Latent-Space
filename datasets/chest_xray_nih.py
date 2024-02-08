@@ -94,7 +94,7 @@ class ChestXRay_nih(torch.utils.data.Dataset):
         if self.auto_augment:
             image = PIL.Image.open(img_path)
             image = image.convert('L')
-            image_transformed = self.transform(image)
+            image_transformed = self.transform(image).squeeze()
 
         else:
             image = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
@@ -108,5 +108,5 @@ class ChestXRay_nih(torch.utils.data.Dataset):
   
 
 if __name__ == "__main__":
-    ds = ChestXRay_nih(auto_augment=False)
-    print(ds[1])
+    ds = ChestXRay_nih(auto_augment=True)
+    print(ds[1][0].shape)

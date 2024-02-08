@@ -51,7 +51,7 @@ if __name__ == "__main__":
         "all labels" if dl_config["num_labeled"] is None else f"{dl_config['num_labeled']} per class",
         config.model.get("model_type")
     ]
-    trainer_kwargs["logger"] = pl.loggers.WandbLogger(name=nowname, id=nowname)
+    trainer_kwargs["logger"] = pl.loggers.WandbLogger(name=nowname, id=nowname, project = "Joint-Diffusion-in-Latent-Space")
 
     # modelcheckpoint - use TrainResult/EvalResult(checkpoint_on=metric) to
     # specify which metric is used to determine best models
