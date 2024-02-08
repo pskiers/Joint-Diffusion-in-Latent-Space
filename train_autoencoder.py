@@ -1,4 +1,4 @@
-from ldm.models.autoencoder import AutoencoderKL
+from ldm.models.autoencoder import AutoencoderKL, VQModel
 from omegaconf import OmegaConf
 import argparse
 import pytorch_lightning as pl
@@ -36,11 +36,19 @@ if __name__ == "__main__":
     if checkpoint_path is not None:
         config.model.params["ckpt_path"] = checkpoint_path
 
-    model = AutoencoderKL(**config.model.get("params", dict()))
+    now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    
+    if 'AutoencoderKL' in config.model.target:
+        model = AutoencoderKL(**config.model.get("params", dict()))
+        nowname = args.prefix + "_AutoencoderKL_" + now
+    elif 'VQModel' in config.model.target:
+        model = VQModel(**config.model.get("params", dict()))
+        nowname = args.prefix + "_AutoencoderVQ_" + now
+    else:
+        raise NotImplementedError
+    
     model.learning_rate = config.model.base_learning_rate
 
-    now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-    nowname = args.prefix + "_Autoencoder_" + now
     logdir = path.join(config.logdir, "logs", nowname)
     ckptdir = path.join(logdir, "checkpoints")
     cfgdir = path.join(logdir, "configs")
