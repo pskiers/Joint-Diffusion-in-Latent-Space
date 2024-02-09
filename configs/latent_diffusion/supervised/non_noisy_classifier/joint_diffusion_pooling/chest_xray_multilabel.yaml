@@ -25,7 +25,7 @@ model:
 
     classifier_in_features: 26240
     classifier_hidden: 2048 #now calculated in code
-    num_classes: 15
+    num_classes: 14 # we can have 15 with last column, or 14 without
     dropout: 0.3
 
     unet_config:

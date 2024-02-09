@@ -53,8 +53,9 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         )
         # self.x_start = None
         self.gradient_guided_sampling = False
-        self.auroc_train = AUROC(num_classes=num_classes-1)
-        self.auroc_val = AUROC(num_classes=num_classes-1)
+        self.num_classes = num_classes
+        self.auroc_train = AUROC(num_classes=self.num_classes-1)
+        self.auroc_val = AUROC(num_classes=self.num_classes-1)
         
         # counts from https://www.mdpi.com/2075-4426/13/10/1426 ->parametrize it!!!
         self.BCEweights = torch.Tensor(weights)
@@ -65,8 +66,9 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         representations = unet.just_representations(x, t, pooled=False)
         representations = self.transform_representations(representations)
         y_pred = self.classifier(representations)
-
-        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float(), pos_weight=self.BCEweights.to(self.device))
+        
+        #skip last column if num classes < len(y_true) - we want to skip no findings label. BCE weights have to be adjusted!!!
+        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y[:,:self.num_classes].float(), pos_weight=self.BCEweights.to(self.device))
         accuracy = accuracy_score(y.cpu(), y_pred.cpu()>=0.5)
         return loss, accuracy, y_pred
 

@@ -148,7 +148,7 @@ class MultilabelClassifier(pl.LightningModule):
         x = x.unsqueeze(1)
         y_pred = self(x)
 
-        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float(), pos_weight=self.BCEweights.to(self.device))
+        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y[:,:self.num_classes].float(), pos_weight=self.BCEweights.to(self.device))
         accuracy = accuracy_score(y.cpu(), y_pred.cpu()>=0.5)
         self.auroc_train.update(y_pred[:,:-1], y[:,:-1])
         self.log('train/auroc', self.auroc_train, on_step=False, on_epoch=True)
