@@ -69,7 +69,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         
         #skip last column if num classes < len(y_true) - we want to skip no findings label. BCE weights have to be adjusted!!!
         loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y[:,:self.num_classes].float(), pos_weight=self.BCEweights.to(self.device))
-        accuracy = accuracy_score(y.cpu(), y_pred.cpu()>=0.5)
+        accuracy = accuracy_score(y[:,:self.num_classes].cpu(), y_pred.cpu()>=0.5)
         return loss, accuracy, y_pred
 
 
