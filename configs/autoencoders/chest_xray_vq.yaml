@@ -27,7 +27,7 @@ model:
       target: taming.modules.losses.vqperceptual.VQLPIPSWithDiscriminator
       params:
         disc_conditional: false
-        disc_in_channels: 3
+        disc_in_channels: 1
         disc_num_layers: 2
         disc_start: 1
         disc_weight: 0.6
