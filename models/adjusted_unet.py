@@ -30,7 +30,8 @@ class AdjustedUNet(UNetModel):
             context_dim=None,
             n_embed=None,
             legacy=True,
-            pool_size=2
+            pool_size=2, 
+            pool_type = 'avg'
         ):
         super().__init__(
             image_size,
@@ -59,6 +60,7 @@ class AdjustedUNet(UNetModel):
             legacy
         )
         self.pool_size = pool_size
+        self.pool_type = pool_type
 
     def forward(self, x, timesteps=None, context=None, y=None, pooled=True, **kwargs):
         """
@@ -100,12 +102,19 @@ class AdjustedUNet(UNetModel):
         return output
 
     def pool_representations(self, representations):
+        if self.pool_type =='avg':
+            pool_fun = th.nn.functional.avg_pool2d
+        elif self.pool_type =='max':
+            pool_fun = th.nn.functional.max_pool2d
+        else:
+            raise NotImplementedError
+        
         pooled_representations = []
         for h in representations:
             if h.shape[-1] < self.pool_size:
-                pooled_representations.append(th.nn.functional.avg_pool2d(h, h.shape[-1]))
+                pooled_representations.append(pool_fun(h, h.shape[-1]))
             else:
-                pooled_representations.append(th.nn.functional.avg_pool2d(h, self.pool_size))
+                pooled_representations.append(pool_fun(h, self.pool_size))
         return pooled_representations
 
     def forward_output_blocks(self, x, context, emb, representations):
