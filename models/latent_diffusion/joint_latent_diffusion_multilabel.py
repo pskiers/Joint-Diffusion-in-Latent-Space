@@ -79,7 +79,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         x, y = self.get_train_classification_input(batch, self.first_stage_key)
         t = torch.zeros((x.shape[0],), device=self.device).long()
 
-        if y_pred.shape[1]!=y.shape[1]: #means one class less
+        if self.num_classes!=y.shape[1]: #means one class less
             loss_classification, accuracy, y_pred = self.do_classification(x, t, y[:,:self.num_classes])
             self.auroc_train.update(y_pred, y[:,:-1])
 
@@ -107,7 +107,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
 
         loss, loss_dict_no_ema = self(x_diff, c)
 
-        if y_pred.shape[1]!=y.shape[1]: #means one class less
+        if self.num_classes!=y.shape[1]: #means one class less
             loss_cls, accuracy, _ = self.do_classification(x, t, y[:,:self.num_classes])
         else:
             loss_cls, accuracy, _ = self.do_classification(x, t, y)
@@ -120,7 +120,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         with self.ema_scope():
             loss, loss_dict_ema = self(x_diff, c)
 
-            if y_pred.shape[1]!=y.shape[1]: #means one class less
+            if self.num_classes!=y.shape[1]: #means one class less
                 loss_cls, accuracy, y_pred = self.do_classification(x, t, y[:,:self.num_classes])
                 self.auroc_val.update(y_pred, y[:,:-1])
 
