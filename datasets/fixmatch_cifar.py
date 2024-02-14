@@ -120,7 +120,7 @@ def get_cifar100_supervised(args, root):
 def get_svhn_supervised(args, root):
     transform_val = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize(mean=cifar100_mean, std=cifar100_std)
+        transforms.Normalize(mean=normal_mean, std=normal_std)
     ])
 
     train_dataset = SVHNSSL(
@@ -194,7 +194,7 @@ def get_svhn(args, root):
 
     train_unlabeled_dataset = SVHNSSL(
         root, train_unlabeled_idxs, train=True,
-        transform=TransformFixMatch(mean=cifar100_mean, std=cifar100_std))
+        transform=TransformFixMatch(mean=normal_mean, std=normal_std))
 
     test_dataset = datasets.SVHN(
         root, split="test", transform=transform_val, download=True)

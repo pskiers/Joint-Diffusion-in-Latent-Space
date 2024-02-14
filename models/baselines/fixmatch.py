@@ -103,7 +103,7 @@ class FixMatch(pl.LightningModule):
     def get_train_input(self, batch):
         x = batch[0][self.img_key]
         y = batch[0][self.label_key]
-        weak_img, strong_img = batch[1][0]
+        _, weak_img, strong_img = batch[1][0]
         return x, y, weak_img, strong_img
 
     def get_val_input(self, batch):

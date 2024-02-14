@@ -1,33 +1,34 @@
-from typing import List, Dict
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
-from einops import rearrange
-from ldm.models.diffusion.ddpm import LatentDiffusion
-from ..representation_transformer import RepresentationTransformer
+from ..adjusted_unet import AdjustedUNet
+from .fixmatch import FixMatch, FixMatchEma
 
 
-
-class AttentionOnLatentDiffusion(pl.LightningModule):
-    def __init__(self,
-                 trained_diffusion: LatentDiffusion,
-                 attention_config: Dict,
-                 lr: float = 0.001) -> None:
+class DiffusionClassifier(pl.LightningModule):
+    def __init__(
+            self,
+            unet_config: dict,
+            num_classes: int,
+            in_features: int,
+            hidden_layer: int,
+            lr: float = 0.001
+        ) -> None:
         super().__init__()
-        self.trained_diffusion = trained_diffusion
-        self.attention_classifier = RepresentationTransformer(**attention_config)
+        self.unet = AdjustedUNet(**unet_config)
+        self.num_classes = num_classes
+        self.mlp = nn.Sequential(
+            nn.Linear(in_features, hidden_layer),
+            nn.ReLU(),
+            nn.Linear(hidden_layer, self.num_classes)
+        )
         self.lr = lr
 
-    @torch.no_grad()
-    def get_imgs_representation(self, imgs: torch.Tensor):
-        encoder_posterior = self.trained_diffusion.encode_first_stage(imgs)
-        z = self.trained_diffusion.get_first_stage_encoding(encoder_posterior).detach()
-        hs = self.trained_diffusion.model.diffusion_model.just_representations(z, torch.ones(z.shape[0], device=self.device), pooled=False)
-        return hs
-
     def forward(self, imgs: torch.Tensor):
-        z = self.get_imgs_representation(imgs)
-        return self.attention_classifier(z)
+        _, z = self.unet(imgs, torch.ones(imgs.shape[0], device=self.device))
+        z = [torch.flatten(z_i, start_dim=1) for z_i in z]
+        z = torch.concat(z, dim=1)
+        return self.mlp(z)
 
     def training_step(self, batch, batch_idx):
         imgs, labels = batch
@@ -59,3 +60,10 @@ class AttentionOnLatentDiffusion(pl.LightningModule):
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
+
+
+class FixMatchDiffusionClassifier(FixMatch):
+    def __init__(self, unet_config, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.model = DiffusionClassifier(unet_config, num_classes=10, in_features=3712, hidden_layer=1024)
+        self.model_ema = FixMatchEma(self.model, decay=0.999)

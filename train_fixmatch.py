@@ -20,8 +20,7 @@ class Args:
 
 
 if __name__ == "__main__":
-    config = OmegaConf.load("configs/cifar10-joint-standard-diffusion.yaml") # not really important
-
+    config = OmegaConf.load("configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml")
     lightning_config = config.pop("lightning", OmegaConf.create())
 
     trainer_config = lightning_config.get("trainer", OmegaConf.create())
@@ -32,29 +31,29 @@ if __name__ == "__main__":
 
     args = Args()
     train_sampler = RandomSampler
-    labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS["cifar10_multi"](args, './data')
+    labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS["cifar10"](args, './data')
     labeled_trainloader = DataLoader(
         labeled_dataset,
         sampler=train_sampler(labeled_dataset),
-        batch_size=60,
+        batch_size=64,
         num_workers=4,
         drop_last=True)
 
     unlabeled_trainloader = DataLoader(
         unlabeled_dataset,
         sampler=train_sampler(unlabeled_dataset),
-        batch_size=42,
+        batch_size=64*7,
         num_workers=4,
         drop_last=True)
 
     test_loader = DataLoader(
         test_dataset,
         sampler=SequentialSampler(test_dataset),
-        batch_size=64,
+        batch_size=128,
         num_workers=4)
 
 
-    model = MeanMatch(batch_size=60)
+    model = FixMatchDiffusionClassifier(unet_config=config["model"]["params"]["unet_config"]["params"], batch_size=64)
 
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     nowname = model.__class__.__name__ + "_" + now
