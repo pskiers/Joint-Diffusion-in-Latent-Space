@@ -93,7 +93,7 @@ lightning:
       
   callbacks:
     img_logger:
-      batch_frequency: 5000
+      batch_frequency: 1
       max_images: 10
       clamp: True
       increase_log_steps: False

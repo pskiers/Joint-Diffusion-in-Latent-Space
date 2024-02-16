@@ -8,6 +8,7 @@ from .cifar10 import AdjustedCIFAR10
 from .cifar100 import AdjustedCIFAR100
 from .chest_xray_nih import ChestXRay_nih
 from .chest_xray import ChestXRay
+from .chest_xray_nih_bbox import ChestXRay_nih_bbox
 from .chest_xray_nih_64 import ChestXRay_nih_64
 from .mnist import AdjustedMNIST
 from .cleba import AdjustedCelbA
