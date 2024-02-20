@@ -39,6 +39,7 @@ if __name__ == "__main__":
     model = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
 
     model.learning_rate = config.model.base_learning_rate
+    model.sampling_metod = "unconditional"
 
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     nowname = args.prefix + "_" + model.__class__.__name__ + "_" + now

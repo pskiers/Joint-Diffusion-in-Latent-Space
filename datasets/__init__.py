@@ -7,6 +7,7 @@ from torchvision import datasets
 from .cifar10 import AdjustedCIFAR10
 from .cifar100 import AdjustedCIFAR100
 from .chest_xray_nih import ChestXRay_nih
+from .chest_xray_nih_ssl import ChestXRay_nih_ssl
 from .chest_xray import ChestXRay
 from .chest_xray_nih_bbox import ChestXRay_nih_bbox
 from .chest_xray_nih_64 import ChestXRay_nih_64
@@ -54,12 +55,25 @@ def get_dataloaders(name: str,
         return non_randaugment_dl(
             train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers, 
             pin_memory=pin_memory, persistent_workers=persistent_workers)
-    elif name=='chest_xray_nih_64':
-        train_ds = ChestXRay_nih_64(mode='train')
-        val_ds = ChestXRay_nih_64(mode='test')
-        num_classes = 2
-        return non_randaugment_dl(
-            train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers)
+    elif name=='chest_xray_nih_ssl':
+            labeled_dataset = ChestXRay_nih_ssl(mode='train', 
+                                    training_platform = training_platform, 
+                                    min_augmentation_ratio=min_augmentation_ratio,
+                                    auto_augment = auto_augment, labeled = True)
+            unlabeled_dataset = ChestXRay_nih_ssl(mode='train', 
+                                    training_platform = training_platform, 
+                                    min_augmentation_ratio=min_augmentation_ratio,
+                                    auto_augment = auto_augment, labeled = False)
+            test_dataset = ChestXRay_nih_ssl(mode='test', training_platform = training_platform)
+            num_classes = 15
+            return ssl_randaugment_dl(labeled_dataset, unlabeled_dataset, test_dataset, train_batches[0], val_batch, num_workers)
+    
+    # elif name=='chest_xray_nih_64':
+    #     train_ds = ChestXRay_nih_64(mode='train')
+    #     val_ds = ChestXRay_nih_64(mode='test')
+    #     num_classes = 2
+    #     return non_randaugment_dl(
+    #         train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers)
     elif name == "cifar10_randaugment":
         if num_labeled is not None:
             if len(train_batches) != 1:
