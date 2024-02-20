@@ -84,8 +84,6 @@ dataloaders:
   persistent_workers: True
   training_platform: local_sano
   #training_platform: plgrid
-  labeled: False
-
 
 
 lightning:
