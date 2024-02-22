@@ -210,14 +210,17 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
 
             x.retain_grad()
             sample_classes = torch.zeros((x.shape[0], self.num_classes)).cuda()
+            #TODO here absolutely the worst, everything is hardcoded and chaged manually while running notebook!!! 
+            # TODO dont use it while training for logging
             sample_classes[:, -1] = 1
-            loss = nn.functional.binary_cross_entropy_with_logits(pred, sample_classes, reduction="sum")
+            print('here', nn.functional.sigmoid(pred[:,[1,14]]), sample_classes[:,[1,14]])
+            loss = -nn.functional.binary_cross_entropy_with_logits(pred[:,[1,14]], sample_classes[:,[1,14]], reduction="sum")
             cl_list = ["Atelectasis","Cardiomegaly","Consolidation","Edema","Effusion","Emphysema","Fibrosis", "Hernia","Infiltration", "Mass", "Nodule","Pleural_Thickening","Pneumonia","Pneumothorax","No Finding"]
-            print([*zip(nn.functional.sigmoid(pred[0]), cl_list)])
+            #print([*zip(nn.functional.sigmoid(pred[0]), cl_list)])
             loss.backward()
             s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
-            #model_out = (pred_noise + s_t * x.grad).detach()
-            model_out = (pred_noise).detach()
+            model_out = (pred_noise + s_t * x.grad).detach()
+            #model_out = (pred_noise).detach()
 
         return model_out
 
