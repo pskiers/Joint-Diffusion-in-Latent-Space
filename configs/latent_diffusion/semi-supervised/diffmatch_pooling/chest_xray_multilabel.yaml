@@ -21,7 +21,7 @@ model:
 
     min_confidence: 0.95
     mu: 7
-    batch_size: 64
+    batch_size: 3
     classification_start: 0
 
     classification_key: 1
@@ -30,7 +30,7 @@ model:
 
     classifier_in_features: 26240
     classifier_hidden: 2048 #now calculated in code
-    num_classes: 14 # we can have 15 with last column, or 14 without
+    num_classes: 15 # we can have 15 with last column, or 14 without
     dropout: 0.3
 
     unet_config:
@@ -74,8 +74,8 @@ model:
 
 dataloaders:
   name: chest_xray_nih_ssl
-  train_batches: [ 1 ] #96 for RAM40, 196 for RAM80
-  val_batch: 1
+  train_batches: [3] #96 for RAM40, 196 for RAM80
+  val_batch: 3
   min_augmentation_ratio: 8
   auto_augment: False
   num_workers: 6

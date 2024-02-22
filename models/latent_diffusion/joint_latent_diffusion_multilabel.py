@@ -55,7 +55,6 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             **kwargs
         )
         # self.x_start = None
-        self.gradient_guided_sampling = False
         self.sampling_method = "conditional_to_x"
         self.num_classes = num_classes
         print('WARNING AUROC HARDCODEDDDD to 14 classes')

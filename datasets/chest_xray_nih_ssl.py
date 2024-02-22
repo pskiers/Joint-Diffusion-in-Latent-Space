@@ -59,7 +59,7 @@ class ChestXRay_nih_ssl(ChestXRay_nih):
         if self.labeled:
             return image_transformed, self.y_labeled[index]
         else:
-            return image_transformed, self.y_unlabeled[index]
+            return (image_transformed,image_transformed,image_transformed), self.y_unlabeled[index]
 
 if __name__ == "__main__":
     ds = ChestXRay_nih_ssl(auto_augment=True, labeled=False)

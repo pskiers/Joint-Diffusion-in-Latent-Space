@@ -58,6 +58,8 @@ def get_model_class(name: str):
         return JointLatentDiffusionAttention
     elif name == "latent_diffmatch_pooling":
         return LatentDiffMatchPooling
+    elif name == "latent_diffmatch_pooling_multilabel":
+        return LatentDiffMatchPoolingMultilabel
     elif name == "latent_diffmatch_attention":
         return LatentDiffMatchAttention
     else:

@@ -4,15 +4,16 @@ from torchvision import transforms
 from einops import rearrange
 import kornia as K
 from .ssl_joint_diffusion import SSLJointLatentDiffusion, SSLJointLatentDiffusionV2
-from .joint_latent_diffusion import JointLatentDiffusion, JointLatentDiffusionAttention, Jo
+from .joint_latent_diffusion import JointLatentDiffusion, JointLatentDiffusionAttention
 from .joint_latent_diffusion_multilabel import JointLatentDiffusionMultilabel
 from ..representation_transformer import RepresentationTransformer
 from ..adjusted_unet import AdjustedUNet
 from ..ddim import DDIMSamplerGradGuided
 from ..utils import FixMatchEma, interleave, de_interleave
+from sklearn.metrics import accuracy_score
 
 
-class LatentDiffMatchPooling(JointLatentDiffusionMultilabel):
+class LatentDiffMatchPoolingMultilabel(JointLatentDiffusionMultilabel):
     def __init__(self,
                  first_stage_config,
                  cond_stage_config,
@@ -26,6 +27,7 @@ class LatentDiffMatchPooling(JointLatentDiffusionMultilabel):
                  dropout=0,
                  classification_loss_weight=1.0,
                  classification_key=1,
+                 augmentations = True,
                  num_timesteps_cond=None,
                  cond_stage_key="image",
                  cond_stage_trainable=False,
@@ -34,6 +36,8 @@ class LatentDiffMatchPooling(JointLatentDiffusionMultilabel):
                  conditioning_key=None,
                  scale_factor=1,
                  scale_by_std=False,
+                 weights=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+
                  *args,
                  **kwargs):
         super().__init__(
@@ -45,7 +49,7 @@ class LatentDiffMatchPooling(JointLatentDiffusionMultilabel):
             dropout,
             classification_loss_weight,
             classification_key,
-            False,
+            augmentations,
             num_timesteps_cond,
             cond_stage_key,
             cond_stage_trainable,
@@ -54,6 +58,7 @@ class LatentDiffMatchPooling(JointLatentDiffusionMultilabel):
             conditioning_key,
             scale_factor,
             scale_by_std,
+            weights,
             *args,
             **kwargs
         )
@@ -72,7 +77,6 @@ class LatentDiffMatchPooling(JointLatentDiffusionMultilabel):
                   bs=None):
         if self.training is True:
             batch = batch[1][0]
-        batch[k] = rearrange(batch[k], 'b c h w -> b h w c')
         return super().get_input(
             batch,
             k,
@@ -85,19 +89,19 @@ class LatentDiffMatchPooling(JointLatentDiffusionMultilabel):
 
     def get_train_classification_input(self, batch, k):
         x = batch[0][k]
-        x = self.to_latent(x, arrange=False)
+        x = self.to_latent(x, arrange=True)
 
         y = batch[0][self.classification_key]
 
-        _, weak_img, strong_img = batch[1][0]
-        weak_img = self.to_latent(weak_img, arrange=False)
-        strong_img = self.to_latent(strong_img, arrange=False)
+        # _, weak_img, strong_img = batch[1][0]
+        # weak_img = self.to_latent(weak_img, arrange=True)
+        # strong_img = self.to_latent(strong_img, arrange=True)
 
-        return x, y, weak_img, strong_img
+        return x, y #, weak_img, strong_img
 
     def get_valid_classification_input(self, batch, k):
         x = batch[k]
-        x = self.to_latent(x, arrange=False)
+        x = self.to_latent(x, arrange=True)
         y = batch[self.classification_key]
         return x, y
 
@@ -107,29 +111,38 @@ class LatentDiffMatchPooling(JointLatentDiffusionMultilabel):
             return loss
 
         loss_dict = {}
-        x, y, weak_img, strong_img = self.get_train_classification_input(
-            batch, self.first_stage_key)
-        t = torch.zeros((x.shape[0]*(2*self.mu+1),), device=self.device).long()
+        # x, y, weak_img, strong_img = self.get_train_classification_input(
+        #     batch, self.first_stage_key)
+        # t = torch.zeros((x.shape[0]*(2*self.mu+1),), device=self.device).long()
 
-        inputs = interleave(
-            torch.cat((x, weak_img, strong_img)), 2*self.mu+1)
+        # inputs = interleave(
+        #     torch.cat((x, weak_img, strong_img)), 2*self.mu+1)
+
+        x, y = self.get_train_classification_input(
+            batch, self.first_stage_key)
+        t = torch.zeros((x.shape[0]), device=self.device).long()
+
+        inputs = x
 
         unet: AdjustedUNet = self.model.diffusion_model
-        representations = unet.just_representations(inputs, t)
+        representations = unet.just_representations(inputs, t, pooled=False)
         representations = self.transform_representations(representations)
         logits = self.classifier(representations)
 
-        logits = de_interleave(logits, 2*self.mu+1)
-        preds_x = logits[:self.batch_size]
-        preds_weak, preds_strong = logits[self.batch_size:].chunk(2)
-        del logits
+        # logits = de_interleave(logits, 2*self.mu+1)
+        # preds_x = logits[:self.batch_size]
+        # preds_weak, preds_strong = logits[self.batch_size:].chunk(2)
+        # del logits
 
+        preds_x = logits[:self.batch_size]
+        
         loss_classification = nn.functional.binary_cross_entropy_with_logits(preds_x, y.float()[:,:self.num_classes], 
                                                                              pos_weight=self.BCEweights.to(self.device), reduction="mean")
         loss += loss_classification * self.classification_loss_weight
-        accuracy = torch.sum(torch.argmax(preds_x, dim=1) == y) / len(y)
         loss_dict.update(
             {'train/loss_classification': loss_classification})
+        
+        accuracy = accuracy_score(y[:,:self.num_classes].cpu(), preds_x.cpu()>=0.5)
         loss_dict.update({'train/loss': loss})
         loss_dict.update({'train/accuracy': accuracy})
 
@@ -137,7 +150,9 @@ class LatentDiffMatchPooling(JointLatentDiffusionMultilabel):
             self.auroc_train.update(preds_x, y[:,:-1])
         else:
             self.auroc_train.update(preds_x[:,:-1], y[:,:-1])
+
         self.log('train/auroc', self.auroc_train, on_step=False, on_epoch=True)
+
 
         # pseudo_label = torch.softmax(preds_weak.detach(), dim=-1)
         # max_probs, targets_u = torch.max(pseudo_label, dim=-1)
@@ -158,9 +173,14 @@ class LatentDiffMatchPooling(JointLatentDiffusionMultilabel):
         self.log_dict(loss_dict, prog_bar=True,
                       logger=True, on_step=True, on_epoch=True)
         return loss
+    
+    @torch.no_grad()
+    def log_images(self, batch, N=8, n_row=2, sample=True, return_keys=None, **kwargs):
+        if type(batch[0])==list:
+            batch = (batch[1][0][0], batch[1][1])
+        return super().log_images(batch=batch, N=8, n_row=2, sample=True, return_keys=None, **kwargs)
 
-
-class LatentDiffMatchAttention(LatentDiffMatchPooling):
+class LatentDiffMatchAttentionMultiLabel(LatentDiffMatchPoolingMultilabel):
     def __init__(self,
                  first_stage_config,
                  cond_stage_config,
