@@ -54,7 +54,10 @@ def CutoutAbs(img, v, **kwarg):
     y1 = int(min(h, y0 + v))
     xy = (x0, y0, x1, y1)
     # gray
-    color = (127, 127, 127)
+    if img.mode=='L':
+        color = 127
+    else:
+        color = (127, 127, 127)
     img = img.copy()
     PIL.ImageDraw.Draw(img).rectangle(xy, color)
     return img

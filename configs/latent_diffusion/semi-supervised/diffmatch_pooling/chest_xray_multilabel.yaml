@@ -28,8 +28,8 @@ model:
     augmentations: False
 
     classifier_in_features: 26240
-    classifier_hidden: 2048 #now calculated in code
-    num_classes: 15 # we can have 15 with last column, or 14 without
+    classifier_hidden: 2048 #we dont use it, now computed in code
+    num_classes: 15 # we can have 15 with last column 'no findings', or 14 without. AUROC always for 14- hardcoded
     dropout: 0.3
 
     unet_config:
@@ -70,10 +70,10 @@ model:
           target: torch.nn.Identity
     cond_stage_config: __is_unconditional__
 
-batch_size: 32 # we need it also here - the code is not optimized
+batch_size: 32 # we need labeled train batch also here - the code was not optimized. I could have fixed it but i just didnt
 dataloaders:
   name: chest_xray_nih_ssl
-  train_batches: [32] #96 for RAM40, 196 for RAM80
+  train_batches: [32] #for laebeled. unlabeled size is multiplied by mu
   val_batch: 64
   min_augmentation_ratio: 8
   auto_augment: False
@@ -82,7 +82,7 @@ dataloaders:
   pin_memory: True
   persistent_workers: True
   training_platform: local_sano
-  #training_platform: plgrid
+  #training_platform: plgrid # pls check your data paths
 
 
 lightning:

@@ -70,6 +70,7 @@ if __name__ == "__main__":
         print(f"Monitoring {model.monitor} as checkpoint metric.")
         default_modelckpt_cfg["params"]["monitor"] = model.monitor
         default_modelckpt_cfg["params"]["save_top_k"] = 1
+        default_modelckpt_cfg["params"]["mode"] = 'max' if 'auroc'in model.monitor or 'acc' in model.monitor else 'min'
 
     callback_cfg = lightning_config.get("callbacks", OmegaConf.create())
     trainer_kwargs["callbacks"] = [
