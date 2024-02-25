@@ -67,6 +67,9 @@ class LatentDiffMatchPoolingMultilabel(JointLatentDiffusionMultilabel):
         self.batch_size = batch_size
         self.classification_start = classification_start
 
+    def get_sampl(self):
+        print("sampling_method, gradient_guided_samplings", self.sampling_method, self.gradient_guided_sampling)
+        
     def get_input(self,
                   batch,
                   k,
