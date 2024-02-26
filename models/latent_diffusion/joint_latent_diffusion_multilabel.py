@@ -147,10 +147,10 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         )
 
 
-    def p_mean_variance(self, x, c, t, clip_denoised: bool, original_img=None, return_codebook_ids=False, quantize_denoised=False,
+    def p_mean_variance(self, x, c, t, clip_denoised: bool, original_img=None, pick_class = None, return_codebook_ids=False, quantize_denoised=False,
                         return_x0=False, score_corrector=None, corrector_kwargs=None):
         if self.sampling_method == "conditional_to_x":
-            return self.grad_guided_p_mean_variance(x, t, clip_denoised, original_img =original_img)
+            return self.grad_guided_p_mean_variance(x, t, clip_denoised, original_img =original_img, pick_class=pick_class)
         elif self.sampling_method == "conditional_to_repr":
             return self.grad_guided_p_mean_variance(x, t, clip_denoised)
         elif self.sampling_method == "unconditional":
@@ -164,13 +164,16 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
                 x_recon.clamp_(-1., 1.)
 
             model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
-            return model_mean, posterior_variance, posterior_log_variance
+            if return_x0:
+                return model_mean, posterior_variance, posterior_log_variance, x_recon
+            else:
+                return model_mean, posterior_variance, posterior_log_variance
         else:
             raise NotImplementedError("Sampling method not implemented")
 
-    def grad_guided_p_mean_variance(self, x, t, clip_denoised: bool, original_img = None):
+    def grad_guided_p_mean_variance(self, x, t, clip_denoised: bool, original_img = None, pick_class=None):
         if self.sampling_method == "conditional_to_x":
-            model_out = self.guided_apply_model(x, t, original_img =original_img)
+            model_out = self.guided_apply_model(x, t, original_img =original_img, pick_class=pick_class)
         elif self.sampling_method == "conditional_to_repr":
             model_out = self.guided_repr_apply_model(x, t)
 
@@ -187,7 +190,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         return model_mean, posterior_variance, posterior_log_variance
 
     @torch.no_grad()
-    def guided_apply_model(self, x: torch.Tensor, t, original_img=None):
+    def guided_apply_model(self, x: torch.Tensor, t, original_img=None, pick_class='Cardiomegaly'):
         unet: AdjustedUNet = self.model.diffusion_model
         if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
             return unet.just_reconstruction(x, t)
@@ -207,30 +210,40 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             pooled_representations = self.transform_representations(
                 representations)
             pred = self.classifier(pooled_representations)
-            print('all predictins for x pred start', nn.functional.sigmoid(pred))
 
             representations_o = unet.just_representations(
                 original_img, torch.zeros(len(original_img)).cuda(), context=None, pooled=False)
             pooled_representations_o = self.transform_representations(
                 representations_o)
             pred_o = self.classifier(pooled_representations_o)
-            print('all predictins for orig x', nn.functional.sigmoid(pred_o))
 
             x.retain_grad()
-            sample_classes = torch.zeros((x.shape[0], self.num_classes)).cuda()
             #TODO here absolutely the worst, everything is hardcoded and chaged manually while running notebook!!! 
             # TODO dont use it while training for logging
-            sample_classes[:, -1] = 1
-            print('predicitons', nn.functional.sigmoid(pred[:,[7,14]]))
-            print('target labels', sample_classes[:,[7,14]])
-            loss = +nn.functional.binary_cross_entropy_with_logits(pred[:,[7]], sample_classes[:,[7]], reduction="sum")
             cl_list = ["Atelectasis","Cardiomegaly","Consolidation","Edema","Effusion","Emphysema","Fibrosis", "Hernia","Infiltration", "Mass", "Nodule","Pleural_Thickening","Pneumonia","Pneumothorax","No Finding"]
-            #print([*zip(nn.functional.sigmoid(pred[0]), cl_list)])
+            sample_classes = torch.zeros((x.shape[0], self.num_classes)).cuda()
+            
+            id_class = cl_list.index(pick_class)
+            loss = +nn.functional.binary_cross_entropy_with_logits(pred[:,[id_class]], sample_classes[:,[id_class]], reduction="sum")
+
             loss.backward()
             s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
-            print('max grad from x', x.grad.max())
+            
             model_out = (pred_noise + s_t * x.grad).detach()
+            if t[0]<100:
+                
+                #print(cl_list)
+                # print('all predictins for x pred start', nn.functional.sigmoid(pred))
+                # print('all predictins for orig x', nn.functional.sigmoid(pred_o))
+                print(f'predicitons for x pred start, only class {cl_list[id_class]}', nn.functional.sigmoid(pred[:,[id_class]]))
+                print(f'predicitons for x original, only class {cl_list[id_class]}', nn.functional.sigmoid(pred_o[:,[id_class]]))
+                # print('target label', sample_classes[:,[id_class]])
 
+                print('max grad from x', x[0][0].max())
+                try:
+                    print(x[1][0].max(), x[2][0].max())
+                except:
+                    pass
             #model_out = (pred_noise).detach()
 
         return model_out
@@ -271,15 +284,16 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         return model_out
     
     @torch.no_grad()
-    def p_sample(self, x, c, t, original_img=None, clip_denoised=False, repeat_noise=False,
+    def p_sample(self, x, c, t, original_img=None, pick_class=None, clip_denoised=False, repeat_noise=False,
                  return_codebook_ids=False, quantize_denoised=False, return_x0=False,
                  temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None):
         b, *_, device = *x.shape, x.device
         outputs = self.p_mean_variance(x=x, c=c, t=t, original_img=original_img, clip_denoised=clip_denoised,
                                        return_codebook_ids=return_codebook_ids,
                                        quantize_denoised=quantize_denoised,
-                                       return_x0=return_x0,
+                                       return_x0=return_x0, pick_class=pick_class,
                                        score_corrector=score_corrector, corrector_kwargs=corrector_kwargs)
+        
         if return_codebook_ids:
             raise DeprecationWarning("Support dropped.")
             model_mean, _, model_log_variance, logits = outputs
@@ -305,7 +319,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
     @torch.no_grad()
     def p_sample_loop(self, cond, shape, original_img=None, return_intermediates=False,
                       x_T=None, verbose=True, callback=None, timesteps=None, quantize_denoised=False,
-                      mask=None, x0=None, img_callback=None, start_T=None,
+                      mask=None, x0=None, img_callback=None, pick_class=None, start_T=None,
                       log_every_t=None):
 
         if not log_every_t:
@@ -339,7 +353,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
 
             img = self.p_sample(img, cond, ts,
                                 clip_denoised=self.clip_denoised,original_img=original_img,
-                                quantize_denoised=quantize_denoised)
+                                quantize_denoised=quantize_denoised, pick_class=pick_class)
             if mask is not None:
                 img_orig = self.q_sample(x0, ts)
                 img = img_orig * mask + (1. - mask) * img

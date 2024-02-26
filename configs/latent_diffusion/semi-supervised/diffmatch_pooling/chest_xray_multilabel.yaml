@@ -81,8 +81,8 @@ dataloaders:
   num_labeled: 1500
   pin_memory: True
   persistent_workers: True
-  training_platform: local_sano
-  #training_platform: plgrid # pls check your data paths
+  training_platform: local_sano # pls check your data paths in datasets/chest_xray_nih.py
+  #training_platform: plgrid # pls check your data paths in datasets/chest_xray_nih.py
 
 
 lightning:
@@ -96,12 +96,14 @@ lightning:
       
   callbacks:
     img_logger:
-      batch_frequency: 5000
+      batch_frequency: 1
       max_images: 10
       clamp: True
       increase_log_steps: False
       log_images_kwargs: {
           "N": 10,
           "inpaint": False,
-          "sample_classes": [0,1,2,3,4,5,6,7,8,9,10,11,12,13]
+          "sample_classes": [0,1,2,3,4,5,6,7,8,9,10,11,12,13],
+          "mean": 0.5,
+          "std": 0.5
       }

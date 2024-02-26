@@ -28,6 +28,8 @@ class ChestXRay_nih_bbox(torch.utils.data.Dataset):
         self.df.columns = ["Image Index", "Finding Label", "x", "y", "w", "h"]
         if pick_class:
             self.df = self.df[self.df["Finding Label"]==pick_class].reset_index(drop=True)
+        self.df = self.df.head(3)
+        print(self.df)
 
 
 
@@ -55,6 +57,6 @@ class ChestXRay_nih_bbox(torch.utils.data.Dataset):
   
 
 if __name__ == "__main__":
-    ds = ChestXRay_nih_bbox(pick_class="Cardiomegaly")
+    ds = ChestXRay_nih_bbox(pick_class="Mass")
     print(ds.df)
     print(ds[1][0].shape, ds[1][1], ds[1][2])
