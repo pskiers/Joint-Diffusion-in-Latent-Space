@@ -42,8 +42,6 @@ if __name__ == "__main__":
     model.sampling_method = "unconditional"
     model.gradient_guided_sampling=False
 
-    model.get_sampl()
-
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     nowname = args.prefix + "_" + model.__class__.__name__ + "_" + now
     logdir = path.join(config.model.logdir,"logs", nowname)
