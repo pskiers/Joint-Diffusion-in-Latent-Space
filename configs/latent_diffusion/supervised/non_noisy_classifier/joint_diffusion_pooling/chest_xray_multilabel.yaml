@@ -1,6 +1,6 @@
 model:
   logdir: home/jk/Joint-Diffusion-in-Latent-Space/
-  base_learning_rate: 5.0e-05
+  base_learning_rate: 1.0e-04
   weight_decay: 0.0001
   model_type: joint_latent_diffusion_multilabel
   params:
@@ -13,14 +13,16 @@ model:
     image_size: 32
     channels: 4
     monitor: val/auroc_ema
-    weights: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    #weights: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
     # 15 classes, log
     # weights: [1.065099588, 1.779603253, 1.551821122, 1.873975748, 1.043947633, 1.859830453, 1.916502338, 2.869185932, 0.818237579, 1.396153514, 1.326128693, 1.658934256, 2.072830496, 1.586778408, 0.02886104]
     #14 classes, log
-    # weights: [0.741790821, 1.485960814, 1.253424332, 1.581670469, 0.718735907, 1.567343026, 1.624709854, 2.581797199, 0.464784148, 1.092677857, 1.019675586, 1.363090079, 1.782541339, 1.289286516]
+    #weights: [0.741790821, 1.485960814, 1.253424332, 1.581670469, 0.718735907, 1.567343026, 1.624709854, 2.581797199, 0.464784148, 1.092677857, 1.019675586, 1.363090079, 1.782541339, 1.289286516]
+    # 14 classes sqrt
+    weights: [2.349067037, 5.533251459, 4.233622847, 6.177819776, 2.287536085, 6.076752008, 6.491647465, 19.53883204, 1.707623308, 3.518349097, 3.234728186, 4.80335892, 7.785216056, 4.412078777]
 
     classification_key: 1
-    classification_loss_weight: 0.01
+    classification_loss_weight: 0.001
     augmentations: False
 
     classifier_in_features: 26240
@@ -69,9 +71,9 @@ model:
 
 dataloaders:
   name: chest_xray_nih
-  train_batches: [ 1 ] #96 for RAM40, 196 for RAM80
-  val_batch: 1
-  min_augmentation_ratio: 8
+  train_batches: [ 64 ] #96 for RAM40, 196 for RAM80
+  val_batch: 128
+  min_augmentation_ratio: 0.8
   auto_augment: False
   num_workers: 6
   num_labeled: null
@@ -93,7 +95,7 @@ lightning:
       
   callbacks:
     img_logger:
-      batch_frequency: 1
+      batch_frequency: 5000
       max_images: 10
       clamp: True
       increase_log_steps: False
