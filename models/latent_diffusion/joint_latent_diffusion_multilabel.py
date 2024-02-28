@@ -148,9 +148,9 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
 
 
     def p_mean_variance(self, x, c, t, clip_denoised: bool, original_img=None, pick_class = None, return_codebook_ids=False, quantize_denoised=False,
-                        return_x0=False, score_corrector=None, corrector_kwargs=None):
+                        return_x0=False, score_corrector=None, corrector_kwargs=None, return_pred_o=False):
         if self.sampling_method == "conditional_to_x":
-            return self.grad_guided_p_mean_variance(x, t, clip_denoised, original_img =original_img, pick_class=pick_class)
+            return self.grad_guided_p_mean_variance(x, t, clip_denoised, original_img =original_img, pick_class=pick_class, return_pred_o=return_pred_o)
         elif self.sampling_method == "conditional_to_repr":
             return self.grad_guided_p_mean_variance(x, t, clip_denoised)
         elif self.sampling_method == "unconditional":
@@ -171,12 +171,14 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         else:
             raise NotImplementedError("Sampling method not implemented")
 
-    def grad_guided_p_mean_variance(self, x, t, clip_denoised: bool, original_img = None, pick_class=None):
+    def grad_guided_p_mean_variance(self, x, t, clip_denoised: bool, original_img = None, pick_class=None, return_pred_o=False):
         if self.sampling_method == "conditional_to_x":
-            model_out = self.guided_apply_model(x, t, original_img =original_img, pick_class=pick_class)
+            model_out = self.guided_apply_model(x, t, original_img =original_img, pick_class=pick_class, return_pred_o=return_pred_o)
         elif self.sampling_method == "conditional_to_repr":
             model_out = self.guided_repr_apply_model(x, t)
-
+        
+        if return_pred_o:
+            model_out, pred_o = model_out
         if self.parameterization == "eps":
             x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
         elif self.parameterization == "x0":
@@ -187,10 +189,13 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         if clip_denoised:
             x_recon.clamp_(-1., 1.)
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
-        return model_mean, posterior_variance, posterior_log_variance
+        if return_pred_o:
+            return model_mean, posterior_variance, posterior_log_variance, pred_o
+        else:
+            return model_mean, posterior_variance, posterior_log_variance
 
     @torch.no_grad()
-    def guided_apply_model(self, x: torch.Tensor, t, original_img=None, pick_class='Cardiomegaly'):
+    def guided_apply_model(self, x: torch.Tensor, t, original_img=None, pick_class='Cardiomegaly', return_pred_o=False):
         unet: AdjustedUNet = self.model.diffusion_model
         if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
             return unet.just_reconstruction(x, t)
@@ -230,23 +235,21 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
             
             model_out = (pred_noise + s_t * x.grad).detach()
-            if t[0]<100:
+            #if t[0]<100:
                 
                 #print(cl_list)
                 # print('all predictins for x pred start', nn.functional.sigmoid(pred))
                 # print('all predictins for orig x', nn.functional.sigmoid(pred_o))
-                print(f'predicitons for x pred start, only class {cl_list[id_class]}', nn.functional.sigmoid(pred[:,[id_class]]))
-                print(f'predicitons for x original, only class {cl_list[id_class]}', nn.functional.sigmoid(pred_o[:,[id_class]]))
+                #print(f'predicitons for x pred start, only class {cl_list[id_class]}', nn.functional.sigmoid(pred[:,[id_class]]))
+                #print(f'predicitons for x original, only class {cl_list[id_class]}', nn.functional.sigmoid(pred_o[:,[id_class]]))
                 # print('target label', sample_classes[:,[id_class]])
 
-                print('max grad from x', x[0][0].max())
-                try:
-                    print(x[1][0].max(), x[2][0].max())
-                except:
-                    pass
+                
             #model_out = (pred_noise).detach()
-
-        return model_out
+        if return_pred_o:
+            return model_out, pred_o
+        else:
+            return model_out
 
     @torch.no_grad()
     def guided_repr_apply_model(self, x, t):
@@ -285,20 +288,24 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
     
     @torch.no_grad()
     def p_sample(self, x, c, t, original_img=None, pick_class=None, clip_denoised=False, repeat_noise=False,
-                 return_codebook_ids=False, quantize_denoised=False, return_x0=False,
+                 return_codebook_ids=False, quantize_denoised=False, return_x0=False, return_pred_o=False,
                  temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None):
         b, *_, device = *x.shape, x.device
         outputs = self.p_mean_variance(x=x, c=c, t=t, original_img=original_img, clip_denoised=clip_denoised,
                                        return_codebook_ids=return_codebook_ids,
                                        quantize_denoised=quantize_denoised,
-                                       return_x0=return_x0, pick_class=pick_class,
+                                       return_x0=return_x0, pick_class=pick_class,return_pred_o=return_pred_o,
                                        score_corrector=score_corrector, corrector_kwargs=corrector_kwargs)
+
         
+    
         if return_codebook_ids:
             raise DeprecationWarning("Support dropped.")
             model_mean, _, model_log_variance, logits = outputs
         elif return_x0:
             model_mean, _, model_log_variance, x0 = outputs
+        elif return_pred_o:
+            model_mean, _, model_log_variance, pred_o = outputs
         else:
             model_mean, _, model_log_variance = outputs
 
@@ -310,8 +317,10 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
 
         if return_codebook_ids:
             return model_mean + nonzero_mask * (0.5 * model_log_variance).exp() * noise, logits.argmax(dim=1)
-        if return_x0:
+        elif return_x0:
             return model_mean + nonzero_mask * (0.5 * model_log_variance).exp() * noise, x0
+        elif return_pred_o:
+            return model_mean + nonzero_mask * (0.5 * model_log_variance).exp() * noise, pred_o
         else:
             return model_mean + nonzero_mask * (0.5 * model_log_variance).exp() * noise
         
@@ -320,8 +329,10 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
     def p_sample_loop(self, cond, shape, original_img=None, return_intermediates=False,
                       x_T=None, verbose=True, callback=None, timesteps=None, quantize_denoised=False,
                       mask=None, x0=None, img_callback=None, pick_class=None, start_T=None,
-                      log_every_t=None):
+                      log_every_t=None, return_pred_o=False):
 
+        if return_pred_o:
+            print("[WARNING] models/latent_diffusion/joint_latent_diffusion_multilabel.py, p_sample_loop: return_pred_o not implemented for every case" )
         if not log_every_t:
             log_every_t = self.log_every_t
         device = self.betas.device
@@ -350,10 +361,13 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
                 assert self.model.conditioning_key != 'hybrid'
                 tc = self.cond_ids[ts].to(cond.device)
                 cond = self.q_sample(x_start=cond, t=tc, noise=torch.randn_like(cond))
-
+          
             img = self.p_sample(img, cond, ts,
                                 clip_denoised=self.clip_denoised,original_img=original_img,
-                                quantize_denoised=quantize_denoised, pick_class=pick_class)
+                                quantize_denoised=quantize_denoised, pick_class=pick_class, return_pred_o=return_pred_o)
+            
+            if return_pred_o:
+                img, pred_o = img
             if mask is not None:
                 img_orig = self.q_sample(x0, ts)
                 img = img_orig * mask + (1. - mask) * img
@@ -363,8 +377,62 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             if callback: callback(i)
             if img_callback: img_callback(img, i)
 
+        if return_pred_o:
+            print(['[WARNING] Return_pred_o cannot return intermediates - not impemented!'])
+            return img,pred_o
         if return_intermediates:
             return img, intermediates
         return img
 
 
+
+class JointLatentDiffusionMultilabelAttention(JointLatentDiffusionMultilabel):
+    def __init__(self,
+                 first_stage_config,
+                 cond_stage_config,
+                 attention_config,
+                 classifier_in_features,
+                 classifier_hidden,
+                 num_classes,
+                 dropout=0,
+                 classification_loss_weight=1.0,
+                 classification_key=1,
+                 augmentations=True,
+                 num_timesteps_cond=None,
+                 cond_stage_key="image",
+                 cond_stage_trainable=False,
+                 concat_mode=True,
+                 cond_stage_forward=None,
+                 conditioning_key=None,
+                 scale_factor=1,
+                 scale_by_std=False,
+                 weights=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                 *args,
+                 **kwargs):
+        super().__init__(
+            first_stage_config=first_stage_config,
+            cond_stage_config=cond_stage_config,
+            classifier_in_features=classifier_in_features,
+            classifier_hidden=classifier_hidden,
+            num_classes=num_classes,
+            dropout=dropout,
+            classification_loss_weight=classification_loss_weight,
+            classification_key=classification_key,
+            augmentations=augmentations,
+            num_timesteps_cond=num_timesteps_cond,
+            cond_stage_key=cond_stage_key,
+            cond_stage_trainable=cond_stage_trainable,
+            concat_mode=concat_mode,
+            cond_stage_forward=cond_stage_forward,
+            conditioning_key=conditioning_key,
+            scale_factor=scale_factor,
+            scale_by_std=scale_by_std,
+            weights=weights,
+            *args,
+            **kwargs
+        )
+        self.classifier = RepresentationTransformer(**attention_config)
+
+
+    def transform_representations(self, representations):
+        return representations

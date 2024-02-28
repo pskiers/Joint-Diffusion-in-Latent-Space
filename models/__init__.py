@@ -62,5 +62,7 @@ def get_model_class(name: str):
         return LatentDiffMatchPoolingMultilabel
     elif name == "latent_diffmatch_attention":
         return LatentDiffMatchAttention
+    elif name == "joint_latent_diffusion_attention_multilabel":
+        return JointLatentDiffusionMultilabelAttention
     else:
         raise NotImplementedError(f"Model {name} is not available")

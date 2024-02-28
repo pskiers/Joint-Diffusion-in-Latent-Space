@@ -15,7 +15,6 @@ import PIL
 class ChestXRay_nih_bbox(torch.utils.data.Dataset):
     def __init__(self, mode='train', training_platform: str = 'local_sano',  img_size = 256, pick_class = None) -> None:
         super().__init__()
-        print('BBOX READ AS INT FIX IT')
 
         assert training_platform in ['plgrid', 'local_sano',]
         if training_platform=='plgrid':
@@ -28,8 +27,6 @@ class ChestXRay_nih_bbox(torch.utils.data.Dataset):
         self.df.columns = ["Image Index", "Finding Label", "x", "y", "w", "h"]
         if pick_class:
             self.df = self.df[self.df["Finding Label"]==pick_class].reset_index(drop=True)
-        self.df = self.df.head(3)
-        print(self.df)
 
 
 
