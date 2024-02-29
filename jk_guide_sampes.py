@@ -70,8 +70,8 @@ if __name__=='__main__':
     model_2.eval()
 
     cl_list = ["Atelectasis","Cardiomegaly","Consolidation","Edema","Effusion","Emphysema","Fibrosis", "Hernia","Infiltration", "Mass", "Nodule","Pleural_Thickening","Pneumonia","Pneumothorax","No Finding"]
-    cl_list_loop=cl_list.copy()
-    T = 200
+    cl_list_loop=cl_list[2:]#.copy()
+    T = 500
     num_timesteps = 1000
 
     for class_ in cl_list_loop:
@@ -126,19 +126,19 @@ if __name__=='__main__':
                 if batch>1000:
                     break
                 
-        folder_to_save = "vce_results_baseline"
-        torch.save(torch.cat(x_samples_save, dim=0), f'{folder_to_save}/T{T}_{class_}_x_samples.pt')
-        del x_samples_save
-        torch.save(torch.cat(img_original_save, dim=0), f'{folder_to_save}/T{T}_{class_}_img_original.pt')
-        del img_original_save
-        torch.save(torch.cat(pred_o_save, dim=0), f'{folder_to_save}/T{T}_{class_}_pred_o.pt')
-        del pred_o_save
-        torch.save(torch.cat(pred_o_ext_save, dim=0), f'{folder_to_save}/T{T}_{class_}_pred_o_ext.pt')
-        del pred_o_ext_save
-        torch.save(torch.cat(pred_ext_save, dim=0), f'{folder_to_save}/T{T}_{class_}_pred_ext.pt')
-        del pred_ext_save
-        torch.save(torch.cat(bbox_save, dim=0), f'{folder_to_save}/T{T}_{class_}_bbox.pt')
-        del bbox_save
+            folder_to_save = "vce_results_baseline"
+            torch.save(torch.cat(x_samples_save, dim=0), f'{folder_to_save}/T{T}_{class_}_x_samples.pt')
+            del x_samples_save
+            torch.save(torch.cat(img_original_save, dim=0), f'{folder_to_save}/T{T}_{class_}_img_original.pt')
+            del img_original_save
+            torch.save(torch.cat(pred_o_save, dim=0), f'{folder_to_save}/T{T}_{class_}_pred_o.pt')
+            del pred_o_save
+            torch.save(torch.cat(pred_o_ext_save, dim=0), f'{folder_to_save}/T{T}_{class_}_pred_o_ext.pt')
+            del pred_o_ext_save
+            torch.save(torch.cat(pred_ext_save, dim=0), f'{folder_to_save}/T{T}_{class_}_pred_ext.pt')
+            del pred_ext_save
+            torch.save(torch.cat(bbox_save, dim=0), f'{folder_to_save}/T{T}_{class_}_bbox.pt')
+            del bbox_save
                 
 
 
