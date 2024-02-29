@@ -148,3 +148,4 @@ trash.ipynb
 _job_outputs/
 chest_xray_nih.zip
 vce_results/
+*.zip
