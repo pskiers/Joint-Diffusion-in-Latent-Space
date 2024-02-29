@@ -78,7 +78,7 @@ if __name__=='__main__':
         dataset = ChestXRay_nih_bbox(pick_class=class_)
         if len(dataset)>0:
             print(class_, 'has N samples: ', len(dataset))
-            dl = torch.utils.data.DataLoader(dataset, batch_size=min(len(dataset), 64), shuffle=False)
+            dl = torch.utils.data.DataLoader(dataset, batch_size=min(len(dataset), 128), shuffle=False)
 
             ret = embed_imgs(model, dl)
             batch = 0
@@ -108,26 +108,37 @@ if __name__=='__main__':
                 pred_o_ext = model_2(img_original)
                 pred_ext = model_2(x_samples)
 
-                x_samples_save.append(x_samples.detach().cpu())
-                img_original_save.append(img_original.detach().cpu())
-                pred_o_save.append(pred_o.detach().cpu())
-                pred_o_ext_save.append(pred_o_ext.detach().cpu())
-                pred_ext_save.append(pred_ext.detach().cpu())
-                bbox_save.append(bbox)
+                x_samples_save.append(x_samples.detach().cpu().clone())
+                del x_samples
+                img_original_save.append(img_original.detach().cpu().clone())
+                del img_original
+                pred_o_save.append(pred_o.detach().cpu().clone())
+                del pred_o
+                pred_o_ext_save.append(pred_o_ext.detach().cpu().clone())
+                del pred_o_ext
+                pred_ext_save.append(pred_ext.detach().cpu().clone())
+                del pred_ext
+                bbox_save.append(bbox.clone())
+                del bbox
 
 
                 batch+=1
                 if batch>1000:
                     break
                 
-            folder_to_save = "vce_results_2"
-            torch.save(torch.cat(x_samples_save, dim=0), f'{folder_to_save}/{class_}_T{T}_x_samples.pt')
-            torch.save(torch.cat(img_original_save, dim=0), f'{folder_to_save}/{class_}_T{T}_img_original.pt')
-            torch.save(torch.cat(pred_o_save, dim=0), f'{folder_to_save}/{class_}_T{T}_pred_o.pt')
-            torch.save(torch.cat(pred_o_ext_save, dim=0), f'{folder_to_save}/{class_}_T{T}_pred_o_ext.pt')
-            torch.save(torch.cat(pred_ext_save, dim=0), f'{folder_to_save}/{class_}_T{T}_pred_ext.pt')
-            torch.save(torch.cat(bbox_save, dim=0), f'{folder_to_save}/{class_}_T{T}_bbox.pt')
-
+        folder_to_save = "vce_results_baseline"
+        torch.save(torch.cat(x_samples_save, dim=0), f'{folder_to_save}/T{T}_{class_}_x_samples.pt')
+        del x_samples_save
+        torch.save(torch.cat(img_original_save, dim=0), f'{folder_to_save}/T{T}_{class_}_img_original.pt')
+        del img_original_save
+        torch.save(torch.cat(pred_o_save, dim=0), f'{folder_to_save}/T{T}_{class_}_pred_o.pt')
+        del pred_o_save
+        torch.save(torch.cat(pred_o_ext_save, dim=0), f'{folder_to_save}/T{T}_{class_}_pred_o_ext.pt')
+        del pred_o_ext_save
+        torch.save(torch.cat(pred_ext_save, dim=0), f'{folder_to_save}/T{T}_{class_}_pred_ext.pt')
+        del pred_ext_save
+        torch.save(torch.cat(bbox_save, dim=0), f'{folder_to_save}/T{T}_{class_}_bbox.pt')
+        del bbox_save
                 
 
 
