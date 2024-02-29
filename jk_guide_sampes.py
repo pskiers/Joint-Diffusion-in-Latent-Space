@@ -71,14 +71,14 @@ if __name__=='__main__':
 
     cl_list = ["Atelectasis","Cardiomegaly","Consolidation","Edema","Effusion","Emphysema","Fibrosis", "Hernia","Infiltration", "Mass", "Nodule","Pleural_Thickening","Pneumonia","Pneumothorax","No Finding"]
     cl_list_loop=cl_list.copy()
-    T = 500
+    T = 200
     num_timesteps = 1000
 
     for class_ in cl_list_loop:
         dataset = ChestXRay_nih_bbox(pick_class=class_)
         if len(dataset)>0:
             print(class_, 'has N samples: ', len(dataset))
-            dl = torch.utils.data.DataLoader(dataset, batch_size=min(len(dataset), 128), shuffle=False)
+            dl = torch.utils.data.DataLoader(dataset, batch_size=min(len(dataset), 48), shuffle=False)
 
             ret = embed_imgs(model, dl)
             batch = 0
