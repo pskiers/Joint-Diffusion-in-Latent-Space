@@ -149,3 +149,4 @@ _job_outputs/
 chest_xray_nih.zip
 vce_results/
 *.zip
+vce_results_baseline/
