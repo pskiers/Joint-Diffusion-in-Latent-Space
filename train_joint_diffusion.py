@@ -39,6 +39,13 @@ if __name__ == "__main__":
     model = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
 
     model.learning_rate = config.model.base_learning_rate
+    try:
+        model.classifier_lr = config.model.classifier_lr
+        print(['CLASSIFIER HAS SEPARATE LR'])
+    except:
+        model.classifier_lr=None
+        print(['CLASSIFIER HAS THE SAME LR'])
+
     model.sampling_method = "unconditional"
     model.gradient_guided_sampling=False
 

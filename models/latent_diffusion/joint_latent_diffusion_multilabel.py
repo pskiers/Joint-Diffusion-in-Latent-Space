@@ -9,6 +9,26 @@ from torchmetrics import AUROC
 from ldm.modules.diffusionmodules.util import extract_into_tensor, noise_like
 from tqdm import tqdm
 from pytorch_msssim import ssim
+import torch
+import torch.nn as nn
+import numpy as np
+import pytorch_lightning as pl
+from torch.optim.lr_scheduler import LambdaLR
+from einops import rearrange, repeat
+from contextlib import contextmanager
+from functools import partial
+from tqdm import tqdm
+from torchvision.utils import make_grid
+from pytorch_lightning.utilities.distributed import rank_zero_only
+
+from ldm.util import log_txt_as_img, exists, default, ismap, isimage, mean_flat, count_params, instantiate_from_config
+from ldm.modules.ema import LitEma
+from ldm.modules.distributions.distributions import normal_kl, DiagonalGaussianDistribution
+from ldm.models.autoencoder import VQModelInterface, IdentityFirstStage, AutoencoderKL
+from ldm.modules.diffusionmodules.util import make_beta_schedule, extract_into_tensor, noise_like
+from ldm.models.diffusion.ddim import DDIMSampler
+#TODO remove unused imports!!!
+
 
 class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
     def __init__(self,
@@ -61,7 +81,38 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         self.auroc_train = AUROC(num_classes=14) #self.num_classes-1)
         self.auroc_val = AUROC(num_classes=14) #self.num_classes-1)
         self.BCEweights = torch.Tensor(weights)[:self.num_classes]
-     
+    
+    def configure_optimizers(self):
+        lr = self.learning_rate
+        params = list(self.model.parameters())
+        if self.cond_stage_trainable:
+            print(f"{self.__class__.__name__}: Also optimizing conditioner params!")
+            params = params + list(self.cond_stage_model.parameters())
+        if self.learn_logvar:
+            print('Diffusion model optimizing logvar')
+            params.append(self.logvar)
+        if self.classifier_lr:
+            cl_lr = self.classifier_lr
+            l = [{'params': [*self.model.parameters()], 'lr': lr},
+                 {'params': [*self.classifier.parameters()], 'lr': cl_lr},]
+        else:
+            l = [{'params': [p for p in self.model.named_parameters()], 'lr': lr},]
+
+        opt = torch.optim.AdamW(l, lr=0)
+        if self.use_scheduler:
+            assert 'target' in self.scheduler_config
+            scheduler = instantiate_from_config(self.scheduler_config)
+
+            print("Setting up LambdaLR scheduler...")
+            scheduler = [
+                {
+                    'scheduler': LambdaLR(opt, lr_lambda=scheduler.schedule),
+                    'interval': 'step',
+                    'frequency': 1
+                }]
+            return [opt], scheduler
+        return opt
+    
     
     def do_classification(self, x, t, y):
         unet: AdjustedUNet = self.model.diffusion_model
