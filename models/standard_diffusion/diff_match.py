@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 import wandb
+from tqdm import tqdm
 from einops import rearrange, repeat
 from contextlib import contextmanager
 import kornia as K
@@ -495,6 +496,29 @@ class DiffMatchFixed(DDPM):
 
         model_out = unet.forward_output_blocks(x, None, emb, representations)
         return model_out
+
+    @torch.no_grad()
+    def p_sample_loop(self, shape, return_intermediates=False, x_start=None, t_start=None):
+        device = self.betas.device
+        b = shape[0]
+        img = torch.randn(shape, device=device) if x_start is None else x_start.clone().to(device)
+        num_timesteps = self.num_timesteps if t_start is None else t_start
+        intermediates = [img]
+        for i in tqdm(reversed(range(0, num_timesteps)), desc='Sampling t', total=num_timesteps):
+            img = self.p_sample(img, torch.full((b,), i, device=device, dtype=torch.long),
+                                clip_denoised=self.clip_denoised)
+            if i % self.log_every_t == 0 or i == self.num_timesteps - 1:
+                intermediates.append(img)
+        if return_intermediates:
+            return img, intermediates
+        return img
+
+    @torch.no_grad()
+    def sample(self, batch_size=16, return_intermediates=False, x_start=None, t_start=None):
+        image_size = self.image_size
+        channels = self.channels
+        return self.p_sample_loop((batch_size, channels, image_size, image_size),
+                                  return_intermediates=return_intermediates, x_start=x_start, t_start=t_start)
 
     @torch.no_grad()
     def log_images(self, batch, N=8, n_row=2, sample=True, return_keys=None, **kwargs):
