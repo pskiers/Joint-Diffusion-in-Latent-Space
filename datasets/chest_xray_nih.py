@@ -17,11 +17,13 @@ class ChestXRay_nih(torch.utils.data.Dataset):
         super().__init__()
         self.auto_augment = auto_augment if mode=='train' else False
 
-        assert training_platform in ['plgrid', 'local_sano',]
+        assert training_platform in ['plgrid', 'local_sano', "de"]
         if training_platform=='plgrid':
             data_path = f"{os.environ['SCRATCH']}/chest_xray_nih"
         elif training_platform=='local_sano':
             data_path = "/home/jk/Joint-Diffusion-in-Latent-Space/chest_xray_nih"
+        elif training_platform=='de':
+            data_path = "/data/jan_dubinski/Joint-Diffusion-in-Latent-Space/sano_machines/data"
         
         df = pd.read_csv(os.path.join(data_path, "Data_Entry_2017.csv"))[["Image Index", "Finding Labels"]]
         df = pd.concat([df.drop("Finding Labels", axis=1), df["Finding Labels"].str.get_dummies('|')], axis=1)

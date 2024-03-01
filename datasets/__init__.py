@@ -55,6 +55,16 @@ def get_dataloaders(name: str,
         return non_randaugment_dl(
             train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers, 
             pin_memory=pin_memory, persistent_workers=persistent_workers)
+    elif name=='chest_xray_nih_2perc':
+        train_ds = ChestXRay_nih_ssl(mode='train', 
+                                    training_platform = training_platform, 
+                                    min_augmentation_ratio=min_augmentation_ratio,
+                                    auto_augment = auto_augment, labeled = True)
+        val_ds = ChestXRay_nih(mode='test', training_platform = training_platform)
+        num_classes = 15
+        return non_randaugment_dl(
+            train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers, 
+            pin_memory=pin_memory, persistent_workers=persistent_workers)
     elif name=='chest_xray_nih_ssl':
             labeled_dataset = ChestXRay_nih_ssl(mode='train', 
                                     training_platform = training_platform, 
