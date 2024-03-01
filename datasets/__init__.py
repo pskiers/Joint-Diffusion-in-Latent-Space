@@ -178,7 +178,7 @@ def ssl_randaugment_dl(labeled_dataset, unlabeled_dataset, test_dataset, batch_t
     unlabeled_trainloader = DataLoader(
         unlabeled_dataset,
         sampler=RandomSampler(unlabeled_dataset),
-        batch_size=batch_train*3,
+        batch_size=batch_train*7,
         num_workers=num_workers,
         drop_last=True)
 
