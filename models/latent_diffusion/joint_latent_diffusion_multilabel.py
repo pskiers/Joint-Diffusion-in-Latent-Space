@@ -96,7 +96,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             l = [{'params': [*self.model.parameters()], 'lr': lr},
                  {'params': [*self.classifier.parameters()], 'lr': cl_lr},]
         else:
-            l = [{'params': [p for p in self.model.named_parameters()], 'lr': lr},]
+            l = [{'params': [p for p in self.model.parameters()], 'lr': lr},]
 
         opt = torch.optim.AdamW(l, lr=0)
         if self.use_scheduler:
