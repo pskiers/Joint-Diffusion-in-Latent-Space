@@ -84,10 +84,20 @@ class FIDScoreLogger(Callback):
             if type(batch) in (list, tuple):
                 batch = batch[0]
             else:
-                batch = batch.permute(0, 3, 1, 2)  # TODO all dataloaders should output in one format (b,c,w,h)
+                pass
+                # batch = batch.permute(0, 3, 1, 2)  # TODO all dataloaders should output in one format (b,c,w,h)
             if self.denormalize is not None:
                 batch = self.denormalize(batch)
+
+            # import torchvision as tv
+            # import matplotlib.pyplot as plt
+            # # samples = self.denormalize(batch)
+            # grid = tv.utils.make_grid(batch)
+            # plt.imshow(grid.permute(1, 2, 0))
+            # plt.show()
+            # break
             batch = batch.to(self.device)
+            break
 
             pred = self.activation_model(batch)[0]
 
@@ -105,6 +115,8 @@ class FIDScoreLogger(Callback):
         return pred_arr
 
     def get_model_statistics(self, dataloader, img_key):
+        # self.test_mu = np.zeros((2048,))
+        # self.test_sigma = np.zeros((2048, 2048))
         if self.test_mu is None or self.test_sigma is None:
             act = self.get_activations(dataloader, img_key)
             self.test_mu = np.mean(act, axis=0)
@@ -166,6 +178,11 @@ class FIDScoreLogger(Callback):
             x_samples = samples
         if self.denormalize is not None:
             x_samples = self.denormalize(x_samples)
+        # import torchvision as tv
+        # import matplotlib.pyplot as plt
+        # grid = tv.utils.make_grid(x_samples.cpu())
+        # plt.imshow(grid.permute(1, 2, 0))
+        # plt.show()
         x_samples = x_samples.to(self.device)
 
         pred = self.activation_model(x_samples)[0]

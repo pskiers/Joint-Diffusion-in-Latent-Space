@@ -4,8 +4,8 @@ from omegaconf import OmegaConf
 import argparse
 import torch
 import pytorch_lightning as pl
-from models import ClassifierOnLatentDiffusion, AttentionOnLatentDiffusion
-from datasets import AdjustedMNIST, AdjustedSVHN
+from models import ClassifierOnLatentDiffusion, AttentionOnLatentDiffusion, FixMatch
+from datasets import AdjustedMNIST, AdjustedSVHN, AdjustedCIFAR10
 from os import listdir, path
 import datetime
 from callbacks import ImageLogger, CUDACallback, SetupCallback, FIDScoreLogger
@@ -21,8 +21,8 @@ if __name__ == "__main__":
     trainer_opt = argparse.Namespace(**trainer_config)
     lightning_config.trainer = trainer_config
 
-    train_ds = AdjustedSVHN(train="train")
-    test_ds = AdjustedSVHN(train="test")
+    train_ds = AdjustedCIFAR10(train="train")
+    test_ds = AdjustedCIFAR10(train="test")
     train_ds, validation_ds = torch.utils.data.random_split(train_ds, [len(train_ds)-len(test_ds), len(test_ds)], generator=torch.Generator().manual_seed(42))
 
     train_dl = torch.utils.data.DataLoader(train_ds, batch_size=256, shuffle=True, num_workers=0, drop_last=True)

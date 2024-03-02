@@ -30,18 +30,18 @@ if __name__ == "__main__":
     args = parser.parse_args()
     config_path = str(args.path)
     checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
-    # checkpoint_path = "./cl_cifar10.ckpt"
+    # checkpoint_path = None
     old_generator_path = str(args.old) if args.old is not None else None
-    # old_generator_path = "./cl_cifar10.ckpt"
+    # old_generator_path = None
     new_generator_path = str(args.new) if args.new is not None else None
-    # new_generator_path = "./cl_cifar10.ckpt"
+    # new_generator_path = None
     current_task = args.task
-    # current_task = 1
+    # current_task = 2
     tasks_learned = args.learned if args.learned is not None else []
-    # tasks_learned = [0]
+    # tasks_learned = []
 
     config = OmegaConf.load(config_path)
-    # config = OmegaConf.load("configs/standard_diffusion/continual_learning/joint_diffusion_pooling/cifar10.yaml")
+    # config = OmegaConf.load("configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml")
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
@@ -109,7 +109,8 @@ if __name__ == "__main__":
             "filename": "{epoch:06}",
             "verbose": True,
             "save_last": True,
-            "mode": "max"
+            "mode": "max",
+            "every_n_train_steps": 10000
         }
     }
     if hasattr(model, "monitor"):
