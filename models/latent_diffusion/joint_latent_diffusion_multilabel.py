@@ -81,7 +81,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         self.auroc_train = AUROC(num_classes=14) #self.num_classes-1)
         self.auroc_val = AUROC(num_classes=14) #self.num_classes-1)
         self.BCEweights = torch.Tensor(weights)[:self.num_classes]
-    
+
     def configure_optimizers(self):
         lr = self.learning_rate
         params = list(self.model.parameters())
@@ -112,28 +112,26 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
                 }]
             return [opt], scheduler
         return opt
-    
-    
+
     def do_classification(self, x, t, y):
         unet: AdjustedUNet = self.model.diffusion_model
         representations = unet.just_representations(x, t, pooled=False)
         representations = self.transform_representations(representations)
         y_pred = self.classifier(representations)
-        
-        #skip last column if num classes < len(y_true) - we want to skip no findings label. BCE weights have to be adjusted!!!
-        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float()[:,:self.num_classes], pos_weight=self.BCEweights.to(self.device))
-        accuracy = accuracy_score(y[:,:self.num_classes].cpu(), y_pred.cpu()>=0.5)
-        return loss, accuracy, y_pred
 
+        #skip last column if num classes < len(y_true) - we want to skip no findings label. BCE weights have to be adjusted!!!
+        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float()[:, :self.num_classes], pos_weight=self.BCEweights.to(self.device))
+        accuracy = accuracy_score(y[:, :self.num_classes].cpu(), y_pred.cpu()>=0.5)
+        return loss, accuracy, y_pred
 
     def train_classification_step(self, batch, loss):
         loss_dict = {}
 
         x, y = self.get_train_classification_input(batch, self.first_stage_key)
         t = torch.zeros((x.shape[0],), device=self.device).long()
-            
+
         loss_classification, accuracy, y_pred = self.do_classification(x, t, y)
-        
+
         if y_pred.shape[1]!=y.shape[1]: #means one class less in training
             self.auroc_train.update(y_pred, y[:,:-1])
         else:
@@ -147,8 +145,6 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         loss_dict.update({'train/accuracy': accuracy})
         self.log_dict(loss_dict, prog_bar=True,
                       logger=True, on_step=True, on_epoch=True)
-
-
         return loss
 
     @torch.no_grad()
@@ -158,12 +154,11 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         x_diff, c = self.get_input(batch, self.first_stage_key)
 
         loss, loss_dict_no_ema = self(x_diff, c)
-        loss_cls, accuracy, _ = self.do_classification(x, t, y)            
+        loss_cls, accuracy, _ = self.do_classification(x, t, y)
 
         loss_dict_no_ema.update({'val/loss_classification': loss_cls})
         loss_dict_no_ema.update({'val/loss_full': loss + loss_cls})
         loss_dict_no_ema.update({'val/accuracy': accuracy})
-
 
         with self.ema_scope():
             loss, loss_dict_ema = self(x_diff, c)
@@ -197,7 +192,6 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             on_epoch=True
         )
 
-
     def p_mean_variance(self, x, c, t, clip_denoised: bool, original_img=None, pick_class = None, return_codebook_ids=False, quantize_denoised=False,
                         return_x0=False, score_corrector=None, corrector_kwargs=None, return_pred_o=False):
         if self.sampling_method == "conditional_to_x":
@@ -227,7 +221,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             model_out = self.guided_apply_model(x, t, original_img =original_img, pick_class=pick_class, return_pred_o=return_pred_o)
         elif self.sampling_method == "conditional_to_repr":
             model_out = self.guided_repr_apply_model(x, t)
-        
+
         if return_pred_o:
             model_out, pred_o = model_out
         if self.parameterization == "eps":
@@ -274,20 +268,20 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             pred_o = self.classifier(pooled_representations_o)
 
             x.retain_grad()
-            #TODO here absolutely the worst, everything is hardcoded and chaged manually while running notebook!!! 
+            #TODO here absolutely the worst, everything is hardcoded and chaged manually while running notebook!!!
             # TODO dont use it while training for logging
             cl_list = ["Atelectasis","Cardiomegaly","Consolidation","Edema","Effusion","Emphysema","Fibrosis", "Hernia","Infiltration", "Mass", "Nodule","Pleural_Thickening","Pneumonia","Pneumothorax","No Finding"]
             sample_classes = torch.zeros((x.shape[0], self.num_classes)).cuda()
-            
+
             id_class = cl_list.index(pick_class)
             loss = +nn.functional.binary_cross_entropy_with_logits(pred[:,[id_class]], sample_classes[:,[id_class]], reduction="sum")
 
             loss.backward()
             s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
-            
+
             model_out = (pred_noise + s_t * x.grad).detach()
             #if t[0]<100:
-                
+
                 #print(cl_list)
                 # print('all predictins for x pred start', nn.functional.sigmoid(pred))
                 # print('all predictins for orig x', nn.functional.sigmoid(pred_o))
@@ -295,7 +289,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
                 #print(f'predicitons for x original, only class {cl_list[id_class]}', nn.functional.sigmoid(pred_o[:,[id_class]]))
                 # print('target label', sample_classes[:,[id_class]])
 
-                
+
             #model_out = (pred_noise).detach()
         if return_pred_o:
             return model_out, pred_o
@@ -336,7 +330,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
 
         model_out = unet.forward_output_blocks(x, None, emb, representations)
         return model_out
-    
+
     @torch.no_grad()
     def p_sample(self, x, c, t, original_img=None, pick_class=None, clip_denoised=False, repeat_noise=False,
                  return_codebook_ids=False, quantize_denoised=False, return_x0=False, return_pred_o=False,
@@ -348,8 +342,8 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
                                        return_x0=return_x0, pick_class=pick_class,return_pred_o=return_pred_o,
                                        score_corrector=score_corrector, corrector_kwargs=corrector_kwargs)
 
-        
-    
+
+
         if return_codebook_ids:
             raise DeprecationWarning("Support dropped.")
             model_mean, _, model_log_variance, logits = outputs
@@ -374,7 +368,6 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             return model_mean + nonzero_mask * (0.5 * model_log_variance).exp() * noise, pred_o
         else:
             return model_mean + nonzero_mask * (0.5 * model_log_variance).exp() * noise
-        
 
     @torch.no_grad()
     def p_sample_loop(self, cond, shape, original_img=None, return_intermediates=False,
@@ -412,11 +405,11 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
                 assert self.model.conditioning_key != 'hybrid'
                 tc = self.cond_ids[ts].to(cond.device)
                 cond = self.q_sample(x_start=cond, t=tc, noise=torch.randn_like(cond))
-          
+
             img = self.p_sample(img, cond, ts,
                                 clip_denoised=self.clip_denoised,original_img=original_img,
                                 quantize_denoised=quantize_denoised, pick_class=pick_class, return_pred_o=return_pred_o)
-            
+
             if return_pred_o:
                 img, pred_o = img
             if mask is not None:
@@ -434,7 +427,6 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         if return_intermediates:
             return img, intermediates
         return img
-
 
 
 class JointLatentDiffusionMultilabelAttention(JointLatentDiffusionMultilabel):
@@ -483,7 +475,6 @@ class JointLatentDiffusionMultilabelAttention(JointLatentDiffusionMultilabel):
             **kwargs
         )
         self.classifier = RepresentationTransformer(**attention_config)
-
 
     def transform_representations(self, representations):
         return representations
