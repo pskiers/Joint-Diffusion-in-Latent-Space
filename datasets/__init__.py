@@ -37,47 +37,59 @@ def get_dataloaders(name: str,
                     pin_memory: bool = False,
                     persistent_workers: bool = False,
                     training_platform: str = 'plgrid',
-                     min_augmentation_ratio:str = 0.8,
-                     auto_augment = False):
+                    min_augmentation_ratio: str = 0.8,
+                    auto_augment=False,
+                    augment_type=None):
     if name == "cifar10":
         train_ds = AdjustedCIFAR10(train=True)
         val_ds = AdjustedCIFAR10(train=False)
         num_classes = 10
         return non_randaugment_dl(
             train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers)
-    elif name=='chest_xray_nih':
-        train_ds = ChestXRay_nih(mode='train', 
-                                 training_platform = training_platform, 
-                                 min_augmentation_ratio=min_augmentation_ratio,
-                                 auto_augment = auto_augment)
-        val_ds = ChestXRay_nih(mode='test', training_platform = training_platform)
+    elif name == 'chest_xray_nih':
+        train_ds = ChestXRay_nih(
+            mode='train',
+            training_platform=training_platform,
+            min_augmentation_ratio=min_augmentation_ratio,
+            auto_augment=auto_augment
+        )
+        val_ds = ChestXRay_nih(mode='test', training_platform=training_platform)
         num_classes = 15
         return non_randaugment_dl(
-            train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers, 
+            train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers,
             pin_memory=pin_memory, persistent_workers=persistent_workers)
-    elif name=='chest_xray_nih_2perc':
-        train_ds = ChestXRay_nih_ssl(mode='train', 
-                                    training_platform = training_platform, 
-                                    min_augmentation_ratio=min_augmentation_ratio,
-                                    auto_augment = auto_augment, labeled = True)
-        val_ds = ChestXRay_nih(mode='test', training_platform = training_platform)
+    elif name == 'chest_xray_nih_2perc':
+        train_ds = ChestXRay_nih_ssl(
+            mode='train',
+            training_platform=training_platform,
+            min_augmentation_ratio=min_augmentation_ratio,
+            auto_augment=auto_augment,
+            labeled=True
+        )
+        val_ds = ChestXRay_nih(mode='test', training_platform=training_platform)
         num_classes = 15
         return non_randaugment_dl(
-            train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers, 
+            train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers,
             pin_memory=pin_memory, persistent_workers=persistent_workers)
-    elif name=='chest_xray_nih_ssl':
-            labeled_dataset = ChestXRay_nih_ssl(mode='train', 
-                                    training_platform = training_platform, 
-                                    min_augmentation_ratio=min_augmentation_ratio,
-                                    auto_augment = auto_augment, labeled = True)
-            unlabeled_dataset = ChestXRay_nih_ssl(mode='train', 
-                                    training_platform = training_platform, 
-                                    min_augmentation_ratio=min_augmentation_ratio,
-                                    auto_augment = auto_augment, labeled = False)
-            test_dataset = ChestXRay_nih_ssl(mode='test', training_platform = training_platform)
-            num_classes = 15
-            return ssl_randaugment_dl(labeled_dataset, unlabeled_dataset, test_dataset, train_batches[0], val_batch, num_workers)
-    
+    elif name == 'chest_xray_nih_ssl':
+        labeled_dataset = ChestXRay_nih_ssl(
+            mode='train',
+            training_platform=training_platform,
+            min_augmentation_ratio=min_augmentation_ratio,
+            augment_type=augment_type,
+            labeled=True
+        )
+        unlabeled_dataset = ChestXRay_nih_ssl(
+            mode='train',
+            training_platform=training_platform,
+            min_augmentation_ratio=min_augmentation_ratio,
+            augment_type=augment_type,
+            labeled=False
+        )
+        test_dataset = ChestXRay_nih_ssl(mode='test', training_platform=training_platform)
+        num_classes = 15
+        return ssl_randaugment_dl(labeled_dataset, unlabeled_dataset, test_dataset, train_batches[0], val_batch, num_workers)
+
     # elif name=='chest_xray_nih_64':
     #     train_ds = ChestXRay_nih_64(mode='train')
     #     val_ds = ChestXRay_nih_64(mode='test')
