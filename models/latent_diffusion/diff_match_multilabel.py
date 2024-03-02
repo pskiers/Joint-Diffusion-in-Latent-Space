@@ -174,7 +174,7 @@ class LatentDiffMatchPoolingMultilabel(JointLatentDiffusionMultilabel):
         loss_dict.update({'train/ssl_accuracy': accuracy})
         for i in range(mask.shape[1]):
             accuracy = torch.sum(
-                (torch.sigmoid(preds_strong[:, i].detach() >= 0.5).long() == targets_u[:, i].long()) * mask[:, i]
+                ((torch.sigmoid(preds_strong[:, i].detach()) >= 0.5).long() == targets_u[:, i].long()) * mask[:, i]
             ) / mask[:, i].sum() if mask[:, i].sum() > 0 else 0
             loss_dict.update({f'train/ssl_class_{i}_accuracy': mask[:, i].max().item()})
         self.log_dict(loss_dict, prog_bar=True,
