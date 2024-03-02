@@ -69,13 +69,13 @@ dataloaders:
   train_batches: [8] #for laebeled. unlabeled size is multiplied by mu
   val_batch: 64
   min_augmentation_ratio: 8
-  augment_type: "med_augmentations"
+  augment_type: "fixmatch"
   num_workers: 6
   num_labeled: 1500
   pin_memory: True
   persistent_workers: True
-  training_platform: local_sano # pls check your data paths in datasets/chest_xray_nih.py
-  #training_platform: plgrid # pls check your data paths in datasets/chest_xray_nih.py
+  # training_platform: local_sano # pls check your data paths in datasets/chest_xray_nih.py
+  training_platform: plgrid # pls check your data paths in datasets/chest_xray_nih.py
 
 
 lightning:

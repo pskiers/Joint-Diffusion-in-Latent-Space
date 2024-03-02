@@ -24,7 +24,7 @@ model:
     classification_loss_weight: 0.01
     augmentations: False
 
-    classifier_in_features: 4224
+    classifier_in_features: 4928
     classifier_hidden: 2048
     num_classes: 14 # we can have 15 with last column 'no findings', or 14 without. AUROC always for 14- hardcoded
     dropout: 0.3
@@ -35,7 +35,7 @@ model:
         image_size: 32
         in_channels: 4
         out_channels: 4
-        model_channels: 192
+        model_channels: 224
         attention_resolutions: [ 4,2,1 ]
         num_res_blocks: 2
         channel_mult: [ 1, 2, 4]
@@ -74,8 +74,8 @@ dataloaders:
   num_labeled: 1500
   pin_memory: True
   persistent_workers: True
-  training_platform: local_sano # pls check your data paths in datasets/chest_xray_nih.py
-  #training_platform: plgrid # pls check your data paths in datasets/chest_xray_nih.py
+  # training_platform: local_sano # pls check your data paths in datasets/chest_xray_nih.py
+  training_platform: plgrid # pls check your data paths in datasets/chest_xray_nih.py
 
 
 lightning:
