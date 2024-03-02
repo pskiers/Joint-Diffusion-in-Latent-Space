@@ -152,3 +152,4 @@ vce_results/
 vce_results_baseline/
 sano_machines/
 slurm/
+vce_*/*

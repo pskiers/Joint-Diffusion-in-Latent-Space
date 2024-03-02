@@ -49,10 +49,17 @@ if __name__=='__main__':
     # config = OmegaConf.load("logs/a7_jd_lr10_4_bcew_JointLatentDiffusionMultilabel_2024-02-09T03-14-54/configs/config.yaml")
     # config.model.params["ckpt_path"] = f"logs/a7_jd_lr10_4_bcew_JointLatentDiffusionMultilabel_2024-02-09T03-14-54/checkpoints/last.ckpt"
 
-    config = OmegaConf.load("logs/a8_jd_lr10_4_14cls_JointLatentDiffusionMultilabel_2024-02-09T07-02-07/configs/config.yaml")
-    config.model.params["ckpt_path"] = f"logs/a8_jd_lr10_4_14cls_JointLatentDiffusionMultilabel_2024-02-09T07-02-07/checkpoints/last.ckpt"
+    # config = OmegaConf.load("logs/a8_jd_lr10_4_14cls_JointLatentDiffusionMultilabel_2024-02-09T07-02-07/configs/config.yaml")
+    # config.model.params["ckpt_path"] = f"logs/a8_jd_lr10_4_14cls_JointLatentDiffusionMultilabel_2024-02-09T07-02-07/checkpoints/last.ckpt"
+
+    config = OmegaConf.load("logs/a21_bcews14cls_lr10_4_cllr10_5_clwe10_2_encauto_JointLatentDiffusionMultilabel_2024-03-01T19-12-04-copy/configs/config.yaml")
+    config.model.params["ckpt_path"] = f"logs/a21_bcews14cls_lr10_4_cllr10_5_clwe10_2_encauto_JointLatentDiffusionMultilabel_2024-03-01T19-12-04-copy/checkpoints/epoch=000016.ckpt"
+
 
     model = JointLatentDiffusionMultilabel(**config.model.get("params", dict()))
+    print("WARNING CHECK GUIDANCE IN JOINT DIFFUSION FILE!!! WE tested scale 0 hardcoded")
+    print("WARNING CHECK GUIDANCE IN JOINT DIFFUSION FILE!!! WE tested guide to 1 hardcoded")
+
     model.sampling_method='conditional_to_x'
     model.to("cuda")
     model.eval()
@@ -70,11 +77,14 @@ if __name__=='__main__':
     model_2.eval()
 
     cl_list = ["Atelectasis","Cardiomegaly","Consolidation","Edema","Effusion","Emphysema","Fibrosis", "Hernia","Infiltration", "Mass", "Nodule","Pleural_Thickening","Pneumonia","Pneumothorax","No Finding"]
-    cl_list_loop=cl_list[2:]#.copy()
+    cl_list_loop=cl_list.copy()
     T = 500
     num_timesteps = 1000
 
     for class_ in cl_list_loop:
+        print("WARNING CHECK GUIDANCE IN JOINT DIFFUSION FILE!!! WE tested scale 0 hardcoded")
+        print("WARNING CHECK GUIDANCE IN JOINT DIFFUSION FILE!!! WE tested guide to 1 hardcoded")
+
         dataset = ChestXRay_nih_bbox(pick_class=class_)
         if len(dataset)>0:
             print(class_, 'has N samples: ', len(dataset))
@@ -126,7 +136,7 @@ if __name__=='__main__':
                 if batch>1000:
                     break
                 
-            folder_to_save = "vce_results_baseline"
+            folder_to_save = "vce_guide_to_1"
             torch.save(torch.cat(x_samples_save, dim=0), f'{folder_to_save}/T{T}_{class_}_x_samples.pt')
             del x_samples_save
             torch.save(torch.cat(img_original_save, dim=0), f'{folder_to_save}/T{T}_{class_}_img_original.pt')
