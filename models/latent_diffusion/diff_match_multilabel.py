@@ -166,9 +166,9 @@ class LatentDiffMatchPoolingMultilabel(JointLatentDiffusionMultilabel):
         loss_dict.update({'train/ssl_above_threshold': mask.mean().item()})
         for i in range(mask.shape[1]):
             loss_dict.update({f'train/ssl_class_{i}_above_threshold': mask[:, i].mean().item()})
-        loss_dict.update({'train/ssl_max_confidence': mask.max().item()})
-        for i in range(mask.shape[1]):
-            loss_dict.update({f'train/ssl_class_{i}_max_confidence': mask[:, i].max().item()})
+        # loss_dict.update({'train/ssl_max_confidence': mask.max().item()})
+        # for i in range(mask.shape[1]):
+        #     loss_dict.update({f'train/ssl_class_{i}_max_confidence': mask[:, i].max().item()})
         loss_dict.update({'train/loss_ssl_classification': ssl_loss})
         loss_dict.update({'train/loss': loss})
         loss_dict.update({'train/ssl_accuracy': accuracy})
@@ -176,7 +176,7 @@ class LatentDiffMatchPoolingMultilabel(JointLatentDiffusionMultilabel):
             accuracy = torch.sum(
                 ((torch.sigmoid(preds_strong[:, i].detach()) >= 0.5).long() == targets_u[:, i].long()) * mask[:, i]
             ) / mask[:, i].sum() if mask[:, i].sum() > 0 else 0
-            loss_dict.update({f'train/ssl_class_{i}_accuracy': mask[:, i].max().item()})
+            loss_dict.update({f'train/ssl_class_{i}_accuracy': accuracy})
         self.log_dict(loss_dict, prog_bar=True,
                       logger=True, on_step=True, on_epoch=True)
         return loss

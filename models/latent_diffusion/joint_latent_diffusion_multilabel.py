@@ -154,11 +154,16 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         x_diff, c = self.get_input(batch, self.first_stage_key)
 
         loss, loss_dict_no_ema = self(x_diff, c)
-        loss_cls, accuracy, _ = self.do_classification(x, t, y)
+        loss_cls, accuracy, preds = self.do_classification(x, t, y)
 
         loss_dict_no_ema.update({'val/loss_classification': loss_cls})
         loss_dict_no_ema.update({'val/loss_full': loss + loss_cls})
         loss_dict_no_ema.update({'val/accuracy': accuracy})
+        for i in range(preds.shape[1]):
+            accuracy = torch.sum(
+                ((torch.sigmoid(preds[:, i].detach()) >= 0.5).long() == y[:, i].long())
+            ) / len(preds)
+            loss_dict_no_ema.update({f'val/class_{i}_accuracy': accuracy})
 
         with self.ema_scope():
             loss, loss_dict_ema = self(x_diff, c)
@@ -170,12 +175,16 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
                 self.auroc_val.update(y_pred[:,:-1], y[:,:-1])
 
             self.log('val/auroc_ema', self.auroc_val, on_step=False, on_epoch=True)
-
             loss_dict_ema.update({'val/loss_classification': loss_cls})
             loss_dict_ema.update({'val/loss_full': loss + loss_cls})
             loss_dict_ema.update({'val/accuracy': accuracy})
             loss_dict_ema = {
                 key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
+            for i in range(y_pred.shape[1]):
+                accuracy = torch.sum(
+                    ((torch.sigmoid(y_pred[:, i].detach()) >= 0.5).long() == y[:, i].long())
+                ) / len(y_pred)
+                loss_dict_no_ema.update({f'val/class_{i}_accuracy': accuracy})
 
         self.log_dict(
             loss_dict_no_ema,
