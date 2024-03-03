@@ -85,7 +85,7 @@ lightning:
     max_steps: 1000000
     gpus: -1
     accelerator: ddp
-    accumulate_grad_batches: 4
+    accumulate_grad_batches: 8
 
   callbacks:
     img_logger:
