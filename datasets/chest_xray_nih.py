@@ -18,7 +18,7 @@ class ChestXRay_nih(torch.utils.data.Dataset):
         super().__init__()
         self.auto_augment = auto_augment if mode=='train' else False
 
-        assert training_platform in ['plgrid', 'local_sano', "de"]
+        assert training_platform in ['plgrid', 'local_sano', "de", "local_pawel"]
         if training_platform =='plgrid':
             data_path = f"{os.environ['SCRATCH']}/chest_xray_nih"
         elif training_platform=='local_sano':
