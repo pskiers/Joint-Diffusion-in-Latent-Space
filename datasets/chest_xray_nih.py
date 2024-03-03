@@ -66,8 +66,8 @@ class ChestXRay_nih(torch.utils.data.Dataset):
                     ])
                 else:
                     self.transform = A.Compose([
-                        A.RandomResizedCrop(width=img_size, height=img_size, scale=(min_augmentation_ratio, 1.0), ratio=(0.75, 1.33)),
-                        A.Rotate(15),
+                        A.RandomResizedCrop(width=img_size, height=img_size, scale=(min_augmentation_ratio, 1.0), ratio=(0.9, 1.1)),
+                        A.Rotate(5),
                         A.HorizontalFlip(p=0.5),
                         A.Normalize(mean=0.5, std=0.5),
                     ])

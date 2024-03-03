@@ -364,6 +364,7 @@ class SetupCallback(Callback):
 
     def on_pretrain_routine_start(self, trainer, pl_module):
         if trainer.global_rank == 0:
+            print('RANK 0 SHOULD CREATE LOGDIR')
             # Create logdirs and save configs
             os.makedirs(self.logdir, exist_ok=True)
             os.makedirs(self.ckptdir, exist_ok=True)
