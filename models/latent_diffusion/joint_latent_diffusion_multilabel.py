@@ -483,6 +483,8 @@ class JointLatentDiffusionMultilabelAttention(JointLatentDiffusionMultilabel):
             **kwargs
         )
         self.classifier = RepresentationTransformer(**attention_config)
+        self.init_ema()
+        self.init_ckpt(**kwargs)
 
 
     def transform_representations(self, representations):
