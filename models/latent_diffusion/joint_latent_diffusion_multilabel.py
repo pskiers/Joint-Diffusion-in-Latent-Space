@@ -268,7 +268,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             pred = self.classifier(pooled_representations)
 
             representations_o = unet.just_representations(
-                original_img, torch.zeros(len(original_img)).cuda(), context=None, pooled=False)
+                original_img, torch.ones(len(original_img)).cuda(), context=None, pooled=False)
             pooled_representations_o = self.transform_representations(
                 representations_o)
             pred_o = self.classifier(pooled_representations_o)
@@ -277,7 +277,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             #TODO here absolutely the worst, everything is hardcoded and chaged manually while running notebook!!! 
             # TODO dont use it while training for logging
             cl_list = ["Atelectasis","Cardiomegaly","Consolidation","Edema","Effusion","Emphysema","Fibrosis", "Hernia","Infiltration", "Mass", "Nodule","Pleural_Thickening","Pneumonia","Pneumothorax","No Finding"]
-            sample_classes = torch.ones((x.shape[0], self.num_classes)).cuda()
+            sample_classes = torch.zeros((x.shape[0], self.num_classes)).cuda()
             #TODO sample classes 0 / 1 parametrize check!!!
             id_class = cl_list.index(pick_class)
             loss = +nn.functional.binary_cross_entropy_with_logits(pred[:,[id_class]], sample_classes[:,[id_class]], reduction="sum")

@@ -52,8 +52,8 @@ if __name__=='__main__':
     # config = OmegaConf.load("logs/a8_jd_lr10_4_14cls_JointLatentDiffusionMultilabel_2024-02-09T07-02-07/configs/config.yaml")
     # config.model.params["ckpt_path"] = f"logs/a8_jd_lr10_4_14cls_JointLatentDiffusionMultilabel_2024-02-09T07-02-07/checkpoints/last.ckpt"
 
-    config = OmegaConf.load("logs/a21_bcews14cls_lr10_4_cllr10_5_clwe10_2_encauto_JointLatentDiffusionMultilabel_2024-03-01T19-12-04-copy/configs/config.yaml")
-    config.model.params["ckpt_path"] = f"logs/a21_bcews14cls_lr10_4_cllr10_5_clwe10_2_encauto_JointLatentDiffusionMultilabel_2024-03-01T19-12-04-copy/checkpoints/epoch=000016.ckpt"
+    config = OmegaConf.load("logs/a23_bcewa14cls_lr10_4_cllr10_5_clwe10_2_encauto_ch224_JointLatentDiffusionMultilabel_2024-03-02T19-12-35/configs/config.yaml")
+    config.model.params["ckpt_path"] = f"logs/a23_bcewa14cls_lr10_4_cllr10_5_clwe10_2_encauto_ch224_JointLatentDiffusionMultilabel_2024-03-02T19-12-35/checkpoints/epoch=000015.ckpt"
 
 
     model = JointLatentDiffusionMultilabel(**config.model.get("params", dict()))
@@ -64,7 +64,7 @@ if __name__=='__main__':
     model.to("cuda")
     model.eval()
 
-    model.sample_grad_scale=40
+    model.sample_grad_scale=100
 
     torch.set_printoptions(sci_mode=False)
     config = OmegaConf.load("/home/jk/Joint-Diffusion-in-Latent-Space/logs/d14_resnet_aug8_100_MultilabelClassifier_2024-02-08T23-03-18/configs/config.yaml")
@@ -136,7 +136,7 @@ if __name__=='__main__':
                 if batch>1000:
                     break
                 
-            folder_to_save = "vce_guide_to_1"
+            folder_to_save = "vce_guide_to_1_weighted"
             torch.save(torch.cat(x_samples_save, dim=0), f'{folder_to_save}/T{T}_{class_}_x_samples.pt')
             del x_samples_save
             torch.save(torch.cat(img_original_save, dim=0), f'{folder_to_save}/T{T}_{class_}_img_original.pt')
