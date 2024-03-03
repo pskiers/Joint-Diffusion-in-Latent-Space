@@ -18,6 +18,7 @@ from .svhn import AdjustedSVHN
 from .gtsrb import GTSRB
 from .utils import equal_labels_random_split, cl_class_split
 from .fixmatch_cifar import DATASET_GETTERS
+from pytorch_multilabel_balanced_sampler.samplers import RandomClassSampler, ClassCycleSampler, LeastSampledClassSampler
 
 
 @dataclass
@@ -243,15 +244,27 @@ def non_randaugment_dl(train_ds: torch.utils.data.Dataset,
     else:
         if len(train_batches) != 1:
             raise ValueError("Need 1 train batch size - supervised batch size")
+        
+        labels_for_sampler = torch.tensor(train_ds.final_image_df.loc[:, [*train_ds.labels, "no_finding"]].to_numpy(dtype=int))
         train_dl = torch.utils.data.DataLoader(
             train_ds,
             batch_size=train_batches[0],
-            shuffle=True,
             num_workers=num_workers,
             drop_last=True,
             pin_memory=pin_memory,
-            persistent_workers = persistent_workers
+            persistent_workers = persistent_workers,
+            sampler = RandomClassSampler(labels=labels_for_sampler)
         )
+
+        # train_dl = torch.utils.data.DataLoader(
+        #     train_ds,
+        #     batch_size=train_batches[0],
+        #     shuffle=True,
+        #     num_workers=num_workers,
+        #     drop_last=True,
+        #     pin_memory=pin_memory,
+        #     persistent_workers = persistent_workers,
+        # )
 
     valid_dl = torch.utils.data.DataLoader(
         val_ds,
