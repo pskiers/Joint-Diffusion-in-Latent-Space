@@ -81,10 +81,9 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         self.auroc_train = AUROC(num_classes=14) #self.num_classes-1)
         self.auroc_val = AUROC(num_classes=14) #self.num_classes-1)
         
-        # TODO this is the worst BUT FOR SOME REASONS my torch lightnig couldn't log the metric in ddp
-        # neither as non-aggregated, manually computed and accessed in self.on_validation_epoch_end() - mode should be passed but no option to pass it
-        # nor as dict/list of separate metrics - attribute name not available
-        # pls somebody fix this, I spent long time on this and gave up
+        # TODO this is the worst BUT FOR SOME REASON torch lightnig couldn't log the metric in non-ddp mode
+        # neither as non-aggregated, manually metric.compute() and accessed in self.on_validation_epoch_end() (no mode specified)
+        # nor as dict/list of separate metrics. Sth with lihghtning version.
         self.auroc_val_class_0 = AUROC(num_classes=1)
         self.auroc_val_class_1 = AUROC(num_classes=1)
         self.auroc_val_class_2 = AUROC(num_classes=1)
@@ -202,10 +201,9 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
                 self.auroc_val.update(y_pred[:,:-1], y[:,:-1])
             self.log('val/auroc_ema', self.auroc_val, on_step=False, on_epoch=True, sync_dist=True)
             
-            # TODO this is the worst BUT FOR SOME REASON my torch lightnig couldn't log the metric in ddp
-            # neither as non-aggregated, manually computed and accessed in self.on_validation_epoch_end()
-            # nor as dict/list of separate metrics
-            # pls somebody fix this, I spent long time on this and gave up
+            # TODO this is the worst BUT FOR SOME REASON torch lightnig couldn't log the metric in non-ddp mode
+            # neither as non-aggregated, manually metric.compute() and accessed in self.on_validation_epoch_end() (no mode specified)
+            # nor as dict/list of separate metrics. Sth with lihghtning version.
             self.auroc_val_class_0.update(y_pred[:,0], y[:,0])
             self.log('val/auroc_val_class_0', self.auroc_val_class_0, on_step=False, on_epoch=True, sync_dist=True)
             self.auroc_val_class_1.update(y_pred[:,1], y[:,1])

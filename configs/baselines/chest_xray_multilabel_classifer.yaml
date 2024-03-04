@@ -3,12 +3,12 @@ model:
   logdir: .
   model_type: multilabel_classifier
   params:
-    classifier_test_mode: "encoder_resnet"
+    classifier_test_mode: "densenet"
     image_size: 256 # 32 for latent
     channels: 4
     monitor: val/auroc
-    in_features: 2048 # encoder+resnet18 512, resnet50 2048, linear 4096
-    num_classes: 15
+    in_features: 1024 # encoder+resnet18 512, resnet50 2048, linear 4096; densenest121 1024
+    num_classes: 14
     dropout: 0.3
     learning_rate: 0.0003
     weight_decay: 0.0001
@@ -33,18 +33,20 @@ model:
           dropout: 0.0
         lossconfig:
           target: torch.nn.Identity
-    weights: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-    # 15 classes, log
-    # weights: [1.065099588, 1.779603253, 1.551821122, 1.873975748, 1.043947633, 1.859830453, 1.916502338, 2.869185932, 0.818237579, 1.396153514, 1.326128693, 1.658934256, 2.072830496, 1.586778408, 0.02886104]
+    weights: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
     #14 classes, log
-    # weights: [0.741790821, 1.485960814, 1.253424332, 1.581670469, 0.718735907, 1.567343026, 1.624709854, 2.581797199, 0.464784148, 1.092677857, 1.019675586, 1.363090079, 1.782541339, 1.289286516]
-
+    #weights: [0.741790821, 1.485960814, 1.253424332, 1.581670469, 0.718735907, 1.567343026, 1.624709854, 2.581797199, 0.464784148, 1.092677857, 1.019675586, 1.363090079, 1.782541339, 1.289286516]
+    # 14 classes sqrt
+    #weights: [2.349067037, 5.533251459, 4.233622847, 6.177819776, 2.287536085, 6.076752008, 6.491647465, 19.53883204, 1.707623308, 3.518349097, 3.234728186, 4.80335892, 7.785216056, 4.412078777]
+    # 14 classes abs
+    # weights: [5.518115942, 30.6168717, 17.92356241, 38.16545718, 5.232821342, 36.92691497, 42.14148681, 381.7659574, 2.915977362, 12.37878037, 10.46346644, 23.07225691, 60.60958904, 19.46643914]
+    
 dataloaders:
   name: chest_xray_nih
-  train_batches: [ 1 ]
-  val_batch: 1
-  min_augmentation_ratio: 8
-  auto_augment: True
+  train_batches: [ 128 ]
+  val_batch: 128
+  min_augmentation_ratio: 9
+  auto_augment: False
   num_workers: 4
   num_labeled: null
   pin_memory: True

@@ -13,7 +13,7 @@ import torch.nn as nn
 import pytorch_lightning as pl
 from ldm.models.diffusion.ddpm import LatentDiffusion
 from ldm.modules.diffusionmodules.util import timestep_embedding
-from torchvision.models import resnet50
+from torchvision.models import resnet50, densenet121
 import importlib
 
 def disabled_train(self, mode=True):
@@ -104,6 +104,14 @@ class MultilabelClassifier(pl.LightningModule):
                 nn.Dropout(p=self.dropout),
                 nn.Linear(self.in_features, self.num_classes),
                 )
+        elif self.classifier_test_mode == "densenet":
+            self.densenet = densenet121()
+            self.densenet.features[0] = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+            self.num_classes = self.num_classes
+            self.densenet.classifier = nn.Sequential(
+                nn.Dropout(p=self.dropout),
+                nn.Linear(self.in_features, self.num_classes),
+                )
         else:
             print('TEST NOT IMPLEMENTED')
 
@@ -137,6 +145,8 @@ class MultilabelClassifier(pl.LightningModule):
             out = self.fc(out)
         elif self.classifier_test_mode == "resnet":
             out = self.resnet(imgs)
+        elif self.classifier_test_mode == "densenet":
+            out = self.densenet(imgs)
         return out
     
     def configure_optimizers(self):
@@ -148,9 +158,9 @@ class MultilabelClassifier(pl.LightningModule):
         x = x.unsqueeze(1)
         y_pred = self(x)
 
-        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y[:,:self.num_classes].float(), pos_weight=self.BCEweights.to(self.device))
-        accuracy = accuracy_score(y.cpu(), y_pred.cpu()>=0.5)
-        self.auroc_train.update(y_pred[:,:-1], y[:,:-1])
+        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y[:,:self.num_classes].float(), pos_weight=self.BCEweights.to(self.device)[:self.num_classes])
+        accuracy = accuracy_score(y.cpu()[:,:14], y_pred.cpu()>=0.5)
+        self.auroc_train.update(y_pred[:,:14], y[:,:14])
         self.log('train/auroc', self.auroc_train, on_step=False, on_epoch=True)
         loss_dict.update({'train/loss_classification': loss})
         loss_dict.update({'train/accuracy': accuracy})
@@ -165,9 +175,9 @@ class MultilabelClassifier(pl.LightningModule):
         x = x.unsqueeze(1)
         y_pred = self(x)
 
-        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float())
-        accuracy = accuracy_score(y.cpu(), y_pred.cpu()>=0.5)
-        self.auroc_val.update(y_pred[:,:-1], y[:,:-1])
+        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float()[:,:self.num_classes])
+        accuracy = accuracy_score(y.cpu()[:,:self.num_classes], y_pred.cpu()>=0.5)
+        self.auroc_val.update(y_pred[:,:14], y[:,:14])
 
         self.log('val/auroc', self.auroc_val, on_step=False, on_epoch=True)
         loss_dict = {"val/loss": loss, "val/accuracy": accuracy}
