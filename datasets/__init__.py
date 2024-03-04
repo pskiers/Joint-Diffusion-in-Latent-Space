@@ -328,5 +328,12 @@ def get_cl_datasets(
             return tasks_datasets, test_dataset, tasks
         else:
             raise NotImplementedError
+    elif name == "cifar10":
+        train_ds = AdjustedCIFAR10(train=True)
+        val_ds = AdjustedCIFAR10(train=False)
+        tasks = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]]
+        train_indices = cl_class_split(train_ds.dataset.targets, tasks)
+        tasks_datasets = [Subset(train_ds, task_idx) for task_idx in train_indices]
+        return tasks_datasets, val_ds, tasks
     else:
         raise NotImplementedError(f"Dataset {name} not implemented")

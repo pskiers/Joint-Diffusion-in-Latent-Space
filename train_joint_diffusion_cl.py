@@ -17,18 +17,23 @@ if __name__ == "__main__":
     environ["WANDB__SERVICE_WAIT"] = "300"
 
     parser = argparse.ArgumentParser()
+    parser.add_argument("--path", "-p", type=Path, required=True, help="path to config file")
     parser.add_argument(
-        "--path", "-p", type=Path, required=True, help="path to config file")
-    parser.add_argument("--checkpoint", "-c", type=Path,
-                        required=False, help="path to model checkpoint file")
-    parser.add_argument("--task", "-t", type=int,
-                        required=True, help="task id")
-    parser.add_argument("--learned", "-l", type=int,
-                        required=False, help="Learned tasks", nargs="+")
-    parser.add_argument("--new", "-n", type=Path, required=False, help="Ckpt to new task data generator")
-    parser.add_argument("--old", "-o", type=Path, required=False, help="Ckpt to old tasks data generator")
+        "--checkpoint", "-c", type=Path, required=False, help="path to model checkpoint file"
+    )
+    parser.add_argument("--task", "-t", type=int, required=True, help="task id")
+    parser.add_argument(
+        "--learned", "-l", type=int, required=False, help="Learned tasks", nargs="+"
+    )
+    parser.add_argument(
+        "--new", "-n", type=Path, required=False, help="Ckpt to new task data generator"
+    )
+    parser.add_argument(
+        "--old", "-o", type=Path, required=False, help="Ckpt to old tasks data generator"
+    )
     args = parser.parse_args()
     config_path = str(args.path)
+    # config_path = "configs/baselines/class_conditioned_ddpm/cifar10.yaml"
     checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
     # checkpoint_path = None
     old_generator_path = str(args.old) if args.old is not None else None
@@ -65,24 +70,26 @@ if __name__ == "__main__":
     )
 
     test_dl = data.DataLoader(
-        test_ds, dl_config["val_batch"], shuffle=False, num_workers=dl_config["num_workers"])
+        test_ds, dl_config["val_batch"], shuffle=False, num_workers=dl_config["num_workers"]
+    )
 
     if checkpoint_path is not None:
         config.model.params["ckpt_path"] = checkpoint_path
     # config.model.params["ckpt_path"] = "./cl_cifar10.ckpt"
 
-    model = get_model_class(config.model.get("model_type"))(
-        **config.model.get("params", dict()))
+    model = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
     new_generator = None
     if new_generator_path is not None:
         config.model.params["ckpt_path"] = new_generator_path
         new_generator = get_model_class(config.model.get("model_type"))(
-            **config.model.get("params", dict()))
+            **config.model.get("params", dict())
+        )
     old_generator = model
     if old_generator_path is not None:
         config.model.params["ckpt_path"] = old_generator_path
         old_generator = get_model_class(config.model.get("model_type"))(
-            **config.model.get("params", dict()))
+            **config.model.get("params", dict())
+        )
 
     model.learning_rate = config.model.base_learning_rate
 
@@ -95,11 +102,14 @@ if __name__ == "__main__":
     trainer_kwargs = dict()
     tags = [
         dl_config["name"],
-        "all labels" if dl_config["num_labeled"] is None else f"{dl_config['num_labeled']} per class",
-        config.model.get("model_type")
+        (
+            "all labels"
+            if dl_config["num_labeled"] is None
+            else f"{dl_config['num_labeled']} per class"
+        ),
+        config.model.get("model_type"),
     ]
-    trainer_kwargs["logger"] = pl.loggers.WandbLogger(
-        name=nowname, id=nowname, tags=tags)
+    trainer_kwargs["logger"] = pl.loggers.WandbLogger(name=nowname, id=nowname, tags=tags)
 
     # modelcheckpoint - use TrainResult/EvalResult(checkpoint_on=metric) to
     # specify which metric is used to determine best models
@@ -110,7 +120,7 @@ if __name__ == "__main__":
             "verbose": True,
             "save_last": True,
             "mode": "max",
-            "every_n_train_steps": 10000
+            "every_n_train_steps": 10000,
         }
     }
     if hasattr(model, "monitor"):
@@ -128,9 +138,9 @@ if __name__ == "__main__":
             ckptdir=ckptdir,
             cfgdir=cfgdir,
             config=config,
-            lightning_config=lightning_config
+            lightning_config=lightning_config,
         ),
-        CUDACallback()
+        CUDACallback(),
     ]
     if (img_logger_cfg := callback_cfg.get("img_logger", None)) is not None:
         trainer_kwargs["callbacks"].append(ImageLogger(**img_logger_cfg))
@@ -155,10 +165,8 @@ if __name__ == "__main__":
             std = dl_config["std"]
             denormalize = transforms.Compose(
                 [
-                    transforms.Normalize(mean=[0., 0., 0.], std=[
-                                         1 / s for s in std]),
-                    transforms.Normalize(
-                        mean=[-m for m in mean], std=[1., 1., 1.]),
+                    transforms.Normalize(mean=[0.0, 0.0, 0.0], std=[1 / s for s in std]),
+                    transforms.Normalize(mean=[-m for m in mean], std=[1.0, 1.0, 1.0]),
                 ]
             )
             samples = denormalize(samples)
@@ -168,6 +176,7 @@ if __name__ == "__main__":
 
     new_samples_generate = None
     if new_generator is not None:
+
         def generate_new_samples(batch, labels):
             new_generator.sampling_method = cl_config["sampling_method"]
             new_generator.sample_grad_scale = cl_config["grad_scale"]
@@ -180,10 +189,8 @@ if __name__ == "__main__":
                 std = dl_config["std"]
                 denormalize = transforms.Compose(
                     [
-                        transforms.Normalize(mean=[0., 0., 0.], std=[
-                                            1 / s for s in std]),
-                        transforms.Normalize(
-                            mean=[-m for m in mean], std=[1., 1., 1.]),
+                        transforms.Normalize(mean=[0.0, 0.0, 0.0], std=[1 / s for s in std]),
+                        transforms.Normalize(mean=[-m for m in mean], std=[1.0, 1.0, 1.0]),
                     ]
                 )
                 samples = denormalize(samples)
@@ -194,36 +201,37 @@ if __name__ == "__main__":
         new_samples_generate = generate_new_samples
 
     prev_tasks = []
-    for i, ((labeled_ds, unlabeled_ds), task) in enumerate(zip(tasks_datasets, tasks)):
+    for i, (datasets, task) in enumerate(zip(tasks_datasets, tasks)):
         if i == current_task:
             old_generator.to(torch.device("cuda"))
             if new_generator is not None:
                 new_generator.to(torch.device("cuda"))
+            (labeled_ds, unlabeled_ds) = datasets if len(datasets) == 2 else (datasets, None)
             train_dls = reply_buff.get_data_for_task(
                 sup_ds=labeled_ds,
                 unsup_ds=unlabeled_ds,
                 prev_tasks=prev_tasks,
                 samples_per_task=cl_config["samples_per_class"],
                 old_sample_generator=generate_old_samples,
-                new_sample_generator=new_samples_generate,
+                new_sample_generator=(
+                    new_samples_generate if unlabeled_ds is not None else True
+                ),  # dummy for class conditioned baseline stuff
                 current_task=task,
-                filename=nowname
+                filename=nowname,
             )
             if new_generator is not None:
                 del new_generator
             if old_generator != model:
                 del old_generator
 
-            trainer = pl.Trainer.from_argparse_args(
-                trainer_opt, **trainer_kwargs)
+            trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
             trainer.logdir = logdir
 
             weight_reinit = cl_config.get("weight_reinit", "none")
             if weight_reinit == "none":
                 pass
             elif weight_reinit == "unused classes":
-                torch.nn.init.xavier_uniform_(
-                    model.classifier[-1].weight[len(prev_tasks):])
+                torch.nn.init.xavier_uniform_(model.classifier[-1].weight[len(prev_tasks) :])
             elif weight_reinit == "classifier":
                 for layer in model.classifier:
                     if hasattr(layer, "weight"):

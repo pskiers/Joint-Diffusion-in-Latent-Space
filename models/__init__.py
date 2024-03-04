@@ -55,5 +55,7 @@ def get_model_class(name: str):
         return LatentDiffMatchPooling
     elif name == "latent_diffmatch_attention":
         return LatentDiffMatchAttention
+    elif name == "class_conditioned_ddpm":
+        return ClassConditionedDDPM
     else:
         raise NotImplementedError(f"Model {name} is not available")
