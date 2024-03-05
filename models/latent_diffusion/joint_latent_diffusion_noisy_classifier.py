@@ -77,16 +77,16 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
                  *args,
                  **kwargs):
         self._init(
-            first_stage_config,
-            cond_stage_config,
-            num_timesteps_cond,
-            cond_stage_key,
-            cond_stage_trainable,
-            concat_mode,
-            cond_stage_forward,
-            conditioning_key,
-            scale_factor,
-            scale_by_std,
+            first_stage_config=first_stage_config,
+            cond_stage_config=cond_stage_config,
+            num_timesteps_cond=num_timesteps_cond,
+            cond_stage_key=cond_stage_key,
+            cond_stage_trainable=cond_stage_trainable,
+            concat_mode=concat_mode,
+            cond_stage_forward=cond_stage_forward,
+            conditioning_key=conditioning_key,
+            scale_factor=scale_factor,
+            scale_by_std=scale_by_std,
             *args,
             **kwargs
         )
