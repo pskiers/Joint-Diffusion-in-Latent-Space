@@ -31,7 +31,7 @@ if __name__ == "__main__":
     lightning_config.trainer = trainer_config
 
     dl_config = config.pop("dataloaders")
-    train_dls, test_dl = get_dataloaders(**dl_config)
+    _, test_dl = get_dataloaders(**dl_config)
 
     if checkpoint_path is not None:
         config.model.params["ckpt_path"] = checkpoint_path
@@ -99,7 +99,7 @@ if __name__ == "__main__":
         fid_cfg["real_dl"] = train_dls[1] if type(train_dls) in (tuple, list) else train_dls  # first dataloader should contain the original images
         fid_cfg["device"] = torch.device("cuda")
         trainer_kwargs["callbacks"].append(FIDScoreLogger(**fid_cfg))
-
+    print('[WARNING]this scriot  Hardcoded for patches')
     trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
     trainer.logdir = logdir
 

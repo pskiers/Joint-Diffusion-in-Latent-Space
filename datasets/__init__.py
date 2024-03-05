@@ -9,6 +9,7 @@ from .cifar100 import AdjustedCIFAR100
 from .chest_xray_nih import ChestXRay_nih
 from .chest_xray_nih_ssl import ChestXRay_nih_ssl
 from .chest_xray import ChestXRay
+from .chest_xray_nih_patches import ChestXRay_nih_patches
 from .chest_xray_nih_bbox import ChestXRay_nih_bbox
 from .chest_xray_nih_64 import ChestXRay_nih_64
 from .mnist import AdjustedMNIST
@@ -78,6 +79,18 @@ def get_dataloaders(name: str,
             test_dataset = ChestXRay_nih_ssl(mode='test', training_platform = training_platform)
             num_classes = 15
             return ssl_randaugment_dl(labeled_dataset, unlabeled_dataset, test_dataset, train_batches[0], val_batch, num_workers)
+    elif name=='chest_xray_nih_patches':
+            ds = ChestXRay_nih_patches(training_platform = training_platform)
+            dl = torch.utils.data.DataLoader(
+                ds,
+                batch_size=val_batch,
+                shuffle=False,
+                num_workers=num_workers,
+                pin_memory=pin_memory,
+                persistent_workers = persistent_workers
+            )
+            num_classes = 14
+            return None, dl
     
     # elif name=='chest_xray_nih_64':
     #     train_ds = ChestXRay_nih_64(mode='train')

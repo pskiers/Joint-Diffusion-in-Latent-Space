@@ -275,14 +275,22 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         
     @torch.no_grad()
     def test_step(self, batch, batch_idx):
-        x, y = self.get_valid_classification_input(batch, self.first_stage_key)
+        
+        x = batch[self.first_stage_key]
+        bs = x.shape[0]
+        x = x.view(-1, 256, 256)
+        x = self.to_latent(x)
+        y = batch[self.classification_key]
         t = torch.zeros((x.shape[0],), device=self.device).long()
+
         with self.ema_scope():
             unet: AdjustedUNet = self.model.diffusion_model
             representations = unet.just_representations(x, t, pooled=False)
             representations = self.transform_representations(representations)
             
             y_pred = self.classifier(representations)
+            y_pred = nn.functional.sigmoid(y_pred)
+            y_pred = y_pred.view(bs, 10, -1).mean(1)
 
             if y_pred.shape[1]!=y.shape[1]: #means one class less
                 self.auroc_test.update(y_pred, y[:,:-1])
