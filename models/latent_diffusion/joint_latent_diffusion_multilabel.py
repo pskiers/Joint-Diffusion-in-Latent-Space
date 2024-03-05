@@ -277,19 +277,21 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
     def test_step(self, batch, batch_idx):
         x, y = self.get_valid_classification_input(batch, self.first_stage_key)
         t = torch.zeros((x.shape[0],), device=self.device).long()
-        unet: AdjustedUNet = self.model.diffusion_model
-        representations = unet.just_representations(x, t, pooled=False)
-        representations = self.transform_representations(representations)
-        y_pred = self.classifier(representations)
+        with self.ema_scope():
+            unet: AdjustedUNet = self.model.diffusion_model
+            representations = unet.just_representations(x, t, pooled=False)
+            representations = self.transform_representations(representations)
+            
+            y_pred = self.classifier(representations)
 
-        if y_pred.shape[1]!=y.shape[1]: #means one class less
-            self.auroc_test.update(y_pred, y[:,:-1])
-        else:
-            self.auroc_test.update(y_pred[:,:-1], y[:,:-1])
-        self.log('test/auroc_ema', self.auroc_test, on_step=False, on_epoch=True, sync_dist=True)
-        #self.auroc_per_class.update(y_pred[:,:14], y[:,:14])
+            if y_pred.shape[1]!=y.shape[1]: #means one class less
+                self.auroc_test.update(y_pred, y[:,:-1])
+            else:
+                self.auroc_test.update(y_pred[:,:-1], y[:,:-1])
+            self.log('test/auroc_ema', self.auroc_test, on_step=False, on_epoch=True, sync_dist=True)
+            #self.auroc_per_class.update(y_pred[:,:14], y[:,:14])
 
-        
+            
 
     def p_mean_variance(self, x, c, t, clip_denoised: bool, original_img=None, pick_class = None, return_codebook_ids=False, quantize_denoised=False,
                         return_x0=False, score_corrector=None, corrector_kwargs=None, return_pred_o=False):
