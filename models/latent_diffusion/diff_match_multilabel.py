@@ -110,7 +110,7 @@ class LatentDiffMatchPoolingMultilabel(JointLatentDiffusionMultilabel):
 
     def train_classification_step(self, batch, loss):
         if self.classification_start > 0:
-            self.classification_start -= 0
+            self.classification_start -= 1
             return loss
 
         loss_dict = {}

@@ -141,18 +141,23 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         y_pred = self.classifier(representations)
         
         #skip last column if num classes < len(y_true) - we want to skip no findings label. BCE weights have to be adjusted!!!
-        #loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float()[:,:self.num_classes], pos_weight=self.BCEweights.to(self.device))
+        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float()[:,:self.num_classes], pos_weight=self.BCEweights.to(self.device))
         
-        #focal loss
-        alpha, gamma = 1, 2
-        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float()[:,:self.num_classes])
-        pt = torch.exp(-loss)
-        loss = (alpha * (1-pt)**gamma * loss).mean()
+        # #focal loss
+        # alpha, gamma = 1, 2
+        # loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float()[:,:self.num_classes])
+        # pt = torch.exp(-loss)
+        # loss = (alpha * (1-pt)**gamma * loss).mean()
+        
         accuracy = accuracy_score(y[:,:self.num_classes].cpu(), y_pred.cpu()>=0.5)
         return loss, accuracy, y_pred
 
 
     def train_classification_step(self, batch, loss):
+        if self.classification_start > 0:
+            self.classification_start -= 1
+            return loss
+        
         loss_dict = {}
 
         x, y = self.get_train_classification_input(batch, self.first_stage_key)
