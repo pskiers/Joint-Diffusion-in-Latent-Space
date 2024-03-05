@@ -15,6 +15,7 @@ from ldm.models.diffusion.ddpm import LatentDiffusion
 from ldm.modules.diffusionmodules.util import timestep_embedding
 from torchvision.models import resnet50, densenet121
 import importlib
+from torchvision.models import DenseNet121_Weights
 
 def disabled_train(self, mode=True):
     """Overwrite model.train with this function to make sure train/eval mode
@@ -105,8 +106,8 @@ class MultilabelClassifier(pl.LightningModule):
                 nn.Linear(self.in_features, self.num_classes),
                 )
         elif self.classifier_test_mode == "densenet":
-            self.densenet = densenet121()
-            self.densenet.features[0] = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+            self.densenet = densenet121(weights = DenseNet121_Weights.DEFAULT)
+            #self.densenet.features[0] = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
             self.num_classes = self.num_classes
             self.densenet.classifier = nn.Sequential(
                 nn.Dropout(p=self.dropout),
@@ -155,7 +156,10 @@ class MultilabelClassifier(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         loss_dict = {}
         x, y = batch
-        x = x.unsqueeze(1)
+        if len(x)<4:
+            x = x.unsqueeze(1)
+        if x.shape[-1]==3:
+            x= x.permute(0,3,1,2)
         y_pred = self(x)
 
         loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y[:,:self.num_classes].float(), pos_weight=self.BCEweights.to(self.device)[:self.num_classes])
@@ -172,7 +176,10 @@ class MultilabelClassifier(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
-        x = x.unsqueeze(1)
+        if len(x)<4:
+            x = x.unsqueeze(1)
+        if x.shape[-1]==3:
+            x= x.permute(0,3,1,2)
         y_pred = self(x)
 
         loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float()[:,:self.num_classes])

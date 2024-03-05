@@ -80,24 +80,26 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         print('WARNING AUROC HARDCODEDDDD to 14 classes')
         self.auroc_train = AUROC(num_classes=14) #self.num_classes-1)
         self.auroc_val = AUROC(num_classes=14) #self.num_classes-1)
+        self.auroc_per_class = AUROC(num_classes=14, average=None)
+        self.auroc_test = AUROC(num_classes=14)
         
-        # TODO this is the worst BUT FOR SOME REASON torch lightnig couldn't log the metric in non-ddp mode
-        # neither as non-aggregated, manually metric.compute() and accessed in self.on_validation_epoch_end() (no mode specified)
-        # nor as dict/list of separate metrics. Sth with lihghtning version.
-        self.auroc_val_class_0 = AUROC(num_classes=1)
-        self.auroc_val_class_1 = AUROC(num_classes=1)
-        self.auroc_val_class_2 = AUROC(num_classes=1)
-        self.auroc_val_class_3 = AUROC(num_classes=1)
-        self.auroc_val_class_4 = AUROC(num_classes=1)
-        self.auroc_val_class_5 = AUROC(num_classes=1)
-        self.auroc_val_class_6 = AUROC(num_classes=1)
-        self.auroc_val_class_7 = AUROC(num_classes=1)
-        self.auroc_val_class_8 = AUROC(num_classes=1)
-        self.auroc_val_class_9 = AUROC(num_classes=1)
-        self.auroc_val_class_10 = AUROC(num_classes=1)
-        self.auroc_val_class_11 = AUROC(num_classes=1)
-        self.auroc_val_class_12 = AUROC(num_classes=1)
-        self.auroc_val_class_13 = AUROC(num_classes=1)
+        # # TODO FIXED but left just in case this is the worst BUT FOR SOME REASON torch lightnig couldn't log the metric in non-ddp mode
+        # # neither as non-aggregated, manually metric.compute() and accessed in self.on_validation_epoch_end() (no mode specified)
+        # # nor as dict/list of separate metrics. Sth with lihghtning version.
+        # self.auroc_val_class_0 = AUROC(num_classes=1)
+        # self.auroc_val_class_1 = AUROC(num_classes=1)
+        # self.auroc_val_class_2 = AUROC(num_classes=1)
+        # self.auroc_val_class_3 = AUROC(num_classes=1)
+        # self.auroc_val_class_4 = AUROC(num_classes=1)
+        # self.auroc_val_class_5 = AUROC(num_classes=1)
+        # self.auroc_val_class_6 = AUROC(num_classes=1)
+        # self.auroc_val_class_7 = AUROC(num_classes=1)
+        # self.auroc_val_class_8 = AUROC(num_classes=1)
+        # self.auroc_val_class_9 = AUROC(num_classes=1)
+        # self.auroc_val_class_10 = AUROC(num_classes=1)
+        # self.auroc_val_class_11 = AUROC(num_classes=1)
+        # self.auroc_val_class_12 = AUROC(num_classes=1)
+        # self.auroc_val_class_13 = AUROC(num_classes=1)
         
 
         self.BCEweights = torch.Tensor(weights)[:self.num_classes]
@@ -205,38 +207,39 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             else:
                 self.auroc_val.update(y_pred[:,:-1], y[:,:-1])
             self.log('val/auroc_ema', self.auroc_val, on_step=False, on_epoch=True, sync_dist=True)
+            self.auroc_per_class.update(y_pred[:,:14], y[:,:14])
             
-            # TODO this is the worst BUT FOR SOME REASON torch lightnig couldn't log the metric in non-ddp mode
-            # neither as non-aggregated, manually metric.compute() and accessed in self.on_validation_epoch_end() (no mode specified)
-            # nor as dict/list of separate metrics. Sth with lihghtning version.
-            self.auroc_val_class_0.update(y_pred[:,0], y[:,0])
-            self.log('val/auroc_val_class_0', self.auroc_val_class_0, on_step=False, on_epoch=True, sync_dist=True)
-            self.auroc_val_class_1.update(y_pred[:,1], y[:,1])
-            self.log('val/auroc_val_class_1', self.auroc_val_class_1, on_step=False, on_epoch=True, sync_dist=True)
-            self.auroc_val_class_2.update(y_pred[:,2], y[:,2])
-            self.log('val/auroc_val_class_2', self.auroc_val_class_2, on_step=False, on_epoch=True, sync_dist=True)
-            self.auroc_val_class_3.update(y_pred[:,3], y[:,3])
-            self.log('val/auroc_val_class_3', self.auroc_val_class_3, on_step=False, on_epoch=True, sync_dist=True)
-            self.auroc_val_class_4.update(y_pred[:,4], y[:,4])
-            self.log('val/auroc_val_class_4', self.auroc_val_class_4, on_step=False, on_epoch=True, sync_dist=True)
-            self.auroc_val_class_5.update(y_pred[:,5], y[:,5])
-            self.log('val/auroc_val_class_5', self.auroc_val_class_5, on_step=False, on_epoch=True, sync_dist=True)
-            self.auroc_val_class_6.update(y_pred[:,6], y[:,6])
-            self.log('val/auroc_val_class_6', self.auroc_val_class_6, on_step=False, on_epoch=True, sync_dist=True)
-            self.auroc_val_class_7.update(y_pred[:,7], y[:,7])
-            self.log('val/auroc_val_class_7', self.auroc_val_class_7, on_step=False, on_epoch=True, sync_dist=True)
-            self.auroc_val_class_8.update(y_pred[:,8], y[:,8])
-            self.log('val/auroc_val_class_8', self.auroc_val_class_8, on_step=False, on_epoch=True, sync_dist=True)
-            self.auroc_val_class_9.update(y_pred[:,9], y[:,9])
-            self.log('val/auroc_val_class_9', self.auroc_val_class_9, on_step=False, on_epoch=True, sync_dist=True)
-            self.auroc_val_class_10.update(y_pred[:,10], y[:,10])
-            self.log('val/auroc_val_class_10', self.auroc_val_class_10, on_step=False, on_epoch=True, sync_dist=True)
-            self.auroc_val_class_11.update(y_pred[:,11], y[:,11])
-            self.log('val/auroc_val_class_11', self.auroc_val_class_11, on_step=False, on_epoch=True, sync_dist=True)
-            self.auroc_val_class_12.update(y_pred[:,12], y[:,12])
-            self.log('val/auroc_val_class_12', self.auroc_val_class_12, on_step=False, on_epoch=True, sync_dist=True)
-            self.auroc_val_class_13.update(y_pred[:,13], y[:,13])
-            self.log('val/auroc_val_class_13', self.auroc_val_class_13, on_step=False, on_epoch=True, sync_dist=True)
+            # # TODO FIXED but left just in case: this is the worst BUT FOR SOME REASON torch lightnig couldn't log the metric in non-ddp mode
+            # # neither as non-aggregated, manually metric.compute() and accessed in self.on_validation_epoch_end() (no mode specified)
+            # # nor as dict/list of separate metrics. Sth with lihghtning version.
+            # self.auroc_val_class_0.update(y_pred[:,0], y[:,0])
+            # self.log('val/auroc_val_class_0', self.auroc_val_class_0, on_step=False, on_epoch=True, sync_dist=True)
+            # self.auroc_val_class_1.update(y_pred[:,1], y[:,1])
+            # self.log('val/auroc_val_class_1', self.auroc_val_class_1, on_step=False, on_epoch=True, sync_dist=True)
+            # self.auroc_val_class_2.update(y_pred[:,2], y[:,2])
+            # self.log('val/auroc_val_class_2', self.auroc_val_class_2, on_step=False, on_epoch=True, sync_dist=True)
+            # self.auroc_val_class_3.update(y_pred[:,3], y[:,3])
+            # self.log('val/auroc_val_class_3', self.auroc_val_class_3, on_step=False, on_epoch=True, sync_dist=True)
+            # self.auroc_val_class_4.update(y_pred[:,4], y[:,4])
+            # self.log('val/auroc_val_class_4', self.auroc_val_class_4, on_step=False, on_epoch=True, sync_dist=True)
+            # self.auroc_val_class_5.update(y_pred[:,5], y[:,5])
+            # self.log('val/auroc_val_class_5', self.auroc_val_class_5, on_step=False, on_epoch=True, sync_dist=True)
+            # self.auroc_val_class_6.update(y_pred[:,6], y[:,6])
+            # self.log('val/auroc_val_class_6', self.auroc_val_class_6, on_step=False, on_epoch=True, sync_dist=True)
+            # self.auroc_val_class_7.update(y_pred[:,7], y[:,7])
+            # self.log('val/auroc_val_class_7', self.auroc_val_class_7, on_step=False, on_epoch=True, sync_dist=True)
+            # self.auroc_val_class_8.update(y_pred[:,8], y[:,8])
+            # self.log('val/auroc_val_class_8', self.auroc_val_class_8, on_step=False, on_epoch=True, sync_dist=True)
+            # self.auroc_val_class_9.update(y_pred[:,9], y[:,9])
+            # self.log('val/auroc_val_class_9', self.auroc_val_class_9, on_step=False, on_epoch=True, sync_dist=True)
+            # self.auroc_val_class_10.update(y_pred[:,10], y[:,10])
+            # self.log('val/auroc_val_class_10', self.auroc_val_class_10, on_step=False, on_epoch=True, sync_dist=True)
+            # self.auroc_val_class_11.update(y_pred[:,11], y[:,11])
+            # self.log('val/auroc_val_class_11', self.auroc_val_class_11, on_step=False, on_epoch=True, sync_dist=True)
+            # self.auroc_val_class_12.update(y_pred[:,12], y[:,12])
+            # self.log('val/auroc_val_class_12', self.auroc_val_class_12, on_step=False, on_epoch=True, sync_dist=True)
+            # self.auroc_val_class_13.update(y_pred[:,13], y[:,13])
+            # self.log('val/auroc_val_class_13', self.auroc_val_class_13, on_step=False, on_epoch=True, sync_dist=True)
      
 
             loss_dict_ema.update({'val/loss_classification': loss_cls})
@@ -261,13 +264,33 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             on_epoch=True
         )
 
-    # @torch.no_grad()
-    # def on_validation_epoch_end(self):
-    #     metric = self.auroc_val_per_class.compute()
-    #     self.auroc_val_per_class.reset()
-    #     for i in range(14):
-    #         self.log(f'val/auroc_ema_class{i}', metric[i], on_step=False, on_epoch=True)
+    @torch.no_grad()
+    def on_validation_epoch_end(self):
+        metric = self.auroc_per_class.compute()
+        self.auroc_per_class.reset()
+        for i in range(14):
+            self.log(f'val/auroc_ema_class{i}', metric[i], on_step=False, on_epoch=True)
         
+    @torch.no_grad()
+    def test_step(self, batch, batch_idx):
+        x, y = batch
+
+        # implement your own
+        out = self(x)
+        loss = self.loss(out, y)
+
+        # log 6 example images
+        # or generated text... or whatever
+        sample_imgs = x[:6]
+        grid = torchvision.utils.make_grid(sample_imgs)
+        self.logger.experiment.add_image('example_images', grid, 0)
+
+        # calculate acc
+        labels_hat = torch.argmax(out, dim=1)
+        test_acc = torch.sum(y == labels_hat).item() / (len(y) * 1.0)
+
+        # log the outputs!
+        self.log_dict({'test_loss': loss, 'test_acc': test_acc})
 
     def p_mean_variance(self, x, c, t, clip_denoised: bool, original_img=None, pick_class = None, return_codebook_ids=False, quantize_denoised=False,
                         return_x0=False, score_corrector=None, corrector_kwargs=None, return_pred_o=False):
