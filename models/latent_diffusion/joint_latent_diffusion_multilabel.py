@@ -39,6 +39,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
                  num_classes,
                  dropout=0,
                  classification_loss_weight=1.0,
+                 classification_start =0,
                  classification_key=1,
                  augmentations=True,
                  num_timesteps_cond=None,
@@ -60,6 +61,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             num_classes=num_classes,
             dropout=dropout,
             classification_loss_weight=classification_loss_weight,
+            classification_start = classification_start,
             sample_grad_scale=100,
             classification_key=classification_key,
             augmentations=augmentations,
@@ -273,24 +275,21 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         
     @torch.no_grad()
     def test_step(self, batch, batch_idx):
-        x, y = batch
+        x, y = self.get_valid_classification_input(batch, self.first_stage_key)
+        t = torch.zeros((x.shape[0],), device=self.device).long()
+        unet: AdjustedUNet = self.model.diffusion_model
+        representations = unet.just_representations(x, t, pooled=False)
+        representations = self.transform_representations(representations)
+        y_pred = self.classifier(representations)
 
-        # implement your own
-        out = self(x)
-        loss = self.loss(out, y)
+        if y_pred.shape[1]!=y.shape[1]: #means one class less
+            self.auroc_test.update(y_pred, y[:,:-1])
+        else:
+            self.auroc_test.update(y_pred[:,:-1], y[:,:-1])
+        self.log('test/auroc_ema', self.auroc_test, on_step=False, on_epoch=True, sync_dist=True)
+        #self.auroc_per_class.update(y_pred[:,:14], y[:,:14])
 
-        # log 6 example images
-        # or generated text... or whatever
-        sample_imgs = x[:6]
-        grid = torchvision.utils.make_grid(sample_imgs)
-        self.logger.experiment.add_image('example_images', grid, 0)
-
-        # calculate acc
-        labels_hat = torch.argmax(out, dim=1)
-        test_acc = torch.sum(y == labels_hat).item() / (len(y) * 1.0)
-
-        # log the outputs!
-        self.log_dict({'test_loss': loss, 'test_acc': test_acc})
+        
 
     def p_mean_variance(self, x, c, t, clip_denoised: bool, original_img=None, pick_class = None, return_codebook_ids=False, quantize_denoised=False,
                         return_x0=False, score_corrector=None, corrector_kwargs=None, return_pred_o=False):

@@ -61,6 +61,7 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
                  classifier_hidden,
                  num_classes,
                  dropout=0,
+                 classification_start=0,
                  classification_loss_weight=1.0,
                  sample_grad_scale=60,
                  classification_key=1,
@@ -89,6 +90,7 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
             *args,
             **kwargs
         )
+        self.classification_start = classification_start
         self.num_classes = num_classes
         self.classification_key = classification_key
         self.classifier = nn.Sequential(
@@ -178,6 +180,10 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
         return loss, accuracy
 
     def train_classification_step(self, batch, loss):
+        if self.classification_start > 0:
+            self.classification_start -= 1
+            return loss
+        
         loss_dict = {}
         x, y = self.get_train_classification_input(batch, self.first_stage_key)
 
