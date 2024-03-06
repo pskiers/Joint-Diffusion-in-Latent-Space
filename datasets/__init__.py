@@ -7,6 +7,7 @@ from torchvision import datasets
 from .cifar10 import AdjustedCIFAR10
 from .cifar100 import AdjustedCIFAR100
 from .chest_xray_nih import ChestXRay_nih
+from .chest_xray_nih_densenet import ChestXRay_nih_densenet
 from .chest_xray_nih_ssl import ChestXRay_nih_ssl
 from .chest_xray import ChestXRay
 from .chest_xray_nih_patches import ChestXRay_nih_patches
@@ -91,6 +92,14 @@ def get_dataloaders(name: str,
             )
             num_classes = 14
             return None, dl
+    elif name=='chest_xray_nih_densenet':
+        train_ds = ChestXRay_nih_densenet(mode='train', 
+                                       training_platform = training_platform)
+        val_ds = ChestXRay_nih_densenet(mode='test', training_platform = training_platform)
+        num_classes = 15
+        return non_randaugment_dl(
+            train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers, 
+            pin_memory=pin_memory, persistent_workers=persistent_workers)
     
     # elif name=='chest_xray_nih_64':
     #     train_ds = ChestXRay_nih_64(mode='train')

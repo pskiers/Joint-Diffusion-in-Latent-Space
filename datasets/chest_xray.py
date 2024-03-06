@@ -20,7 +20,7 @@ class ChestXRay(torch.utils.data.Dataset):
             self.split_idx = int(0.0*len(image_list))
             
             if mode =='val':
-                self.final_image_list = image_list[:self.split_idx]
+                self.final_image_list = image_list[:self.split_idx].reset_index(drop=True)
 
                 self.transform = tv.transforms.Compose([
                     tv.transforms.Resize((256,256)),
@@ -28,7 +28,7 @@ class ChestXRay(torch.utils.data.Dataset):
                     tv.transforms.Normalize(mean=[.5], std=[.5])
                 ])
             elif mode =='train':
-                self.final_image_list = image_list[self.split_idx:]
+                self.final_image_list = image_list[self.split_idx:].reset_index(drop=True)
 
                 self.transform = tv.transforms.Compose([
                         tv.transforms.Resize((256,256)),

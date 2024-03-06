@@ -39,11 +39,9 @@ class ChestXRay_nih_patches(torch.utils.data.Dataset):
         normalize = transforms.Normalize(mean=0.5, std=0.5)
         self.transform=transforms.Compose([
                                         transforms.TenCrop(224),
-                                        transforms.transforms.Lambda(lambda crops: [transforms.Resize(256)(crop) for crop in crops]), #bacause of our model, we could have changed it
-                                        transforms.Lambda
-                                        (lambda crops: torch.stack([transforms.ToTensor()(crop) for crop in crops])),
-                                        transforms.Lambda
-                                        (lambda crops: torch.stack([normalize(crop) for crop in crops]))
+                                        #transforms.transforms.Lambda(lambda crops: [transforms.Resize(256)(crop) for crop in crops]), #bacause of our model, we could have changed it
+                                        transforms.Lambda(lambda crops: torch.stack([transforms.ToTensor()(crop) for crop in crops])),
+                                        transforms.Lambda(lambda crops: torch.stack([normalize(crop) for crop in crops]))
                                         ])
 
         
@@ -54,7 +52,7 @@ class ChestXRay_nih_patches(torch.utils.data.Dataset):
 
         img_path = self.final_image_df.loc[index, 'image_path']
         image = PIL.Image.open(img_path)
-        image = image.convert('L')
+        image = image.convert('RGB')
         image_transformed = self.transform(image).squeeze()
 
         return image_transformed, self.final_image_df.loc[index, [*self.labels, "no_finding"]].to_numpy(dtype=int)
