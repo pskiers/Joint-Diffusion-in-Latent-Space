@@ -173,8 +173,11 @@ class MultilabelClassifier(pl.LightningModule):
     
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay = self.weight_decay)
-        #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor = 0.1, patience = 5, mode = 'min')
-        return [optimizer]#, [scheduler]
+        scheduler = {
+        'scheduler': torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor = 0.1, patience = 5, mode = 'min'),
+        'monitor': "val/loss"
+    }
+        return [optimizer], [scheduler]
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}

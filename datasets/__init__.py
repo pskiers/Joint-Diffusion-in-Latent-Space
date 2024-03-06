@@ -95,7 +95,7 @@ def get_dataloaders(name: str,
     elif name=='chest_xray_nih_densenet':
         train_ds = ChestXRay_nih_densenet(mode='train', 
                                        training_platform = training_platform)
-        val_ds = ChestXRay_nih_densenet(mode='test', training_platform = training_platform)
+        val_ds = ChestXRay_nih_densenet(mode='val', training_platform = training_platform)
         num_classes = 15
         return non_randaugment_dl(
             train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers, 
