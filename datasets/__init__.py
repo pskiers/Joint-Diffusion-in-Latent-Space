@@ -96,17 +96,38 @@ def get_dataloaders(name: str,
         train_ds = ChestXRay_nih_densenet(mode='train', 
                                        training_platform = training_platform)
         val_ds = ChestXRay_nih_densenet(mode='val', training_platform = training_platform)
+        test_ds = ChestXRay_nih_densenet(mode='test', training_platform = training_platform)
+        
+        train_dl = torch.utils.data.DataLoader(
+            train_ds,
+            batch_size=train_batches[0],
+            shuffle=True,
+            num_workers=num_workers,
+            drop_last=True,
+            pin_memory=pin_memory,
+            persistent_workers = persistent_workers,
+        )
+
+        valid_dl = torch.utils.data.DataLoader(
+            val_ds,
+            batch_size=val_batch,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            persistent_workers = persistent_workers
+        )
+
+        test_dl = torch.utils.data.DataLoader(
+            test_ds,
+            batch_size=val_batch,
+            shuffle=False,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            persistent_workers = persistent_workers
+        )
         num_classes = 15
-        return non_randaugment_dl(
-            train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers, 
-            pin_memory=pin_memory, persistent_workers=persistent_workers)
-    
-    # elif name=='chest_xray_nih_64':
-    #     train_ds = ChestXRay_nih_64(mode='train')
-    #     val_ds = ChestXRay_nih_64(mode='test')
-    #     num_classes = 2
-    #     return non_randaugment_dl(
-    #         train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers)
+        return train_dl, valid_dl, test_dl
+
     elif name == "cifar10_randaugment":
         if num_labeled is not None:
             if len(train_batches) != 1:

@@ -199,8 +199,10 @@ class MultilabelClassifier(pl.LightningModule):
                       logger=True, on_step=True, on_epoch=True)
 
         return loss
-
-    def validation_step(self, batch, batch_idx):
+    @torch.no_grad()
+    def validation_step(self, batch, batch_idx, dataloader_idx):
+        self.log("global_step", self.global_step,
+                    prog_bar=True, logger=True, on_step=False, on_epoch=False)
         x, y = batch
         if len(x)<4:
             x = x.unsqueeze(1)
@@ -209,16 +211,25 @@ class MultilabelClassifier(pl.LightningModule):
         y_pred = self(x)
 
         loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float()[:,:self.num_classes])
-        accuracy = accuracy_score(y.cpu()[:,:self.num_classes], y_pred.cpu()>=0.5)
-        self.auroc_val.update(y_pred[:,:14], y[:,:14])
 
-        self.log('val/auroc', self.auroc_val, on_step=False, on_epoch=True)
-        loss_dict = {"val/loss": loss, "val/accuracy": accuracy}
-        self.log_dict(loss_dict, prog_bar=True, logger=True, on_step=True, on_epoch=True)
-        self.log("global_step", self.global_step,
-                 prog_bar=True, logger=True, on_step=False, on_epoch=False)
+        if dataloader_idx == 0:
+            accuracy = accuracy_score(y.cpu()[:,:self.num_classes], y_pred.cpu()>=0.5)
+            self.auroc_val.update(y_pred[:,:14], y[:,:14])
+
+            self.log('val/auroc', self.auroc_val, on_step=False, on_epoch=True, add_dataloader_idx=False)
+            loss_dict = {"val/loss": loss, "val/accuracy": accuracy}
+            self.log_dict(loss_dict, prog_bar=True, logger=True, on_step=True, on_epoch=True, add_dataloader_idx=False)
+            
+        elif dataloader_idx == 1:
+            accuracy = accuracy_score(y.cpu()[:,:self.num_classes], y_pred.cpu()>=0.5)
+            self.auroc_test.update(y_pred[:,:14], y[:,:14])
+
+            self.log('test/auroc', self.auroc_val, on_step=False, on_epoch=True, add_dataloader_idx=False)
+            loss_dict = {"test/loss": loss, "test/accuracy": accuracy}
+            self.log_dict(loss_dict, prog_bar=True, logger=True, on_step=True, on_epoch=True, add_dataloader_idx=False)
+            
         
-        return loss_dict
+        
     
     @torch.no_grad()
     def test_step(self, batch, batch_idx):
