@@ -41,8 +41,6 @@ if __name__ == "__main__":
     
     test_dl = get_dataloaders(**dl_config)[1]
     model = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
-    model.learning_rate = config.model.params.learning_rate
-    
 
     print('[WARNING]this script  Hardcoded for patches')
     trainer = pl.Trainer.from_argparse_args(trainer_opt)

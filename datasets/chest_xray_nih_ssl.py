@@ -50,7 +50,8 @@ class ChestXRay_nih_ssl(ChestXRay_nih):
         y = y.to_numpy()
         X = X.to_numpy()
         np.random.seed(402)
-        self.X_unlabeled, self.y_unlabeled, self.X_labeled, self.y_labeled = iterative_train_test_split(X, y, test_size = 0.02)
+        self.X_unlabeled, self.y_unlabeled, X_labeled, y_labeled = iterative_train_test_split(X, y, test_size = 0.02)
+        self.X_labeled_train, self.y_labeled_train, self.X_labeled_val, self.y_labeled_val = iterative_train_test_split(X_labeled, y_labeled, test_size = 0.2)
         self.fixmatch_transform = TransformFixMatch(mean=0.5, std=0.5)
         
     def __len__(self):
