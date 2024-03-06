@@ -39,7 +39,8 @@ class ChestXRay_nih_patches(torch.utils.data.Dataset):
         normalize = transforms.Normalize(mean=0.5, std=0.5)
         self.transform=transforms.Compose([
                                         transforms.TenCrop(224),
-                                        #transforms.transforms.Lambda(lambda crops: [transforms.Resize(256)(crop) for crop in crops]), #bacause of our model, we could have changed it
+                                        #bacause our diffusion encoder was trained on 256,we need it for diffusoin testing
+                                        #transforms.transforms.Lambda(lambda crops: [transforms.Resize(256)(crop) for crop in crops]), 
                                         transforms.Lambda(lambda crops: torch.stack([transforms.ToTensor()(crop) for crop in crops])),
                                         transforms.Lambda(lambda crops: torch.stack([normalize(crop) for crop in crops]))
                                         ])
