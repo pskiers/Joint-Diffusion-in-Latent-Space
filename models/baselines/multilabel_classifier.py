@@ -224,7 +224,7 @@ class MultilabelClassifier(pl.LightningModule):
             accuracy = accuracy_score(y.cpu()[:,:self.num_classes], y_pred.cpu()>=0.5)
             self.auroc_test.update(y_pred[:,:14], y[:,:14])
 
-            self.log('test/auroc', self.auroc_val, on_step=False, on_epoch=True, add_dataloader_idx=False)
+            self.log('test/auroc', self.auroc_test, on_step=False, on_epoch=True, add_dataloader_idx=False)
             loss_dict = {"test/loss": loss, "test/accuracy": accuracy}
             self.log_dict(loss_dict, prog_bar=True, logger=True, on_step=True, on_epoch=True, add_dataloader_idx=False)
             
