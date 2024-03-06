@@ -1,3 +1,5 @@
+### THIS ISVERY ROUGH CONFIG, SOME FIELDS ARE REALLY USELESS. CHECK IN CODE WHAT TO SET WHERE
+
 model:
   #logdir: /net/tscratch/people/plgjoaxkal/Joint-Diffusion-in-Latent-Space/
   logdir: .
@@ -10,8 +12,8 @@ model:
     in_features: 1024 # encoder+resnet18 512, resnet50 2048, linear 4096; densenest121 1024
     num_classes: 14
     dropout: 0.3
-    learning_rate: 0.0003
-    weight_decay: 0.0001
+    learning_rate: 0.0004
+    weight_decay: 0.00001
     ft_enc: False
 
     first_stage_config:
@@ -42,9 +44,9 @@ model:
     # weights: [5.518115942, 30.6168717, 17.92356241, 38.16545718, 5.232821342, 36.92691497, 42.14148681, 381.7659574, 2.915977362, 12.37878037, 10.46346644, 23.07225691, 60.60958904, 19.46643914]
     
 dataloaders:
-  name: chest_xray_nih
-  train_batches: [ 128 ]
-  val_batch: 128
+  name: chest_xray_nih_densenet
+  train_batches: [ 32 ]
+  val_batch: 32
   min_augmentation_ratio: 9
   auto_augment: False
   num_workers: 4

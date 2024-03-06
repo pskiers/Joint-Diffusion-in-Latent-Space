@@ -53,6 +53,7 @@ class MultilabelClassifier(pl.LightningModule):
             classifier_test_mode: str = "encoder_resnet",
             weights=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             ft_enc = False,
+            ckpt_path = None,
 
         ) -> None:
         super().__init__()
@@ -66,10 +67,15 @@ class MultilabelClassifier(pl.LightningModule):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.ft_enc = ft_enc
+        self.ckpt_path = ckpt_path
 
         self.instantiate_modules()
-        self.auroc_train = AUROC(num_classes=num_classes-1)
-        self.auroc_val = AUROC(num_classes=num_classes-1)
+        if self.ckpt_path is not None:
+            self.init_from_ckpt(ckpt_path, ignore_keys=[])
+        self.auroc_train = AUROC(num_classes=14)
+        self.auroc_val = AUROC(num_classes=14)
+        self.auroc_test = AUROC(num_classes=14)
+
         self.BCEweights = torch.Tensor(weights)
 
         if monitor is not None:
@@ -106,16 +112,31 @@ class MultilabelClassifier(pl.LightningModule):
                 nn.Linear(self.in_features, self.num_classes),
                 )
         elif self.classifier_test_mode == "densenet":
+            # ref impl https://github.com/zoogzog/chexnet/blob/master/DensenetModels.py
             self.densenet = densenet121(weights = DenseNet121_Weights.DEFAULT)
-            #self.densenet.features[0] = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
             self.num_classes = self.num_classes
-            self.densenet.classifier = nn.Sequential(
-                nn.Dropout(p=self.dropout),
-                nn.Linear(self.in_features, self.num_classes),
-                )
+            self.densenet.classifier = nn.Sequential(nn.Linear(self.in_features, self.num_classes))
+
         else:
             print('TEST NOT IMPLEMENTED')
 
+    def init_from_ckpt(self, path, ignore_keys=list(), only_model=False):
+        sd = torch.load(path, map_location="cpu")
+        if "state_dict" in list(sd.keys()):
+            sd = sd["state_dict"]
+        keys = list(sd.keys())
+        for k in keys:
+            for ik in ignore_keys:
+                if k.startswith(ik):
+                    print("Deleting key {} from state_dict.".format(k))
+                    del sd[k]
+        missing, unexpected = self.load_state_dict(sd, strict=False) if not only_model else self.model.load_state_dict(
+            sd, strict=False)
+        print(f"Restored from {path} with {len(missing)} missing and {len(unexpected)} unexpected keys")
+        if len(missing) > 0:
+            print(f"Missing Keys: {missing}")
+        if len(unexpected) > 0:
+            print(f"Unexpected Keys: {unexpected}")
 
     def instantiate_first_stage(self, config):
         model = instantiate_from_config(config)
@@ -151,7 +172,9 @@ class MultilabelClassifier(pl.LightningModule):
         return out
     
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay = self.weight_decay)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay = self.weight_decay)
+        #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor = 0.1, patience = 5, mode = 'min')
+        return [optimizer]#, [scheduler]
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}
@@ -193,3 +216,23 @@ class MultilabelClassifier(pl.LightningModule):
                  prog_bar=True, logger=True, on_step=False, on_epoch=False)
         
         return loss_dict
+    
+    @torch.no_grad()
+    def test_step(self, batch, batch_idx):
+        
+        x = batch[0]
+        bs = x.shape[0]
+        x = x.view(-1, 3,224, 224)
+        y = batch[1]
+        t = torch.zeros((x.shape[0],), device=self.device).long()
+        
+        y_pred = self(x)
+        y_pred = nn.functional.sigmoid(y_pred)
+        y_pred = y_pred.view(bs, 10, -1).mean(1)
+
+        if y_pred.shape[1]!=y.shape[1]: #means one class less
+            self.auroc_test.update(y_pred, y[:,:-1])
+        else:
+            self.auroc_test.update(y_pred[:,:-1], y[:,:-1])
+        self.log('test/auroc', self.auroc_test, on_step=False, on_epoch=True, sync_dist=True)
+

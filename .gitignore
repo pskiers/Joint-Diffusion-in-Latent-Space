@@ -140,6 +140,7 @@ dmypy.json
 # data
 chest_xray/
 chest_xray_nih/
+chest_xray_nih_full/
 
 #auxiliary files
 trash.ipynb

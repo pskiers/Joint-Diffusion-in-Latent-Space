@@ -9,7 +9,7 @@ from os import path, environ
 from pathlib import Path
 import datetime
 from callbacks import ImageLogger, CUDACallback, SetupCallback, FIDScoreLogger
-
+from pytorch_lightning.callbacks import LearningRateMonitor
 
 if __name__ == "__main__":
     environ["WANDB__SERVICE_WAIT"] = "300"
@@ -81,9 +81,11 @@ if __name__ == "__main__":
             config=config,
             lightning_config=lightning_config
         ),
-        CUDACallback()
+        CUDACallback(),
+        #LearningRateMonitor(logging_interval='step')
+
     ]
-    
+
     trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
     trainer.logdir = logdir
 
