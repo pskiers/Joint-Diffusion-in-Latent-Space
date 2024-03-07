@@ -9,9 +9,9 @@ import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from torchvision import datasets, models, transforms
 import PIL
-from chest_xray_nih import ChestXRay_nih
+from .chest_xray_nih import ChestXRay_nih
 from skmultilearn.model_selection import iterative_train_test_split
-from randaugment import RandAugmentMC
+from .randaugment import RandAugmentMC
 
 class TransformFixMatch(object):
     def __init__(self, mean, std):
