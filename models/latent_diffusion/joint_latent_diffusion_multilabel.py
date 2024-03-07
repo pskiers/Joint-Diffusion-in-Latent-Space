@@ -17,6 +17,7 @@ from tqdm import tqdm
 from ldm.util import instantiate_from_config
 from ldm.modules.ema import LitEma
 from ldm.modules.diffusionmodules.util import extract_into_tensor, noise_like
+from ..custom_schedulers import DelayedReduceOnPlateau
 #TODO remove unused imports!!!
 
 
@@ -97,9 +98,11 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             l = [{'params': [p for p in self.model.parameters()], 'lr': lr},]
         
         opt = torch.optim.AdamW(l, lr=0)
-        
-        # TODO add ReduceonPlateau
-        return opt
+        scheduler = {
+        'scheduler': DelayedReduceOnPlateau(opt, factor = 0.5, patience = 5, mode = 'min', delay=self.classification_start+1000),
+        'monitor': "val/loss"
+        }
+        return [opt], [scheduler]
     
     
     def do_classification(self, x, t, y):
