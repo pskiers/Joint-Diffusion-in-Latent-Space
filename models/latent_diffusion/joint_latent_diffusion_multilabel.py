@@ -157,7 +157,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             loss_dict_no_ema.update({'val/loss_classification': loss_cls})
             loss_dict_no_ema.update({'val/loss_full': loss + self.classification_loss_weight*loss_cls})
             loss_dict_no_ema.update({'val/accuracy': accuracy})
-            self.log_dict(loss_dict_no_ema, prog_bar=True, logger=True, on_step=True, on_epoch=True, add_dataloader_idx=False)
+            self.log_dict(loss_dict_no_ema, prog_bar=True, logger=True, on_step=False, on_epoch=True, add_dataloader_idx=False)
             
             self.auroc_val.update(y_pred[:,:self.used_n_classes], y[:,:self.used_n_classes])
             self.log('val/auroc', self.auroc_val, on_step=False, on_epoch=True, sync_dist=True, add_dataloader_idx=False)
@@ -170,7 +170,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
                 loss_dict_ema.update({'val/loss_full': loss + loss_cls})
                 loss_dict_ema.update({'val/accuracy': accuracy})
                 loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
-                self.log_dict(loss_dict_ema, prog_bar=True, logger=True, on_step=True, on_epoch=True, add_dataloader_idx=False)
+                self.log_dict(loss_dict_ema, prog_bar=True, logger=True, on_step=False, on_epoch=True, add_dataloader_idx=False)
 
                 self.auroc_val_ema.update(y_pred[:,:self.used_n_classes], y[:,:self.used_n_classes])
                 self.log('val/auroc_ema', self.auroc_val_ema, on_step=False, on_epoch=True, sync_dist=True, add_dataloader_idx=False)
@@ -185,7 +185,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
                 loss_dict_ema.update({'test/loss_full': loss + self.classification_loss_weight*loss_cls})
                 loss_dict_ema.update({'test/accuracy': accuracy})
                 loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
-                self.log_dict(loss_dict_ema, prog_bar=True, logger=True, on_step=True, on_epoch=True, add_dataloader_idx=False)
+                self.log_dict(loss_dict_ema, prog_bar=True, logger=True, on_step=False, on_epoch=True, add_dataloader_idx=False)
                 
                 self.auroc_test.update(y_pred[:,:self.used_n_classes], y[:,:self.used_n_classes])
                 self.log('test/auroc_ema', self.auroc_test, on_step=False, on_epoch=True, sync_dist=True, add_dataloader_idx=False)
