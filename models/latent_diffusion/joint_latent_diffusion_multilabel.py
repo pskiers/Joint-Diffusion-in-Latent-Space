@@ -12,21 +12,11 @@ from pytorch_msssim import ssim
 import torch
 import torch.nn as nn
 import numpy as np
-import pytorch_lightning as pl
 from torch.optim.lr_scheduler import LambdaLR
-from einops import rearrange, repeat
-from contextlib import contextmanager
-from functools import partial
 from tqdm import tqdm
-from torchvision.utils import make_grid
-from pytorch_lightning.utilities.distributed import rank_zero_only
-
-from ldm.util import log_txt_as_img, exists, default, ismap, isimage, mean_flat, count_params, instantiate_from_config
+from ldm.util import instantiate_from_config
 from ldm.modules.ema import LitEma
-from ldm.modules.distributions.distributions import normal_kl, DiagonalGaussianDistribution
-from ldm.models.autoencoder import VQModelInterface, IdentityFirstStage, AutoencoderKL
-from ldm.modules.diffusionmodules.util import make_beta_schedule, extract_into_tensor, noise_like
-from ldm.models.diffusion.ddim import DDIMSampler
+from ldm.modules.diffusionmodules.util import extract_into_tensor, noise_like
 #TODO remove unused imports!!!
 
 
@@ -79,11 +69,12 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         # self.x_start = None
         self.sampling_method = "conditional_to_x"
         self.num_classes = num_classes
-        print('WARNING AUROC HARDCODEDDDD to 14 classes')
-        self.auroc_train = AUROC(num_classes=14) #self.num_classes-1)
-        self.auroc_val = AUROC(num_classes=14) #self.num_classes-1)
-        self.auroc_per_class = AUROC(num_classes=14, average=None)
-        self.auroc_test = AUROC(num_classes=14)
+        print('[WARNING] AUROC HARDCODED for 14 classes')
+        self.used_n_classes = 14 # in case model trained on 15
+        self.auroc_train = AUROC(num_classes=self.used_n_classes)
+        self.auroc_val = AUROC(num_classes=self.used_n_classes)
+        self.auroc_test_per_class = AUROC(num_classes=self.used_n_classes, average=None)
+        self.auroc_test = AUROC(num_classes=self.used_n_classes)
         
         # # TODO FIXED but left just in case this is the worst BUT FOR SOME REASON torch lightnig couldn't log the metric in non-ddp mode
         # # neither as non-aggregated, manually metric.compute() and accessed in self.on_validation_epoch_end() (no mode specified)
@@ -104,7 +95,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         # self.auroc_val_class_13 = AUROC(num_classes=1)
         
 
-        self.BCEweights = torch.Tensor(weights)[:self.num_classes]
+        self.BCEweights = torch.Tensor(weights)[:self.used_n_classes]
     
     def configure_optimizers(self):
         lr = self.learning_rate
@@ -115,26 +106,17 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         if self.learn_logvar:
             print('Diffusion model optimizing logvar')
             params.append(self.logvar)
+        
         if self.classifier_lr:
             cl_lr = self.classifier_lr
             l = [{'params': [*self.model.parameters()], 'lr': lr},
                  {'params': [*self.classifier.parameters()], 'lr': cl_lr},]
         else:
             l = [{'params': [p for p in self.model.parameters()], 'lr': lr},]
-
+        
         opt = torch.optim.AdamW(l, lr=0)
-        if self.use_scheduler:
-            assert 'target' in self.scheduler_config
-            scheduler = instantiate_from_config(self.scheduler_config)
-
-            print("Setting up LambdaLR scheduler...")
-            scheduler = [
-                {
-                    'scheduler': LambdaLR(opt, lr_lambda=scheduler.schedule),
-                    'interval': 'step',
-                    'frequency': 1
-                }]
-            return [opt], scheduler
+        
+        # TODO add ReduceonPlateau
         return opt
     
     
@@ -145,15 +127,10 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         y_pred = self.classifier(representations)
         
         #skip last column if num classes < len(y_true) - we want to skip no findings label. BCE weights have to be adjusted!!!
-        loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float()[:,:self.num_classes], pos_weight=self.BCEweights.to(self.device))
+        loss = nn.functional.binary_cross_entropy_with_logits(
+            y_pred[:,:self.used_n_classes], y.float()[:,:self.used_n_classes], pos_weight=self.BCEweights.to(self.device))
         
-        # #focal loss
-        # alpha, gamma = 1, 2
-        # loss = nn.functional.binary_cross_entropy_with_logits(y_pred, y.float()[:,:self.num_classes])
-        # pt = torch.exp(-loss)
-        # loss = (alpha * (1-pt)**gamma * loss).mean()
-        
-        accuracy = accuracy_score(y[:,:self.num_classes].cpu(), y_pred.cpu()>=0.5)
+        accuracy = accuracy_score(y[:,:self.used_n_classes].cpu(), nn.functional.sigmoid(y_pred)[:,:self.used_n_classes].cpu()>=0.5)
         return loss, accuracy, y_pred
 
 
@@ -168,11 +145,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         t = torch.zeros((x.shape[0],), device=self.device).long()
             
         loss_classification, accuracy, y_pred = self.do_classification(x, t, y)
-        
-        if y_pred.shape[1]!=y.shape[1]: #means one class less in training
-            self.auroc_train.update(y_pred, y[:,:-1])
-        else:
-            self.auroc_train.update(y_pred[:,:-1], y[:,:-1])
+        self.auroc_train.update(y_pred[:,:self.used_n_classes], y[:,:self.used_n_classes])
 
         loss += loss_classification * self.classification_loss_weight
 
@@ -183,33 +156,55 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         self.log_dict(loss_dict, prog_bar=True,
                       logger=True, on_step=True, on_epoch=True)
 
-
         return loss
 
     @torch.no_grad()
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx, dataloader_idx):
+
+        self.log("global_step", self.global_step,
+                    prog_bar=True, logger=True, on_step=False, on_epoch=False, add_dataloader_idx=False)
+        
         x, y = self.get_valid_classification_input(batch, self.first_stage_key)
         t = torch.zeros((x.shape[0],), device=self.device).long()
         x_diff, c = self.get_input(batch, self.first_stage_key)
 
         loss, loss_dict_no_ema = self(x_diff, c)
-        loss_cls, accuracy, _ = self.do_classification(x, t, y)            
+        loss_cls, accuracy, _ = self.do_classification(x, t, y)      
 
-        loss_dict_no_ema.update({'val/loss_classification': loss_cls})
-        loss_dict_no_ema.update({'val/loss_full': loss + self.classification_loss_weight*loss_cls})
-        loss_dict_no_ema.update({'val/accuracy': accuracy})
+        if dataloader_idx == 0:      
 
+            loss_dict_no_ema.update({'val/loss_classification': loss_cls})
+            loss_dict_no_ema.update({'val/loss_full': loss + self.classification_loss_weight*loss_cls})
+            loss_dict_no_ema.update({'val/accuracy': accuracy})
+            self.log_dict(loss_dict_no_ema, prog_bar=True, logger=True, on_step=True, on_epoch=True, add_dataloader_idx=False)
+            
+            self.auroc_val.update(y_pred[:,:self.used_n_classes], y[:,:self.used_n_classes])
+            self.log('val/auroc', self.auroc_val, on_step=False, on_epoch=True, sync_dist=True, add_dataloader_idx=False)
 
-        with self.ema_scope():
-            loss, loss_dict_ema = self(x_diff, c)
-            loss_cls, accuracy, y_pred = self.do_classification(x, t, y)
+        
+        elif dataloader_idx == 1:
 
-            if y_pred.shape[1]!=y.shape[1]: #means one class less
-                self.auroc_val.update(y_pred, y[:,:-1])
-            else:
-                self.auroc_val.update(y_pred[:,:-1], y[:,:-1])
-            self.log('val/auroc_ema', self.auroc_val, on_step=False, on_epoch=True, sync_dist=True)
-            self.auroc_per_class.update(y_pred[:,:14], y[:,:14])
+            loss_dict_no_ema.update({'test/loss_classification': loss_cls})
+            loss_dict_no_ema.update({'test/loss_full': loss + self.classification_loss_weight*loss_cls})
+            loss_dict_no_ema.update({'test/accuracy': accuracy})
+            self.log_dict(loss_dict_no_ema, prog_bar=True, logger=True, on_step=True, on_epoch=True, add_dataloader_idx=False)
+
+            with self.ema_scope():
+                loss, loss_dict_ema = self(x_diff, c)
+                loss_cls, accuracy, y_pred = self.do_classification(x, t, y)
+                
+                loss_dict_ema.update({'test/loss_classification': loss_cls})
+                loss_dict_ema.update({'test/loss_full': loss + loss_cls})
+                loss_dict_ema.update({'test/accuracy': accuracy})
+                loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
+                self.log_dict(loss_dict_ema, prog_bar=True, logger=True, on_step=True, on_epoch=True, add_dataloader_idx=False)
+
+                self.auroc_test.update(y_pred[:,:self.used_n_classes], y[:,:self.used_n_classes])
+                self.log('test/auroc_ema', self.auroc_val, on_step=False, on_epoch=True, sync_dist=True, add_dataloader_idx=False)
+
+                self.auroc_test_per_class.update(y_pred[:,:self.used_n_classes], y[:,:self.used_n_classes])
+                # non aggregated auroc computed in on_validation_end()
+
             
             # # TODO FIXED but left just in case: this is the worst BUT FOR SOME REASON torch lightnig couldn't log the metric in non-ddp mode
             # # neither as non-aggregated, manually metric.compute() and accessed in self.on_validation_epoch_end() (no mode specified)
@@ -242,13 +237,6 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             # self.log('val/auroc_val_class_12', self.auroc_val_class_12, on_step=False, on_epoch=True, sync_dist=True)
             # self.auroc_val_class_13.update(y_pred[:,13], y[:,13])
             # self.log('val/auroc_val_class_13', self.auroc_val_class_13, on_step=False, on_epoch=True, sync_dist=True)
-     
-
-            loss_dict_ema.update({'val/loss_classification': loss_cls})
-            loss_dict_ema.update({'val/loss_full': loss + loss_cls})
-            loss_dict_ema.update({'val/accuracy': accuracy})
-            loss_dict_ema = {
-                key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
         
 
         self.log_dict(
@@ -268,10 +256,10 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
 
     @torch.no_grad()
     def on_validation_epoch_end(self):
-        metric = self.auroc_per_class.compute()
-        self.auroc_per_class.reset()
+        metric = self.auroc_test_per_class.compute()
+        self.auroc_test_per_class.reset()
         for i in range(14):
-            self.log(f'val/auroc_ema_class{i}', metric[i], on_step=False, on_epoch=True)
+            self.log(f'test/auroc_ema_class{i}', metric[i], on_step=False, on_epoch=True, add_dataloader_idx=False)
         
     @torch.no_grad()
     def test_step(self, batch, batch_idx):

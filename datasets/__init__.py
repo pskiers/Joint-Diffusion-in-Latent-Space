@@ -11,6 +11,7 @@ from .chest_xray_nih_densenet import ChestXRay_nih_densenet
 from .chest_xray_nih_ssl import ChestXRay_nih_ssl
 from .arch.chest_xray import ChestXRay
 from .chest_xray_nih_patches import ChestXRay_nih_patches
+from .chest_xray_nih_densenet_patches import ChestXRay_nih_densenet_patches
 from .chest_xray_nih_bbox import ChestXRay_nih_bbox
 from .arch.chest_xray_nih_64 import ChestXRay_nih_64
 from .mnist import AdjustedMNIST
@@ -40,40 +41,40 @@ def get_dataloaders(name: str,
                     pin_memory: bool = False,
                     persistent_workers: bool = False,
                     training_platform: str = 'plgrid',
-                     min_augmentation_ratio:str = 0.8,
-                     auto_augment = False):
+                    ):
     
     if name=='chest_xray_nih':
-        train_ds = ChestXRay_nih(mode='train', 
-                                 training_platform = training_platform)
+        train_ds = ChestXRay_nih(mode='train', training_platform = training_platform)
         val_ds = ChestXRay_nih(mode='val', training_platform = training_platform)
         test_ds = ChestXRay_nih(mode='test', training_platform = training_platform)
-        num_classes = 15
-        return non_randaugment_dl(
+        return train_test_val_dl(
             train_ds, val_ds, test_ds, train_batches, val_batch, num_workers, 
             pin_memory=pin_memory, persistent_workers=persistent_workers)
+    
     elif name=='chest_xray_nih_2perc':
         train_ds = ChestXRay_nih_ssl(mode='train', 
-                                    training_platform = training_platform, 
-                                    min_augmentation_ratio=min_augmentation_ratio,
-                                    auto_augment = auto_augment, labeled = True)
-        val_ds = ChestXRay_nih(mode='test', training_platform = training_platform)
-        num_classes = 15
-        return non_randaugment_dl(
-            train_ds, val_ds, num_labeled, train_batches, val_batch, num_classes, num_workers, 
+                                    training_platform = training_platform, labeled = True)
+        val_ds = ChestXRay_nih_ssl(mode='val', training_platform = training_platform, labeled = True)
+        test_ds = ChestXRay_nih(mode='test', training_platform = training_platform)
+        return train_test_val_dl(
+            train_ds, val_ds, test_ds,train_batches, val_batch, num_workers, 
             pin_memory=pin_memory, persistent_workers=persistent_workers)
+    
     elif name=='chest_xray_nih_ssl':
-            labeled_dataset = ChestXRay_nih_ssl(mode='train', 
-                                    training_platform = training_platform, 
-                                    min_augmentation_ratio=min_augmentation_ratio,
-                                    auto_augment = auto_augment, labeled = True)
-            unlabeled_dataset = ChestXRay_nih_ssl(mode='train', 
-                                    training_platform = training_platform, 
-                                    min_augmentation_ratio=min_augmentation_ratio,
-                                    auto_augment = auto_augment, labeled = False)
-            test_dataset = ChestXRay_nih_ssl(mode='test', training_platform = training_platform)
-            num_classes = 15
-            return ssl_randaugment_dl(labeled_dataset, unlabeled_dataset, test_dataset, train_batches[0], val_batch, num_workers)
+            labeled_ds = ChestXRay_nih_ssl(mode='train', 
+                                training_platform = training_platform,
+                                labeled = True)
+            unlabeled_ds = ChestXRay_nih_ssl(mode='train', 
+                                training_platform = training_platform, 
+                                labeled = False)
+            val_ds = ChestXRay_nih_ssl(mode='train', 
+                                training_platform = training_platform, 
+                                labeled = False)
+            test_ds = ChestXRay_nih(mode='test', training_platform = training_platform)
+            return ssl_basic_dl(
+                 labeled_ds, unlabeled_ds, val_ds, test_ds, 
+                 train_batches[0], val_batch, num_workers)
+    
     elif name=='chest_xray_nih_patches':
             ds = ChestXRay_nih_patches(training_platform = training_platform)
             dl = torch.utils.data.DataLoader(
@@ -84,43 +85,28 @@ def get_dataloaders(name: str,
                 pin_memory=pin_memory,
                 persistent_workers = persistent_workers
             )
-            num_classes = 14
-            return None, dl
+            return dl
+    
     elif name=='chest_xray_nih_densenet':
         train_ds = ChestXRay_nih_densenet(mode='train', 
                                        training_platform = training_platform)
         val_ds = ChestXRay_nih_densenet(mode='val', training_platform = training_platform)
         test_ds = ChestXRay_nih_densenet(mode='test', training_platform = training_platform)
-        
-        train_dl = torch.utils.data.DataLoader(
-            train_ds,
-            batch_size=train_batches[0],
-            shuffle=True,
-            num_workers=num_workers,
-            drop_last=True,
-            pin_memory=pin_memory,
-            persistent_workers = persistent_workers,
-        )
-
-        valid_dl = torch.utils.data.DataLoader(
-            val_ds,
-            batch_size=val_batch,
-            shuffle=False,
-            num_workers=num_workers,
-            pin_memory=pin_memory,
-            persistent_workers = persistent_workers
-        )
-
-        test_dl = torch.utils.data.DataLoader(
-            test_ds,
-            batch_size=val_batch,
-            shuffle=False,
-            num_workers=num_workers,
-            pin_memory=pin_memory,
-            persistent_workers = persistent_workers
-        )
-        num_classes = 15
-        return train_dl, valid_dl, test_dl
+        return train_test_val_dl(
+            train_ds, val_ds, test_ds, train_batches, val_batch, num_workers, 
+            pin_memory=pin_memory, persistent_workers=persistent_workers)
+    
+    elif name=='chest_xray_nih_densenet_patches':
+            ds = ChestXRay_nih_densenet_patches(training_platform = training_platform)
+            dl = torch.utils.data.DataLoader(
+                ds,
+                batch_size=val_batch,
+                shuffle=False,
+                num_workers=num_workers,
+                pin_memory=pin_memory,
+                persistent_workers = persistent_workers
+            )
+            return dl
 
     # elif name == "cifar10_randaugment":
     #     if num_labeled is not None:
@@ -188,63 +174,7 @@ def get_dataloaders(name: str,
     else:
         raise NotImplementedError(f"Dataset {name} not implemented")
 
-
-def supervised_randaugment_dl(labeled_dataset, test_dataset, batch_train, batch_val, num_workers):
-    labeled_trainloader = DataLoader(
-        labeled_dataset,
-        sampler=RandomSampler(labeled_dataset),
-        batch_size=batch_train,
-        num_workers=num_workers,
-        drop_last=True)
-
-    test_loader = DataLoader(
-        test_dataset,
-        sampler=SequentialSampler(test_dataset),
-        batch_size=batch_val,
-        num_workers=num_workers)
-    return labeled_trainloader, test_loader
-
-
-def ssl_randaugment_dl(labeled_dataset, unlabeled_dataset, test_dataset, batch_train, batch_val, num_workers):
-    labeled_trainloader = DataLoader(
-        labeled_dataset,
-        sampler=RandomSampler(labeled_dataset),
-        batch_size=batch_train,
-        num_workers=num_workers,
-        drop_last=True)
-
-    unlabeled_trainloader = DataLoader(
-        unlabeled_dataset,
-        sampler=RandomSampler(unlabeled_dataset),
-        batch_size=batch_train*7,
-        num_workers=num_workers,
-        drop_last=True)
-
-    test_loader = DataLoader(
-        test_dataset,
-        sampler=SequentialSampler(test_dataset),
-        batch_size=batch_val,
-        num_workers=num_workers)
-    return (labeled_trainloader, unlabeled_trainloader), test_loader
-
-
-def randaugment_dl(labeled_dataset, test_dataset, batch_train, batch_val, num_workers):
-    labeled_trainloader = DataLoader(
-        labeled_dataset,
-        sampler=RandomSampler(labeled_dataset),
-        batch_size=batch_train,
-        num_workers=num_workers,
-        drop_last=True)
-
-    test_loader = DataLoader(
-        test_dataset,
-        sampler=SequentialSampler(test_dataset),
-        batch_size=batch_val,
-        num_workers=num_workers)
-    return labeled_trainloader, test_loader
-
-
-def non_randaugment_dl(train_ds: torch.utils.data.Dataset,
+def train_test_val_dl(train_ds: torch.utils.data.Dataset,
                        val_ds: torch.utils.data.Dataset,
                        test_ds: torch.utils.data.Dataset,
                        train_batches: Tuple[int],
@@ -294,6 +224,66 @@ def non_randaugment_dl(train_ds: torch.utils.data.Dataset,
     )
 
     return train_dl, valid_dl, test_dl
+
+
+def ssl_basic_dl(labeled_dataset, unlabeled_dataset, val_dataset, test_dataset, batch_train, batch_val, num_workers):
+    labeled_trainloader = DataLoader(
+        labeled_dataset,
+        sampler=RandomSampler(labeled_dataset),
+        batch_size=batch_train,
+        num_workers=num_workers,
+        drop_last=True)
+
+    unlabeled_trainloader = DataLoader(
+        unlabeled_dataset,
+        sampler=RandomSampler(unlabeled_dataset),
+        batch_size=batch_train*7,
+        num_workers=num_workers,
+        drop_last=True)
+
+    val_loader = DataLoader(
+        val_dataset,
+        sampler=SequentialSampler(test_dataset),
+        batch_size=batch_val,
+        num_workers=num_workers)
+
+    test_loader = DataLoader(
+        test_dataset,
+        sampler=SequentialSampler(test_dataset),
+        batch_size=batch_val,
+        num_workers=num_workers)
+    return (labeled_trainloader, unlabeled_trainloader), val_loader, test_loader
+
+
+def randaugment_dl(labeled_dataset, test_dataset, batch_train, batch_val, num_workers):
+    labeled_trainloader = DataLoader(
+        labeled_dataset,
+        sampler=RandomSampler(labeled_dataset),
+        batch_size=batch_train,
+        num_workers=num_workers,
+        drop_last=True)
+
+    test_loader = DataLoader(
+        test_dataset,
+        sampler=SequentialSampler(test_dataset),
+        batch_size=batch_val,
+        num_workers=num_workers)
+    return labeled_trainloader, test_loader
+
+def supervised_randaugment_dl(labeled_dataset, test_dataset, batch_train, batch_val, num_workers):
+    labeled_trainloader = DataLoader(
+        labeled_dataset,
+        sampler=RandomSampler(labeled_dataset),
+        batch_size=batch_train,
+        num_workers=num_workers,
+        drop_last=True)
+
+    test_loader = DataLoader(
+        test_dataset,
+        sampler=SequentialSampler(test_dataset),
+        batch_size=batch_val,
+        num_workers=num_workers)
+    return labeled_trainloader, test_loader
 
 
 def get_cl_datasets(

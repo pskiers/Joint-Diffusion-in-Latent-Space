@@ -13,7 +13,7 @@ from ..utils import FixMatchEma, interleave, de_interleave
 from sklearn.metrics import accuracy_score
 
 
-class LatentDiffMatchPoolingMultilabel(JointLatentDiffusionMultilabel):
+class LatentSSLMultilabel(JointLatentDiffusionMultilabel):
     def __init__(self,
                  first_stage_config,
                  cond_stage_config,
@@ -151,7 +151,7 @@ class LatentDiffMatchPoolingMultilabel(JointLatentDiffusionMultilabel):
             batch = (batch[1][0][0], batch[1][1])
         return super().log_images(batch=batch, N=8, n_row=2, sample=True, return_keys=None, **kwargs)
 
-class LatentDiffMatchAttentionMultiLabel(LatentDiffMatchPoolingMultilabel):
+class LatentSSLAttentionMultiLabel(LatentSSLMultilabel):
     def __init__(self,
                  first_stage_config,
                  cond_stage_config,

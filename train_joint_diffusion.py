@@ -106,5 +106,5 @@ if __name__ == "__main__":
     trainer.fit(
         model,
         train_dataloaders=train_dls,
-        val_dataloaders=val_dl,
+        val_dataloaders=[val_dl, test_dl],
     )

@@ -28,7 +28,6 @@ class ChestXRay_nih(torch.utils.data.Dataset):
         df = pd.concat([df.drop("Finding Labels", axis=1), df["Finding Labels"].str.get_dummies('|')], axis=1)
         df.rename(columns=lambda x: x.replace(" ", "_").lower(), inplace=True)
         self.labels = df.columns[~df.columns.isin(['no_finding', 'image_index'])]
-        self.normalize = transforms.Normalize(mean=0.5, std=0.5)
 
         assert mode in ['val', 'train', 'test']
 
@@ -40,9 +39,9 @@ class ChestXRay_nih(torch.utils.data.Dataset):
             df = df[df["image_index"].isin(image_list)]
             df["image_path"] = data_path+"/images/"+df["image_index"]
             df.drop(columns=["image_index"], inplace=True)
-            df = df.sample(frac=1, random_state=45654).reset_index(drop=True)
-            
+            #df = df.sample(frac=1, random_state=45654).reset_index(drop=True) # for rough tests on subsets
             self.split_idx = int(0.1*len(df))
+            self.train_val_image_df = df
             
             if mode =='val':
                 self.final_image_df = df[:self.split_idx].reset_index(drop=True)
@@ -50,7 +49,7 @@ class ChestXRay_nih(torch.utils.data.Dataset):
                 transformList = []
                 transformList.append(transforms.Resize(256))
                 transformList.append(transforms.ToTensor())
-                transformList.append(self.normalize)  
+                transformList.append(transforms.Normalize(mean=0.5, std=0.5))  
                 self.transform=transforms.Compose(transformList)
 
             elif mode =='train':
@@ -60,7 +59,7 @@ class ChestXRay_nih(torch.utils.data.Dataset):
                 transformList.append(transforms.RandomResizedCrop(256))
                 transformList.append(transforms.RandomHorizontalFlip())
                 transformList.append(transforms.ToTensor())
-                transformList.append(self.normalize)      
+                transformList.append(transforms.Normalize(mean=0.5, std=0.5))      
                 self.transform=transforms.Compose(transformList)
 
             
@@ -75,7 +74,7 @@ class ChestXRay_nih(torch.utils.data.Dataset):
             transformList = []
             transformList.append(transforms.Resize(256))
             transformList.append(transforms.ToTensor())
-            transformList.append(self.normalize)  
+            transformList.append(transforms.Normalize(mean=0.5, std=0.5))  
             self.transform=transforms.Compose(transformList)
 
         

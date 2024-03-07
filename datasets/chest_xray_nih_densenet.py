@@ -28,9 +28,6 @@ class ChestXRay_nih_densenet(torch.utils.data.Dataset):
         df = pd.concat([df.drop("Finding Labels", axis=1), df["Finding Labels"].str.get_dummies('|')], axis=1)
         df.rename(columns=lambda x: x.replace(" ", "_").lower(), inplace=True)
         self.labels = df.columns[~df.columns.isin(['no_finding', 'image_index'])]
-        self.normalize = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-
-
 
         assert mode in ['val', 'train', 'test']
 
@@ -43,7 +40,6 @@ class ChestXRay_nih_densenet(torch.utils.data.Dataset):
             df["image_path"] = data_path+"/images/"+df["image_index"]
             df.drop(columns=["image_index"], inplace=True)
             df = df.sample(frac=1, random_state=45654).reset_index(drop=True)
-            
             self.split_idx = int(0.1*len(df))
             
             if mode =='val':
@@ -52,7 +48,7 @@ class ChestXRay_nih_densenet(torch.utils.data.Dataset):
                 transformList = []
                 transformList.append(transforms.Resize(224))
                 transformList.append(transforms.ToTensor())
-                transformList.append(self.normalize)  
+                transformList.append(transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]))  
                 self.transform=transforms.Compose(transformList)
 
             elif mode =='train':
@@ -62,7 +58,7 @@ class ChestXRay_nih_densenet(torch.utils.data.Dataset):
                 transformList.append(transforms.RandomResizedCrop(224))
                 transformList.append(transforms.RandomHorizontalFlip())
                 transformList.append(transforms.ToTensor())
-                transformList.append(self.normalize)      
+                transformList.append(transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]))      
                 self.transform=transforms.Compose(transformList)
 
             
@@ -77,7 +73,7 @@ class ChestXRay_nih_densenet(torch.utils.data.Dataset):
             transformList = []
             transformList.append(transforms.Resize(224))
             transformList.append(transforms.ToTensor())
-            transformList.append(self.normalize)  
+            transformList.append(transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]))  
             self.transform=transforms.Compose(transformList)
 
 
@@ -98,4 +94,4 @@ class ChestXRay_nih_densenet(torch.utils.data.Dataset):
 if __name__ == "__main__":
     ds = ChestXRay_nih_densenet()
     print(len(ds))
-    print(ds[0][0])
+    print(ds[0][0].shape)

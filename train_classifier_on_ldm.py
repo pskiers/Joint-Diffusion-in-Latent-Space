@@ -34,7 +34,7 @@ if __name__ == "__main__":
     lightning_config.trainer = trainer_config
 
     dl_config = config.pop("dataloaders")
-    train_dls, test_dl = get_dataloaders(**dl_config)
+    train_dls, val_dl, test_dl = get_dataloaders(**dl_config)
 
     if checkpoint_path is not None:
         config.model.params["ckpt_path"] = checkpoint_path

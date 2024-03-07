@@ -12,7 +12,7 @@ from albumentations.pytorch import ToTensorV2
 from torchvision import datasets, models, transforms
 import PIL
 
-class ChestXRay_nih_patches(torch.utils.data.Dataset):
+class ChestXRay_nih_densenet_patches(torch.utils.data.Dataset):
     def __init__(self,training_platform: str = 'local_sano') -> None:
         super().__init__()
 
@@ -60,5 +60,5 @@ class ChestXRay_nih_patches(torch.utils.data.Dataset):
   
 
 if __name__ == "__main__":
-    ds = ChestXRay_nih_patches(auto_augment=True)
+    ds = ChestXRay_nih_densenet_patches()
     print(ds[1][0].shape)

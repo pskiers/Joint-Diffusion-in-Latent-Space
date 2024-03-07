@@ -50,7 +50,7 @@ class MultilabelClassifier(pl.LightningModule):
             dropout: float =0,
             learning_rate: float=0.00001,
             weight_decay: float = 0,
-            classifier_test_mode: str = "encoder_resnet",
+            classifier_test_mode: str = "densenet",
             weights=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
             ft_enc = False,
             ckpt_path = None,
@@ -83,6 +83,7 @@ class MultilabelClassifier(pl.LightningModule):
 
     def instantiate_modules(self):
         if self.classifier_test_mode == "encoder_resnet":
+                raise "Not a baseline, not tested, pls dont use it"
                 self.instantiate_first_stage(self.first_stage_config)
                 self.resnet = resnet50()
                 self.resnet.conv1 = nn.Conv2d(self.channels, 64, kernel_size=3, stride=1, padding=2, bias=False)
@@ -93,6 +94,7 @@ class MultilabelClassifier(pl.LightningModule):
                     nn.Linear(self.in_features, self.num_classes)
                     )
         elif self.classifier_test_mode == "encoder_linear":
+            raise "Not a baseline, not tested, pls dont use it"
             self.instantiate_first_stage(self.first_stage_config)
             self.fc = nn.Sequential(
                 nn.Flatten(),
@@ -102,6 +104,7 @@ class MultilabelClassifier(pl.LightningModule):
                 nn.Linear(self.in_features//8, self.num_classes)
                 )
         elif self.classifier_test_mode == "resnet":
+            raise "Not a baseline, not tested, pls dont use it"
             self.resnet = resnet50()
             self.resnet.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
             #for smaller imgs #self.resnet.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=2, bias=False)
