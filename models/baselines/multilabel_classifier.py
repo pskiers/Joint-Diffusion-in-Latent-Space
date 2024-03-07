@@ -232,7 +232,6 @@ class MultilabelClassifier(pl.LightningModule):
             self.log_dict(loss_dict, prog_bar=True, logger=True, on_step=True, on_epoch=True, add_dataloader_idx=False)
             
         
-        
     
     @torch.no_grad()
     def test_step(self, batch, batch_idx):

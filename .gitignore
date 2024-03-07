@@ -152,6 +152,6 @@ vce_results/
 *.zip
 vce_results_baseline/
 sano_machines/
-slurm/
+slurm*/
 vce_*/*
 m-25012018-123527.pth.tar

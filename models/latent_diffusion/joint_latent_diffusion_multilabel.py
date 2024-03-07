@@ -100,7 +100,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         opt = torch.optim.AdamW(l, lr=0)
         scheduler = {
         'scheduler': DelayedReduceOnPlateau(opt, factor = 0.5, patience = 5, mode = 'min', delay=self.classification_start+1000),
-        'monitor': "val/loss"
+        'monitor': "val/loss_classification_ema"
         }
         return [opt], [scheduler]
     

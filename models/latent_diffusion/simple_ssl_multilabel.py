@@ -20,9 +20,6 @@ class LatentSSLMultilabel(JointLatentDiffusionMultilabel):
                  classifier_in_features,
                  classifier_hidden,
                  num_classes,
-                 min_confidence=0.95,
-                 mu=7,
-                 batch_size=64,
                  classification_start=0,
                  dropout=0,
                  classification_loss_weight=1.0,
@@ -62,10 +59,6 @@ class LatentSSLMultilabel(JointLatentDiffusionMultilabel):
             *args,
             **kwargs
         )
-        self.min_confidence = min_confidence
-        self.mu = mu
-        self.batch_size = batch_size
-        self.classification_start = classification_start
 
     def get_sampl(self):
         print("sampling_method, gradient_guided_samplings", self.sampling_method, self.gradient_guided_sampling)
@@ -103,6 +96,12 @@ class LatentSSLMultilabel(JointLatentDiffusionMultilabel):
         x = self.to_latent(x, arrange=True)
         y = batch[self.classification_key]
         return x, y
+    
+    def training_step(self, batch, batch_idx, dataloader_idx):
+        loss = super().training_step(batch, batch_idx)
+        if dataloader_idx == 0 and self.global_step%4==0:
+            loss = self.train_classification_step(batch, loss)
+        return loss
 
     def train_classification_step(self, batch, loss):
         if self.classification_start > 0:
