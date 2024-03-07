@@ -120,6 +120,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
 
     def train_classification_step(self, batch, loss):
         if self.classification_start > 0:
+            print('HERE CHECK GLOB', self.global_step, self.classification_start)
             self.classification_start -= 1
             return loss
         
