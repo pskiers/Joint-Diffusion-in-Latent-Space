@@ -66,7 +66,7 @@ class ChestXRay_nih_densenet(torch.utils.data.Dataset):
             with open(os.path.join(data_path, "test_list.txt")) as file:
                 image_list = [line.rstrip() for line in file] 
             df = df[df["image_index"].isin(image_list)]
-            df["image_path"] = data_path+"/images256/"+df["image_index"]
+            df["image_path"] = data_path+"/images/"+df["image_index"]
             df.drop(columns=["image_index"], inplace=True)
             self.final_image_df = df.sample(frac=1, random_state=45654).reset_index(drop=True)
 

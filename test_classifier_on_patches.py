@@ -31,7 +31,7 @@ if __name__ == "__main__":
                       "accelerator": "ddp"}
     trainer_opt = argparse.Namespace(**trainer_config)
     
-    dl_config = {"name": "chest_xray_nih_patches",
+    dl_config = {"name": "chest_xray_nih_densenet_patches",
                  "train_batches": [None],
                 "val_batch": 16,
                 "num_workers": 6,
@@ -39,7 +39,7 @@ if __name__ == "__main__":
                 "persistent_workers": True,
                 "training_platform": "local_sano"}
     
-    test_dl = get_dataloaders(**dl_config)[1]
+    test_dl = get_dataloaders(**dl_config)
     model = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
 
     print('[WARNING]this script  Hardcoded for patches')

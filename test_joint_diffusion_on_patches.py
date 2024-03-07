@@ -39,7 +39,7 @@ if __name__ == "__main__":
                 "persistent_workers": True,
                 "training_platform": "local_sano"}
     
-    test_dl = get_dataloaders(**dl_config)[1]
+    test_dl = get_dataloaders(**dl_config)
     model = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
     
     
