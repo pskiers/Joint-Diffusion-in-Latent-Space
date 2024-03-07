@@ -24,7 +24,7 @@ model:
     classification_key: 1
     classification_loss_weight: 0.001
     augmentations: False
-
+    classification_start: 3000
     classifier_in_features: 26240
     classifier_hidden: 2048 #now calculated in code
     num_classes: 14 # we can have 15 with last column, or 14 without
@@ -73,8 +73,6 @@ dataloaders:
   name: chest_xray_nih
   train_batches: [ 64 ] #96 for RAM40, 196 for RAM80
   val_batch: 128
-  min_augmentation_ratio: 0.8
-  auto_augment: False
   num_workers: 6
   num_labeled: null
   pin_memory: True
