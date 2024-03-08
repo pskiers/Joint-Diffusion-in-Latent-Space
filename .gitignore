@@ -8,8 +8,6 @@ wandb/
 fid_saves/
 logs_old/
 assets
-cifar10*
-svhn*
 samples/
 pulled_checkpoints
 

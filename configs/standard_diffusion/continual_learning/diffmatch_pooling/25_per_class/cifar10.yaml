@@ -1,6 +1,6 @@
 model:
   base_learning_rate: 0.0002
-  model_type: class_conditioned_ddpm
+  model_type: diffmatch_pooling
   params:
     beta_schedule: sqrt_linear
     linear_start: 0.001
@@ -8,15 +8,22 @@ model:
     log_every_t: 200
     timesteps: 1000
     first_stage_key: 0
-    cond_key: 1
     image_size: 32
     channels: 3
-    monitor: val/loss_ema
+    monitor: val/accuracy_ema
+    classification_loss_weight: 0.001
+    classification_loss_weight_max: 0.001
+    classification_loss_weight_increments: 0
+    classifier_in_features: 3712
+    classifier_hidden: 1024
+    num_classes: 10
+    dropout: 0.1
+    batch_size: 32
+    classification_start: 0
 
     unet_config:
-      target: ldm.modules.diffusionmodules.openaimodel.UNetModel
+      target: models.AdjustedUNet
       params:
-        num_classes: 10
         image_size: 32
         in_channels: 3
         out_channels: 3
@@ -27,27 +34,30 @@ model:
         num_heads: 4
         dropout: 0.1
         use_scale_shift_norm: True
+        pool_size: 10000
 
 cl:
   grad_scale: 15
   samples_per_class: 5000
   sampling_method: "conditional_to_x"
-  weight_reinit: "none"
+  weight_reinit: "unused classes"
 
 dataloaders:
-  name: cifar10
-  train_batches: [ 256 ]
+  name: cifar10_randaugment
+  train_batches: [ 32 ]
   val_batch: 256
   num_workers: 16
-  num_labeled: null
+  num_labeled: 2500
+  mean: [0.4914, 0.4822, 0.4465]
+  std: [0.2471, 0.2435, 0.2616]
 
 
 lightning:
   trainer:
     benchmark: True
     checkpoint_callback: True
-    max_steps: 1000000
-    # accumulate_grad_batches: 2
+    max_steps: 100000
+    accumulate_grad_batches: 2
 
   callbacks:
     # fid_logger:
@@ -66,7 +76,7 @@ lightning:
       increase_log_steps: False
       log_images_kwargs: {
           "N": 10,
-          "y": [2, 2, 2, 2, 2, 3, 3, 3, 3, 3]
+          "inpaint": False,
       }
-      # mean: [0.4914, 0.4822, 0.4465]
-      # std: [0.2471, 0.2435, 0.2616]
+      mean: [0.4914, 0.4822, 0.4465]
+      std: [0.2471, 0.2435, 0.2616]
