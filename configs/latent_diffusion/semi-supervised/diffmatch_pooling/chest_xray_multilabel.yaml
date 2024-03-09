@@ -1,8 +1,8 @@
 model:
   logdir: home/jk/Joint-Diffusion-in-Latent-Space/
-  base_learning_rate: 5.0e-05
+  base_learning_rate: 1.0e-04
   weight_decay: 0.0001
-  model_type: latent_diffmatch_pooling_multilabel
+  model_type: latent_ssl_pooling_multilabel
   params:
     linear_start: 0.0015
     linear_end: 0.0195
@@ -19,18 +19,14 @@ model:
     #14 classes, log
     # weights: [0.741790821, 1.485960814, 1.253424332, 1.581670469, 0.718735907, 1.567343026, 1.624709854, 2.581797199, 0.464784148, 1.092677857, 1.019675586, 1.363090079, 1.782541339, 1.289286516]
 
-    min_confidence: 0.95
-    mu: 3 # doesnt influence batch train / test size. You have to do it manually in datasets/init
-    classification_start: 0
-
     classification_key: 1
-    classification_loss_weight: 0.01
+    classification_loss_weight: 0.001
     augmentations: False
-
-    classifier_in_features: 26240
-    classifier_hidden: 2048 #we dont use it, now computed in code
-    num_classes: 15 # we can have 15 with last column 'no findings', or 14 without. AUROC always for 14- hardcoded
-    dropout: 0.3
+    classification_start: 10000
+    classifier_in_features: 5044
+    classifier_hidden: 1024 #we dont use it, now computed in code
+    num_classes: 14 # we can have 15 with last column 'no findings', or 14 without. AUROC always for 14- hardcoded
+    dropout: 0.0
 
     unet_config:
       target: models.AdjustedUNet
@@ -38,12 +34,12 @@ model:
         image_size: 32
         in_channels: 4
         out_channels: 4
-        model_channels: 320
+        model_channels: 256
         attention_resolutions: [ 4,2,1 ]
         num_res_blocks: 2
         channel_mult: [ 1, 2, 4]
         #num_head_channels: 32
-        pool_size: 8 #10000
+        pool_size: 10000
         pool_type: max
         num_head_channels: 32
 
@@ -73,10 +69,8 @@ model:
 batch_size: 32 # we need labeled train batch also here - the code was not optimized. I could have fixed it but i just didnt
 dataloaders:
   name: chest_xray_nih_ssl
-  train_batches: [32] #for laebeled. unlabeled size is multiplied by mu
-  val_batch: 64
-  min_augmentation_ratio: 8
-  auto_augment: False
+  train_batches: [16] 
+  val_batch: 16
   num_workers: 6
   num_labeled: 1500
   pin_memory: True
@@ -90,7 +84,7 @@ lightning:
     benchmark: True
     checkpoint_callback: True
     max_steps: 100000
-    gpus: -1
+    gpus: 0
     accelerator: ddp
     # accumulate_grad_batches: 2
       

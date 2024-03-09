@@ -96,7 +96,7 @@ if __name__ == "__main__":
 
     if (fid_cfg := callback_cfg.get("fid_logger", None)) is not None:
         fid_cfg = dict(fid_cfg)
-        fid_cfg["real_dl"] = train_dls[1] if type(train_dls) in (tuple, list) else train_dls  # first dataloader should contain the original images
+        fid_cfg["real_dl"] = train_dls[1] if type(train_dls) in (tuple, list) else train_dls
         fid_cfg["device"] = torch.device("cuda")
         trainer_kwargs["callbacks"].append(FIDScoreLogger(**fid_cfg))
 

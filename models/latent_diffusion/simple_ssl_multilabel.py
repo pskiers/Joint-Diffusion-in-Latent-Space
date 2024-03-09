@@ -13,7 +13,7 @@ from ..utils import FixMatchEma, interleave, de_interleave
 from sklearn.metrics import accuracy_score
 
 
-class LatentSSLMultilabel(JointLatentDiffusionMultilabel):
+class LatentSSLPoolingMultilabel(JointLatentDiffusionMultilabel):
     def __init__(self,
                  first_stage_config,
                  cond_stage_config,
@@ -86,13 +86,11 @@ class LatentSSLMultilabel(JointLatentDiffusionMultilabel):
     def get_train_classification_input(self, batch, k):
         x = batch[0][k]
         x = self.to_latent(x, arrange=True)
-
         y = batch[0][self.classification_key]
-
         return x, y 
 
     def get_valid_classification_input(self, batch, k):
-        x = batch[k]
+        x = batch[0][k]
         x = self.to_latent(x, arrange=True)
         y = batch[self.classification_key]
         return x, y
@@ -107,41 +105,24 @@ class LatentSSLMultilabel(JointLatentDiffusionMultilabel):
         if self.classification_start > 0:
             self.classification_start -= 1
             return loss
-
+        
         loss_dict = {}
 
-        x, y = self.get_train_classification_input(
-            batch, self.first_stage_key)
-        t = torch.zeros((x.shape[0]), device=self.device).long()
+        x, y = self.get_train_classification_input(batch, self.first_stage_key)
+        t = torch.zeros((x.shape[0],), device=self.device).long()
+            
+        loss_classification, accuracy, y_pred = self.do_classification(x, t, y)
+        self.auroc_train.update(y_pred[:,:self.used_n_classes], y[:,:self.used_n_classes])
 
-        inputs = x
-
-        unet: AdjustedUNet = self.model.diffusion_model
-        representations = unet.just_representations(inputs, t, pooled=False)
-        representations = self.transform_representations(representations)
-        logits = self.classifier(representations)
-
-        preds_x = logits[:self.batch_size]
-        
-        loss_classification = nn.functional.binary_cross_entropy_with_logits(preds_x, y.float()[:,:self.num_classes], 
-                                                                             pos_weight=self.BCEweights.to(self.device), reduction="mean")
         loss += loss_classification * self.classification_loss_weight
-        loss_dict.update(
-            {'train/loss_classification': loss_classification})
-        
-        accuracy = accuracy_score(y[:,:self.num_classes].cpu(), preds_x.cpu()>=0.5)
-        loss_dict.update({'train/loss': loss})
-        loss_dict.update({'train/accuracy': accuracy})
-
-        if preds_x.shape[1]!=y.shape[1]: #means one class less in training
-            self.auroc_train.update(preds_x, y[:,:-1])
-        else:
-            self.auroc_train.update(preds_x[:,:-1], y[:,:-1])
 
         self.log('train/auroc', self.auroc_train, on_step=False, on_epoch=True)
-
+        loss_dict.update({'train/loss_classification': loss_classification})
+        loss_dict.update({'train/loss_full': loss})
+        loss_dict.update({'train/accuracy': accuracy})
         self.log_dict(loss_dict, prog_bar=True,
                       logger=True, on_step=True, on_epoch=True)
+
         return loss
     
     @torch.no_grad()
@@ -150,7 +131,7 @@ class LatentSSLMultilabel(JointLatentDiffusionMultilabel):
             batch = (batch[1][0][0], batch[1][1])
         return super().log_images(batch=batch, N=8, n_row=2, sample=True, return_keys=None, **kwargs)
 
-class LatentSSLAttentionMultiLabel(LatentSSLMultilabel):
+class LatentSSLAttentionMultiLabel(LatentSSLPoolingMultilabel):
     def __init__(self,
                  first_stage_config,
                  cond_stage_config,

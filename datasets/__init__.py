@@ -237,7 +237,7 @@ def ssl_basic_dl(labeled_dataset, unlabeled_dataset, val_dataset, test_dataset, 
     unlabeled_trainloader = DataLoader(
         unlabeled_dataset,
         sampler=RandomSampler(unlabeled_dataset),
-        batch_size=batch_train*7,
+        batch_size=batch_train,
         num_workers=num_workers,
         drop_last=True)
 
