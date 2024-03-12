@@ -2,6 +2,7 @@ model:
   base_learning_rate: 0.0002
   model_type: diffmatch_pooling
   params:
+    clip_denoised: False
     beta_schedule: sqrt_linear
     linear_start: 0.001
     linear_end: 0.02
@@ -20,7 +21,7 @@ model:
     dropout: 0.1
     batch_size: 16
     classification_start: 0
-    sampling_method: "conditional_to_x"    
+    sampling_method: "conditional_to_repr"    
     sample_grad_scale: 0
 
     unet_config:
@@ -41,7 +42,7 @@ model:
 cl:
   grad_scale: 15
   samples_per_class: 5000
-  sampling_method: "conditional_to_x"
+  sampling_method: "conditional_to_repr"
   weight_reinit: "unused classes"
 
 dataloaders:
@@ -81,7 +82,7 @@ lightning:
           "inpaint": False,
           "sample_classes": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
           "use_ema": False,
-          "grad_scales": [100, 50, 20, 0]
+          "grad_scales": [100, 70, 0]
       }
       mean: [0.4914, 0.4822, 0.4465]
       std: [0.2471, 0.2435, 0.2616]

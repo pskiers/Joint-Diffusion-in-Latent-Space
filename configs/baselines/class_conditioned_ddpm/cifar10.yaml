@@ -2,6 +2,7 @@ model:
   base_learning_rate: 0.0002
   model_type: class_conditioned_ddpm
   params:
+    clip_denoised: False
     beta_schedule: sqrt_linear
     linear_start: 0.001
     linear_end: 0.02
