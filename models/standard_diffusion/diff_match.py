@@ -163,6 +163,8 @@ class DiffMatchFixed(DDPM):
                  classification_loss_weight=1,
                  classification_loss_weight_max=1,
                  classification_loss_weight_increments=0,
+                 sampling_method="unconditional",
+                 sample_grad_scale=0,
                  *args,
                  **kwargs):
         super().__init__(*args, **kwargs)
@@ -177,7 +179,8 @@ class DiffMatchFixed(DDPM):
         self.classification_loss_weight_max = classification_loss_weight_max
         self.classification_loss_weight_increments = classification_loss_weight_increments
         self.scheduler = None
-        self.sampling_method = "unconditional"
+        self.sampling_method = sampling_method
+        self.sample_grad_scale = sample_grad_scale
         if self.use_ema:
             self.model_ema = FixMatchEma(self, decay=0.999)
             print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
@@ -379,39 +382,42 @@ class DiffMatchFixed(DDPM):
         self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
 
     def on_validation_epoch_end(self) -> None:
-        wandb.log({"val/conf_mat": wandb.plot.confusion_matrix(
-            probs=None,
-            y_true=self.val_labels.numpy(),
-            preds=self.val_preds.numpy(),
-        )})
-        wandb.log({"val/conf_mat_ema": wandb.plot.confusion_matrix(
-            probs=None,
-            y_true=self.val_labels.numpy(),
-            preds=self.val_preds_ema.numpy(),
-        )})
+        # wandb.log({"val/conf_mat": wandb.plot.confusion_matrix(
+        #     probs=None,
+        #     y_true=self.val_labels.numpy(),
+        #     preds=self.val_preds.numpy(),
+        # )})
+        # wandb.log({"val/conf_mat_ema": wandb.plot.confusion_matrix(
+        #     probs=None,
+        #     y_true=self.val_labels.numpy(),
+        #     preds=self.val_preds_ema.numpy(),
+        # )})
         self.val_labels = torch.tensor([])
         self.val_preds = torch.tensor([])
         self.val_preds_ema = torch.tensor([])
 
     def p_mean_variance(self, x, t, clip_denoised: bool):
-        if self.sampling_method == "conditional_to_x":
+        if (self.sampling_method == "unconditional") or (self.sample_grad_scale == 0):
+            return self.unconditional_p_mean_variance(x, t, clip_denoised)
+        elif self.sampling_method == "conditional_to_x":
             return self.grad_guided_p_mean_variance(x, t, clip_denoised)
         elif self.sampling_method == "conditional_to_repr":
             return self.grad_guided_p_mean_variance(x, t, clip_denoised)
-        elif self.sampling_method == "unconditional":
-            unet: AdjustedUNet = self.model.diffusion_model
-            model_out = unet.just_reconstruction(x, t)
-            if self.parameterization == "eps":
-                x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
-            elif self.parameterization == "x0":
-                x_recon = model_out
-            if clip_denoised:
-                x_recon.clamp_(-1., 1.)
-
-            model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
-            return model_mean, posterior_variance, posterior_log_variance
         else:
             raise NotImplementedError("Sampling method not implemented")
+    
+    def unconditional_p_mean_variance(self, x, t, clip_denoised: bool):
+        unet: AdjustedUNet = self.model.diffusion_model
+        model_out = unet.just_reconstruction(x, t)
+        if self.parameterization == "eps":
+            x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
+        elif self.parameterization == "x0":
+            x_recon = model_out
+        if clip_denoised:
+            x_recon.clamp_(-1., 1.)
+
+        model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
+        return model_mean, posterior_variance, posterior_log_variance
 
     def grad_guided_p_mean_variance(self, x, t, clip_denoised: bool):
         if self.sampling_method == "conditional_to_x":
@@ -459,6 +465,7 @@ class DiffMatchFixed(DDPM):
             loss.backward()
             s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
             model_out = (pred_noise + s_t * x.grad).detach()
+            self.zero_grad()
 
         return model_out
 
@@ -493,6 +500,7 @@ class DiffMatchFixed(DDPM):
             loss.backward()
             s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
             representations = [(h + self.sample_grad_scale * h.grad * s_t).detach() for h in representations]
+            self.zero_grad()
 
         model_out = unet.forward_output_blocks(x, None, emb, representations)
         return model_out
@@ -521,7 +529,9 @@ class DiffMatchFixed(DDPM):
                                   return_intermediates=return_intermediates, x_start=x_start, t_start=t_start)
 
     @torch.no_grad()
-    def log_images(self, batch, N=8, n_row=2, sample=True, return_keys=None, **kwargs):
+    def log_images(self, batch, N=8, n_row=2, sample=True, return_keys=None, sample_classes=None, use_ema=True, grad_scales=None, **kwargs):
+        if self.sampling_method != "unconditional":
+            self.sample_classes = torch.tensor(sample_classes).to(self.device)
         log = dict()
         if len(batch) == 2:
             _, _, x, _, _ = self.get_train_input(batch)
@@ -548,11 +558,26 @@ class DiffMatchFixed(DDPM):
 
         if sample:
             # get denoise row
-            with self.ema_scope("Plotting"):
-                samples, denoise_row = self.sample(batch_size=N, return_intermediates=True)
+            if grad_scales is None:
+                if use_ema is True:
+                    with self.ema_scope("Plotting"):
+                        samples, denoise_row = self.sample(batch_size=N, return_intermediates=True)
+                else:
+                    samples, denoise_row = self.sample(batch_size=N, return_intermediates=True)
 
-            log["samples"] = samples
-            log["denoise_row"] = self._get_rows_from_list(denoise_row)
+                log["samples"] = samples
+                # log["denoise_row"] = self._get_rows_from_list(denoise_row)
+            else:
+                for grad_scale in grad_scales:
+                    self.sample_grad_scale = grad_scale
+                    if use_ema is True:
+                        with self.ema_scope("Plotting"):
+                            samples, denoise_row = self.sample(batch_size=N, return_intermediates=True)
+                    else:
+                        samples, denoise_row = self.sample(batch_size=N, return_intermediates=True)
+
+                    log[f"samples_grad_scale={grad_scale}"] = samples
+                    # log[f"denoise_row_grad_scale={grad_scale}"] = self._get_rows_from_list(denoise_row)
 
         if return_keys:
             if np.intersect1d(list(log.keys()), return_keys).shape[0] == 0:
