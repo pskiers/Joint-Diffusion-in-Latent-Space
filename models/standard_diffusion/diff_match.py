@@ -209,7 +209,8 @@ class DiffMatchFixed(DDPM):
             step = (self.classification_loss_weight_max - self.classification_loss_weight) / self.classification_loss_weight_increments
             self.classification_loss_weight += step
             self.classification_loss_weight_increments -= 1
-        self.scheduler.step()
+        if self.scheduler is not None:
+            self.scheduler.step()
         if self.use_ema:
             self.model_ema(self)
             # self.model_ema.update(self)
@@ -233,21 +234,21 @@ class DiffMatchFixed(DDPM):
         optimizer = torch.optim.Adam(
             grouped_parameters,
             lr=self.learning_rate,
-            betas=(0.9, 0.999)
+            # betas=(0.9, 0.999)
         )
 
-        def _lr_lambda(current_step):
-            num_warmup_steps = 0
-            num_training_steps = 2**20
-            num_cycles = 7./16.
+        # def _lr_lambda(current_step):
+        #     num_warmup_steps = 0
+        #     num_training_steps = 2**20
+        #     num_cycles = 7./16.
 
-            if current_step < num_warmup_steps:
-                return float(current_step) / float(max(1, num_warmup_steps))
-            no_progress = float(current_step - num_warmup_steps) / \
-                float(max(1, num_training_steps - num_warmup_steps))
-            return max(0., math.cos(math.pi * num_cycles * no_progress))
+        #     if current_step < num_warmup_steps:
+        #         return float(current_step) / float(max(1, num_warmup_steps))
+        #     no_progress = float(current_step - num_warmup_steps) / \
+        #         float(max(1, num_training_steps - num_warmup_steps))
+        #     return max(0., math.cos(math.pi * num_cycles * no_progress))
 
-        self.scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, -1)
+        # self.scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, -1)
         return optimizer
 
     def p_losses(self, x_start, t, noise=None):
@@ -614,21 +615,21 @@ class DiffMatchFixedAttention(DiffMatchFixed):
         optimizer = torch.optim.Adam(
             grouped_parameters,
             lr=self.learning_rate,
-            betas=(0.9, 0.999)
+            # betas=(0.9, 0.999)
         )
 
-        def _lr_lambda(current_step):
-            num_warmup_steps = 0
-            num_training_steps = 2**20
-            num_cycles = 7./16.
+        # def _lr_lambda(current_step):
+        #     num_warmup_steps = 0
+        #     num_training_steps = 2**20
+        #     num_cycles = 7./16.
 
-            if current_step < num_warmup_steps:
-                return float(current_step) / float(max(1, num_warmup_steps))
-            no_progress = float(current_step - num_warmup_steps) / \
-                float(max(1, num_training_steps - num_warmup_steps))
-            return max(0., math.cos(math.pi * num_cycles * no_progress))
+        #     if current_step < num_warmup_steps:
+        #         return float(current_step) / float(max(1, num_warmup_steps))
+        #     no_progress = float(current_step - num_warmup_steps) / \
+        #         float(max(1, num_training_steps - num_warmup_steps))
+        #     return max(0., math.cos(math.pi * num_cycles * no_progress))
 
-        self.scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, -1)
+        # self.scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, -1)
         return optimizer
 
 
@@ -673,21 +674,21 @@ class DiffMatchFixedPooling(DiffMatchFixed):
         optimizer = torch.optim.Adam(
             grouped_parameters,
             lr=self.learning_rate,
-            betas=(0.9, 0.999)
+            # betas=(0.9, 0.999)
         )
 
-        def _lr_lambda(current_step):
-            num_warmup_steps = 0
-            num_training_steps = 2**20
-            num_cycles = 7./16.
+        # def _lr_lambda(current_step):
+        #     num_warmup_steps = 0
+        #     num_training_steps = 2**20
+        #     num_cycles = 7./16.
 
-            if current_step < num_warmup_steps:
-                return float(current_step) / float(max(1, num_warmup_steps))
-            no_progress = float(current_step - num_warmup_steps) / \
-                float(max(1, num_training_steps - num_warmup_steps))
-            return max(0., math.cos(math.pi * num_cycles * no_progress))
+        #     if current_step < num_warmup_steps:
+        #         return float(current_step) / float(max(1, num_warmup_steps))
+        #     no_progress = float(current_step - num_warmup_steps) / \
+        #         float(max(1, num_training_steps - num_warmup_steps))
+        #     return max(0., math.cos(math.pi * num_cycles * no_progress))
 
-        self.scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, -1)
+        # self.scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, -1)
         return optimizer
 
 
