@@ -72,7 +72,7 @@ lightning:
     #   std: [0.2471, 0.2435, 0.2616]
 
     img_logger:
-      batch_frequency: 100
+      batch_frequency: 2500
       max_images: 40
       clamp: True
       increase_log_steps: False
