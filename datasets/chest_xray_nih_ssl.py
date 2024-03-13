@@ -33,7 +33,7 @@ class TransformFixMatch(object):
     def __call__(self, x):
         weak = self.weak(x)
         strong = self.strong(x)
-        return self.normalize(x).squeeze(), self.normalize(weak).squeeze(), self.normalize(strong).squeeze()
+        return self.normalize(x).squeeze() #, self.normalize(weak).squeeze(), self.normalize(strong).squeeze()
     
 
 class ChestXRay_nih_ssl(ChestXRay_nih):
@@ -41,7 +41,7 @@ class ChestXRay_nih_ssl(ChestXRay_nih):
         super().__init__(mode=mode, 
                          training_platform=training_platform,  
                         )
-        
+        print('SSL DATSDET LOADING')
         self.mode=mode
         self.labeled = labeled
         if not self.labeled and self.mode=="val":
@@ -54,39 +54,48 @@ class ChestXRay_nih_ssl(ChestXRay_nih):
         np.random.seed(402)
         self.X_unlabeled, self.y_unlabeled, X_labeled, y_labeled = iterative_train_test_split(X, y, test_size = 0.02)
         self.X_labeled_train, self.y_labeled_train, self.X_labeled_val, self.y_labeled_val = iterative_train_test_split(X_labeled, y_labeled, test_size = 0.33)
+        
+        if self.labeled:
+            if self.mode=="train":
+                self.final_image_df = self.X_labeled_train.copy()
+                self.final_label = self.y_labeled_train.copy()
+            elif self.mode=="val":
+                self.final_image_df = self.X_labeled_val.copy()
+                self.final_label = self.y_labeled_val.copy()
+
+        else:
+            self.final_image_df = self.X_unlabeled.copy()
+            self.final_label = self.y_unlabeled.copy()
+        
+        self.final_image_df = self.final_image_df
+        self.final_label = self.final_label
+
+        
+        del self.X_unlabeled, self.y_unlabeled, X_labeled, self.X_labeled_train, self.y_labeled_train, self.X_labeled_val, self.y_labeled_val, X, y
+
         self.fixmatch_transform = TransformFixMatch(mean=0.5, std=0.5)
         
     def __len__(self):
-        if self.labeled:
-            if self.mode=="train":
-                return len(self.X_labeled_train)
-            elif self.mode=="val":
-                return len(self.X_labeled_val)
-        else:
-            return len(self.X_unlabeled)
+        return len(self.final_image_df)
         
 
     def __getitem__(self, index):
 
         if self.labeled:
-            if self.mode=="train":
-                img_path = self.X_labeled_train[index].item()
-                label = self.y_labeled_train[index]
-            elif self.mode=="val":
-                img_path = self.X_labeled_val[index].item()
-                label = self.y_labeled_val[index]
-            
+            img_path = self.final_image_df[index].item()
+            label = self.final_label[index]
+        
             image = PIL.Image.open(img_path)
             image = image.convert('L')
             image_transformed = self.transform(image).squeeze()
             return image_transformed, label
 
         else:
-            img_path = self.X_unlabeled[index].item()
+            img_path = self.final_image_df[index].item()
             image = PIL.Image.open(img_path)
             image = image.convert('L')
             image_transformed = self.fixmatch_transform(image)
-            return image_transformed, self.y_unlabeled[index]
+            return image_transformed, self.final_label[index]
 
 if __name__ == "__main__":
     ds = ChestXRay_nih_ssl(labeled=True, training_platform="local_sano")

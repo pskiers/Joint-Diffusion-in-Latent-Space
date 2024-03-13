@@ -84,21 +84,55 @@ class LatentSSLPoolingMultilabel(JointLatentDiffusionMultilabel):
         )
 
     def get_train_classification_input(self, batch, k):
-        x = batch[0][k]
+        if type(batch[0])==list:
+            x = batch[0][k]
+        else:
+            x = batch[k]
         x = self.to_latent(x, arrange=True)
-        y = batch[0][self.classification_key]
+        y = batch[self.classification_key]
         return x, y 
 
     def get_valid_classification_input(self, batch, k):
-        x = batch[0][k]
+        x = batch[k]
         x = self.to_latent(x, arrange=True)
         y = batch[self.classification_key]
         return x, y
     
-    def training_step(self, batch, batch_idx, dataloader_idx):
-        loss = super().training_step(batch, batch_idx)
-        if dataloader_idx == 0 and self.global_step%4==0:
-            loss = self.train_classification_step(batch, loss)
+    def get_input(self,
+                  batch,
+                  k,
+                  return_first_stage_outputs=False,
+                  force_c_encode=False,
+                  cond_key=None,
+                  return_original_cond=False,
+                  bs=None):
+        if type(batch[0])==list:
+            batch = batch[0]
+        # k=0 should mean img for tuple (img, label). 
+        #Here it means sth different to have mathcing idx: (img, img_weak, img_strong)
+        #batch[k] = rearrange(batch[k], 'b c h w -> b h w c')
+        return super().get_input(
+            batch,
+            k,
+            return_first_stage_outputs,
+            force_c_encode,
+            cond_key,
+            return_original_cond,
+            bs
+        )
+
+    def training_step(self, batch, batch_idx):
+        loss, loss_dict = self.shared_step(batch[1])
+        self.log_dict(loss_dict, prog_bar=True,
+                      logger=True, on_step=True, on_epoch=True)
+        self.log("global_step", self.global_step,
+                 prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        if self.use_scheduler:
+            lr = self.optimizers().param_groups[0]['lr']
+            self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        
+        if self.global_step%4==0:
+            loss = self.train_classification_step(batch[0], loss)
         return loss
 
     def train_classification_step(self, batch, loss):

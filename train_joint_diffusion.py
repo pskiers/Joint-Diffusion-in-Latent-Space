@@ -102,7 +102,6 @@ if __name__ == "__main__":
 
     trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
     trainer.logdir = logdir
-
     trainer.fit(
         model,
         train_dataloaders=train_dls,

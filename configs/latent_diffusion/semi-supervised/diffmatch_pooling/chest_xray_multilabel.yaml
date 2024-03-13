@@ -23,7 +23,7 @@ model:
     classification_loss_weight: 0.001
     augmentations: False
     classification_start: 10000
-    classifier_in_features: 5044
+    classifier_in_features: 5632
     classifier_hidden: 1024 #we dont use it, now computed in code
     num_classes: 14 # we can have 15 with last column 'no findings', or 14 without. AUROC always for 14- hardcoded
     dropout: 0.0
@@ -84,13 +84,13 @@ lightning:
     benchmark: True
     checkpoint_callback: True
     max_steps: 100000
-    gpus: 0
+    gpus: -1
     accelerator: ddp
     # accumulate_grad_batches: 2
       
   callbacks:
     img_logger:
-      batch_frequency: 1
+      batch_frequency: 5000
       max_images: 10
       clamp: True
       increase_log_steps: False

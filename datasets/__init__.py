@@ -61,15 +61,16 @@ def get_dataloaders(name: str,
             pin_memory=pin_memory, persistent_workers=persistent_workers)
     
     elif name=='chest_xray_nih_ssl':
+            #Not optimized - we repeat the same operation 3 times. But leave it for now 
             labeled_ds = ChestXRay_nih_ssl(mode='train', 
                                 training_platform = training_platform,
                                 labeled = True)
             unlabeled_ds = ChestXRay_nih_ssl(mode='train', 
                                 training_platform = training_platform, 
                                 labeled = False)
-            val_ds = ChestXRay_nih_ssl(mode='train', 
+            val_ds = ChestXRay_nih_ssl(mode='val', 
                                 training_platform = training_platform, 
-                                labeled = False)
+                                labeled = True)
             test_ds = ChestXRay_nih(mode='test', training_platform = training_platform)
             return ssl_basic_dl(
                  labeled_ds, unlabeled_ds, val_ds, test_ds, 
@@ -252,6 +253,7 @@ def ssl_basic_dl(labeled_dataset, unlabeled_dataset, val_dataset, test_dataset, 
         sampler=SequentialSampler(test_dataset),
         batch_size=batch_val,
         num_workers=num_workers)
+    print("HREEEEELENHGTS", len(labeled_dataset), len(unlabeled_dataset), len(val_dataset), len(test_dataset))
     return (labeled_trainloader, unlabeled_trainloader), val_loader, test_loader
 
 
