@@ -27,12 +27,14 @@ class TransformFixMatch(object):
                                   padding_mode='reflect'),
             RandAugmentMC(n=2, m=10)])
         self.normalize = transforms.Compose([
+            transforms.RandomResizedCrop(256),
+            transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize(mean=mean, std=std)])
 
     def __call__(self, x):
-        weak = self.weak(x)
-        strong = self.strong(x)
+        # weak = self.weak(x)
+        # strong = self.strong(x)
         return self.normalize(x).squeeze() #, self.normalize(weak).squeeze(), self.normalize(strong).squeeze()
     
 
