@@ -110,7 +110,6 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         representations = unet.just_representations(x, t, pooled=False)
         representations = self.transform_representations(representations)
         y_pred = self.classifier(representations)
-        print(x.shape, y.shape, "doo classification 113")
         
         loss = nn.functional.binary_cross_entropy_with_logits(
             y_pred[:,:self.used_n_classes], y.float()[:,:self.used_n_classes], pos_weight=self.BCEweights.to(self.device))

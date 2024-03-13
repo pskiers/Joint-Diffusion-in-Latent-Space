@@ -69,8 +69,8 @@ model:
 batch_size: 32 # we need labeled train batch also here - the code was not optimized. I could have fixed it but i just didnt
 dataloaders:
   name: chest_xray_nih_ssl
-  train_batches: [16] 
-  val_batch: 16
+  train_batches: [32] 
+  val_batch: 32
   num_workers: 6
   num_labeled: 1500
   pin_memory: True
