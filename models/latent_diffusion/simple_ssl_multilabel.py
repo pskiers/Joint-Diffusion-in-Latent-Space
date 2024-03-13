@@ -111,7 +111,6 @@ class LatentSSLPoolingMultilabel(JointLatentDiffusionMultilabel):
             batch = batch[0]
         # k=0 should mean img for tuple (img, label). 
         #Here it means sth different to have mathcing idx: (img, img_weak, img_strong)
-        #batch[k] = rearrange(batch[k], 'b c h w -> b h w c')
         return super().get_input(
             batch,
             k,

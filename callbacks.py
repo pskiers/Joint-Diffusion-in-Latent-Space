@@ -198,6 +198,7 @@ class ImageLogger(Callback):
         self.rescale = rescale
         self.batch_freq = batch_frequency
         self.val_batch_idx_to_log = 0
+        self.log_also_val = False
         self.max_images = max_images
         self.logger_log_images = {
             pl.loggers.WandbLogger: self._wandb,
@@ -266,7 +267,8 @@ class ImageLogger(Callback):
         check_idx = batch_idx if self.log_on_batch_idx else pl_module.global_step
         
         # separate logging rules for train and val batches
-        if ((split=='train' and self.check_frequency(check_idx) or (split=='val' and self.val_batch_idx_to_log==batch_idx)) and 
+        if ((split=='train' and self.check_frequency(check_idx) or 
+             (split=='val' and self.val_batch_idx_to_log==batch_idx and self.log_also_val)) and 
             hasattr(pl_module, "log_images") and 
             callable(pl_module.log_images) and 
             self.max_images > 0):
@@ -298,6 +300,13 @@ class ImageLogger(Callback):
 
             if is_train:
                 pl_module.train()
+
+            # log images in corresponding val epoch
+            if split=='train':
+                self.log_also_val = True
+            # once logged, stop logging
+            elif split=="val":
+                self.log_also_val = False
 
     def check_frequency(self, check_idx):
         if ((check_idx % self.batch_freq) == 0 or (check_idx in self.log_steps)) and (

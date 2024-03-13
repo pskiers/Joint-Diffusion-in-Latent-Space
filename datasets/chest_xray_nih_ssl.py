@@ -66,8 +66,8 @@ class ChestXRay_nih_ssl(ChestXRay_nih):
                 self.final_label = self.y_labeled_val.copy()
 
         else:
-            self.final_image_df = self.X_unlabeled.copy()
-            self.final_label = self.y_unlabeled.copy()
+            self.final_image_df = self.X_unlabeled.copy()[:5000]
+            self.final_label = self.y_unlabeled.copy()[:5000]
         
         self.final_image_df = self.final_image_df
         self.final_label = self.final_label
