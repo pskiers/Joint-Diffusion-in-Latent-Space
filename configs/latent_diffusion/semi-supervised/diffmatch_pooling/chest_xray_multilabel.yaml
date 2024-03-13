@@ -20,7 +20,7 @@ model:
     # weights: [0.741790821, 1.485960814, 1.253424332, 1.581670469, 0.718735907, 1.567343026, 1.624709854, 2.581797199, 0.464784148, 1.092677857, 1.019675586, 1.363090079, 1.782541339, 1.289286516]
 
     classification_key: 1
-    classification_loss_weight: 0.001
+    classification_loss_weight: 0.01
     augmentations: False
     classification_start: 10000
     classifier_in_features: 5632

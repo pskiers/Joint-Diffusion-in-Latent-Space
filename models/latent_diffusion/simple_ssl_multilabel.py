@@ -161,8 +161,6 @@ class LatentSSLPoolingMultilabel(JointLatentDiffusionMultilabel):
     
     @torch.no_grad()
     def log_images(self, batch, N=8, n_row=2, sample=True, return_keys=None, **kwargs):
-        if type(batch[0])==list:
-            batch = (batch[1][0][0], batch[1][1])
         return super().log_images(batch=batch, N=8, n_row=2, sample=True, return_keys=None, **kwargs)
 
 class LatentSSLAttentionMultiLabel(LatentSSLPoolingMultilabel):
