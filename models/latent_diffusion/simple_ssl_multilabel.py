@@ -44,6 +44,7 @@ class LatentSSLPoolingMultilabel(JointLatentDiffusionMultilabel):
             classifier_hidden=classifier_hidden,
             num_classes=num_classes,
             dropout=dropout,
+            classification_start=classification_start,
             classification_loss_weight=classification_loss_weight,
             classification_key=classification_key,
             augmentations=augmentations,
