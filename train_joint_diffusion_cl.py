@@ -9,7 +9,13 @@ from datasets import get_cl_datasets
 from os import path, environ
 from pathlib import Path
 import datetime
-from callbacks import ImageLogger, CUDACallback, SetupCallback, FIDScoreLogger
+from callbacks import (
+    ImageLogger,
+    CUDACallback,
+    SetupCallback,
+    FIDScoreLogger,
+    CheckpointEveryNSteps,
+)
 from cl_methods.generative_replay import GenerativeReplay
 
 
@@ -17,9 +23,15 @@ if __name__ == "__main__":
     environ["WANDB__SERVICE_WAIT"] = "300"
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--path", "-p", type=Path, required=True, help="path to config file")
     parser.add_argument(
-        "--checkpoint", "-c", type=Path, required=False, help="path to model checkpoint file"
+        "--path", "-p", type=Path, required=True, help="path to config file"
+    )
+    parser.add_argument(
+        "--checkpoint",
+        "-c",
+        type=Path,
+        required=False,
+        help="path to model checkpoint file",
     )
     parser.add_argument("--task", "-t", type=int, required=True, help="task id")
     parser.add_argument(
@@ -29,11 +41,15 @@ if __name__ == "__main__":
         "--new", "-n", type=Path, required=False, help="Ckpt to new task data generator"
     )
     parser.add_argument(
-        "--old", "-o", type=Path, required=False, help="Ckpt to old tasks data generator"
+        "--old",
+        "-o",
+        type=Path,
+        required=False,
+        help="Ckpt to old tasks data generator",
     )
     args = parser.parse_args()
     config_path = str(args.path)
-    # config_path = "configs/baselines/class_conditioned_ddpm/cifar10.yaml"
+    # config_path = "configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml"
     checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
     # checkpoint_path = None
     old_generator_path = str(args.old) if args.old is not None else None
@@ -41,7 +57,7 @@ if __name__ == "__main__":
     new_generator_path = str(args.new) if args.new is not None else None
     # new_generator_path = None
     current_task = args.task
-    # current_task = 2
+    # current_task = 1
     tasks_learned = args.learned if args.learned is not None else []
     # tasks_learned = []
 
@@ -70,14 +86,19 @@ if __name__ == "__main__":
     )
 
     test_dl = data.DataLoader(
-        test_ds, dl_config["val_batch"], shuffle=False, num_workers=dl_config["num_workers"]
+        test_ds,
+        dl_config["val_batch"],
+        shuffle=False,
+        num_workers=dl_config["num_workers"],
     )
 
     if checkpoint_path is not None:
         config.model.params["ckpt_path"] = checkpoint_path
-    # config.model.params["ckpt_path"] = "./cl_cifar10.ckpt"
+    # config.model.params["ckpt_path"] = "logs/DiffMatchFixedPooling_2024-03-11T00-36-09/checkpoints/last.ckpt"
 
-    model = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
+    model = get_model_class(config.model.get("model_type"))(
+        **config.model.get("params", dict())
+    )
     new_generator = None
     if new_generator_path is not None:
         config.model.params["ckpt_path"] = new_generator_path
@@ -109,7 +130,9 @@ if __name__ == "__main__":
         ),
         config.model.get("model_type"),
     ]
-    trainer_kwargs["logger"] = pl.loggers.WandbLogger(name=nowname, id=nowname, tags=tags)
+    trainer_kwargs["logger"] = pl.loggers.WandbLogger(
+        name=nowname, id=nowname, tags=tags
+    )
 
     # modelcheckpoint - use TrainResult/EvalResult(checkpoint_on=metric) to
     # specify which metric is used to determine best models
@@ -120,7 +143,6 @@ if __name__ == "__main__":
             "verbose": True,
             "save_last": True,
             "mode": "max",
-            "every_n_train_steps": 10000,
         }
     }
     if hasattr(model, "monitor"):
@@ -141,6 +163,7 @@ if __name__ == "__main__":
             lightning_config=lightning_config,
         ),
         CUDACallback(),
+        CheckpointEveryNSteps(10000, prefix="ckpt_"),
     ]
     if (img_logger_cfg := callback_cfg.get("img_logger", None)) is not None:
         trainer_kwargs["callbacks"].append(ImageLogger(**img_logger_cfg))
@@ -165,7 +188,9 @@ if __name__ == "__main__":
             std = dl_config["std"]
             denormalize = transforms.Compose(
                 [
-                    transforms.Normalize(mean=[0.0, 0.0, 0.0], std=[1 / s for s in std]),
+                    transforms.Normalize(
+                        mean=[0.0, 0.0, 0.0], std=[1 / s for s in std]
+                    ),
                     transforms.Normalize(mean=[-m for m in mean], std=[1.0, 1.0, 1.0]),
                 ]
             )
@@ -189,8 +214,12 @@ if __name__ == "__main__":
                 std = dl_config["std"]
                 denormalize = transforms.Compose(
                     [
-                        transforms.Normalize(mean=[0.0, 0.0, 0.0], std=[1 / s for s in std]),
-                        transforms.Normalize(mean=[-m for m in mean], std=[1.0, 1.0, 1.0]),
+                        transforms.Normalize(
+                            mean=[0.0, 0.0, 0.0], std=[1 / s for s in std]
+                        ),
+                        transforms.Normalize(
+                            mean=[-m for m in mean], std=[1.0, 1.0, 1.0]
+                        ),
                     ]
                 )
                 samples = denormalize(samples)
@@ -206,7 +235,9 @@ if __name__ == "__main__":
             old_generator.to(torch.device("cuda"))
             if new_generator is not None:
                 new_generator.to(torch.device("cuda"))
-            (labeled_ds, unlabeled_ds) = datasets if len(datasets) == 2 else (datasets, None)
+            (labeled_ds, unlabeled_ds) = (
+                datasets if len(datasets) == 2 else (datasets, None)
+            )
             train_dls = reply_buff.get_data_for_task(
                 sup_ds=labeled_ds,
                 unsup_ds=unlabeled_ds,
@@ -231,7 +262,9 @@ if __name__ == "__main__":
             if weight_reinit == "none":
                 pass
             elif weight_reinit == "unused classes":
-                torch.nn.init.xavier_uniform_(model.classifier[-1].weight[len(prev_tasks) :])
+                torch.nn.init.xavier_uniform_(
+                    model.classifier[-1].weight[len(prev_tasks) :]
+                )
             elif weight_reinit == "classifier":
                 for layer in model.classifier:
                     if hasattr(layer, "weight"):
