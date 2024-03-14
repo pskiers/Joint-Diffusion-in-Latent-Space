@@ -460,13 +460,11 @@ class DiffMatchFixed(DDPM):
                 representations)
             pred = self.classifier(pooled_representations)
 
-            x.retain_grad()
             loss = nn.functional.cross_entropy(
                 pred, self.sample_classes, reduction="sum")
-            loss.backward()
+            grad = torch.autograd.grad(loss, x)[0]
             s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
-            model_out = (pred_noise + s_t * x.grad).detach()
-            self.zero_grad()
+            model_out = (pred_noise + s_t * grad).detach()
 
         return model_out
 
@@ -481,8 +479,6 @@ class DiffMatchFixed(DDPM):
 
         with torch.enable_grad():
             representations = unet.forward_input_blocks(x, None, emb)
-            for h in representations:
-                h.retain_grad()
 
             pred_noise = unet.forward_output_blocks(x, None, emb, representations)
             pred_x_start = (
@@ -498,10 +494,9 @@ class DiffMatchFixed(DDPM):
             class_predictions = self.classifier(pooled_representations)
             # loss = -torch.log(torch.gather(class_predictions, 1, self.sample_classes.unsqueeze(dim=1))).sum()
             loss = -nn.functional.cross_entropy(class_predictions, self.sample_classes, reduction="sum")
-            loss.backward()
             s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
-            representations = [(h + self.sample_grad_scale * h.grad * s_t).detach() for h in representations]
-            self.zero_grad()
+            grads = torch.autograd.grad(loss, representations)
+            representations = [(h + self.sample_grad_scale * grad * s_t).detach() for h, grad in zip(representations, grads)]
 
         model_out = unet.forward_output_blocks(x, None, emb, representations)
         return model_out
