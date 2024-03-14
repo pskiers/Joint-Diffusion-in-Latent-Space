@@ -131,13 +131,15 @@ class LatentSSLPoolingMultilabel(JointLatentDiffusionMultilabel):
             lr = self.optimizers().param_groups[0]['lr']
             self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         
-        if self.global_step%4==0:
-            loss = self.train_classification_step(batch[0], loss)
+        loss = self.train_classification_step(batch[0], loss)
         return loss
 
     def train_classification_step(self, batch, loss):
         if self.classification_start > 0:
             self.classification_start -= 1
+            return loss
+        
+        if self.global_step%4!=0:
             return loss
         
         loss_dict = {}

@@ -1,7 +1,7 @@
 model:
   logdir: home/jk/Joint-Diffusion-in-Latent-Space/
   base_learning_rate: 1.0e-04
-  weight_decay: 0.0001
+  weight_decay: 0.0000
   model_type: latent_ssl_pooling_multilabel
   params:
     linear_start: 0.0015
@@ -22,8 +22,8 @@ model:
     classification_key: 1
     classification_loss_weight: 0.01
     augmentations: False
-    classification_start: 10000
-    classifier_in_features: 5632
+    classification_start: 5000
+    classifier_in_features: 4224
     classifier_hidden: 1024 #we dont use it, now computed in code
     num_classes: 14 # we can have 15 with last column 'no findings', or 14 without. AUROC always for 14- hardcoded
     dropout: 0.0
@@ -34,7 +34,7 @@ model:
         image_size: 32
         in_channels: 4
         out_channels: 4
-        model_channels: 256
+        model_channels: 192
         attention_resolutions: [ 4,2,1 ]
         num_res_blocks: 2
         channel_mult: [ 1, 2, 4]
