@@ -306,7 +306,6 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
                 representations_o)
             pred_o = self.classifier(pooled_representations_o)
 
-            x.retain_grad()
             #TODO here absolutely the worst, everything is hardcoded and chaged manually while running notebook!!! 
             # TODO dont use it while training for logging
             cl_list = ["Atelectasis","Cardiomegaly","Consolidation","Edema","Effusion","Emphysema","Fibrosis", "Hernia","Infiltration", "Mass", "Nodule","Pleural_Thickening","Pneumonia","Pneumothorax","No Finding"]
@@ -315,10 +314,10 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             id_class = cl_list.index(pick_class)
             loss = +nn.functional.binary_cross_entropy_with_logits(pred[:,[id_class]], sample_classes[:,[id_class]], reduction="sum")
 
-            loss.backward()
+            grad = torch.autograd.grad(loss, x)[0]
             s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
             
-            model_out = (pred_noise + s_t * x.grad).detach()
+            model_out = (pred_noise + s_t * grad).detach()
             #if t[0]<100:
                 
                 #print(cl_list)
