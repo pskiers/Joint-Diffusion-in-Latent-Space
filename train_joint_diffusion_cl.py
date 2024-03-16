@@ -53,13 +53,13 @@ if __name__ == "__main__":
     checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
     # checkpoint_path = None
     old_generator_path = str(args.old) if args.old is not None else None
-    # old_generator_path = None
+    # old_generator_path = "pulled_checkpoints/fixed_cl_cifa10_task0_90.ckpt"
     new_generator_path = str(args.new) if args.new is not None else None
-    # new_generator_path = None
+    # new_generator_path = "pulled_checkpoints/fixed_cl_cifa10_task1_70.ckpt"
     current_task = args.task
     # current_task = 1
     tasks_learned = args.learned if args.learned is not None else []
-    # tasks_learned = []
+    # tasks_learned = [0]
 
     config = OmegaConf.load(config_path)
     # config = OmegaConf.load("configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml")
@@ -176,39 +176,23 @@ if __name__ == "__main__":
 
     cl_config = config.pop("cl")
 
-    def generate_old_samples(batch, labels):
-        old_generator.sampling_method = cl_config["sampling_method"]
-        old_generator.sample_grad_scale = cl_config["grad_scale"]
-        with torch.no_grad():
-            labels = torch.tensor(labels, device=old_generator.device)
-            old_generator.sample_classes = labels
-            samples = old_generator.sample(batch_size=batch)
-            samples = samples.cpu()
-            mean = dl_config["mean"]
-            std = dl_config["std"]
-            denormalize = transforms.Compose(
-                [
-                    transforms.Normalize(
-                        mean=[0.0, 0.0, 0.0], std=[1 / s for s in std]
-                    ),
-                    transforms.Normalize(mean=[-m for m in mean], std=[1.0, 1.0, 1.0]),
-                ]
-            )
-            samples = denormalize(samples)
-        old_generator.sampling_method = "unconditional"
-        old_generator.sample_classes = None
-        return samples, labels.cpu()
-
-    new_samples_generate = None
-    if new_generator is not None:
-
-        def generate_new_samples(batch, labels):
-            new_generator.sampling_method = cl_config["sampling_method"]
-            new_generator.sample_grad_scale = cl_config["grad_scale"]
+    def get_generator(generator):
+        def generate_samples(batch, labels):
+            generator.sampling_method = cl_config["sampling_method"]
+            generator.sample_grad_scale = cl_config["grad_scale"]
             with torch.no_grad():
-                labels = torch.tensor(labels, device=new_generator.device)
-                new_generator.sample_classes = labels
-                samples = new_generator.sample(batch_size=batch)
+                labels = torch.tensor(labels, device=generator.device)
+                generator.sample_classes = labels
+                samples = generator.sample(batch_size=batch)
+
+                unet = generator.model.diffusion_model
+                representations = unet.just_representations(samples, torch.zeros_like(generator.sample_classes), context=None, pooled=False)
+                pooled_representations = generator.transform_representations(representations)
+                pred = generator.classifier(pooled_representations).argmax(dim=-1)
+                ok_class = pred == labels
+                samples = samples[ok_class]
+                labels = labels[ok_class]
+
                 samples = samples.cpu()
                 mean = dl_config["mean"]
                 std = dl_config["std"]
@@ -223,11 +207,17 @@ if __name__ == "__main__":
                     ]
                 )
                 samples = denormalize(samples)
-            new_generator.sampling_method = "unconditional"
-            new_generator.sample_classes = None
+            generator.sampling_method = "unconditional"
+            generator.sample_classes = None
             return samples, labels.cpu()
 
-        new_samples_generate = generate_new_samples
+        return generate_samples
+
+    generate_old_samples = get_generator(old_generator)
+
+    new_samples_generate = None
+    if new_generator is not None:
+        new_samples_generate = get_generator(new_generator)
 
     prev_tasks = []
     for i, (datasets, task) in enumerate(zip(tasks_datasets, tasks)):

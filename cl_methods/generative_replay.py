@@ -19,7 +19,9 @@ class DatasetDummy(Dataset):
         img, target = self.data[index], self.targets[index]
 
         if self.transform is not None:
-            img = Image.fromarray((img.permute((1, 2, 0)).numpy() * 255).astype(np.uint8))
+            img = Image.fromarray(
+                (img.permute((1, 2, 0)).numpy() * 255).astype(np.uint8)
+            )
             img = self.transform(img)
 
         if self.target_transform is not None:
@@ -33,15 +35,17 @@ class DatasetDummy(Dataset):
 
 class GenerativeReplay(CLMethod):
     def get_data_for_task(
-            self,
-            sup_ds: Subset,
-            unsup_ds: Subset,
-            prev_tasks: List,
-            samples_per_task: int,
-            old_sample_generator: Callable[[int, List], Tuple[torch.Tensor, torch.Tensor]],
-            new_sample_generator: Optional[Callable[[int, List], Tuple[torch.Tensor, torch.Tensor]]] = None,
-            current_task: Optional[List] = None,
-            filename: str = ""
+        self,
+        sup_ds: Subset,
+        unsup_ds: Subset,
+        prev_tasks: List,
+        samples_per_task: int,
+        old_sample_generator: Callable[[int, List], Tuple[torch.Tensor, torch.Tensor]],
+        new_sample_generator: Optional[
+            Callable[[int, List], Tuple[torch.Tensor, torch.Tensor]]
+        ] = None,
+        current_task: Optional[List] = None,
+        filename: str = "",
     ):
         if len(prev_tasks) == 0:
             joined_sup_ds = sup_ds
@@ -57,38 +61,57 @@ class GenerativeReplay(CLMethod):
                     imgs, labels = old_sample_generator(bs, [task for _ in range(bs)])
                     generated_imgs = torch.concat((generated_imgs, imgs))
                     generated_labels = torch.concat((generated_labels, labels))
-                    to_generate[task] -= bs
+                    to_generate[task] -= len(labels)
             if new_sample_generator is not None:
                 to_generate = {task: samples_per_task for task in current_task}
                 for task in to_generate.keys():
                     while to_generate[task] > 0:
                         bs = min(self.args.sample_batch_size, to_generate[task])
-                        imgs, labels = new_sample_generator(bs, [task for _ in range(bs)])
+                        imgs, labels = new_sample_generator(
+                            bs, [task for _ in range(bs)]
+                        )
                         generated_imgs = torch.concat((generated_imgs, imgs))
                         generated_labels = torch.concat((generated_labels, labels))
-                        to_generate[task] -= bs
+                        to_generate[task] -= len(labels)
 
             torch.save(generated_imgs, f"./data/cl/{filename}_imgs.pt")
             torch.save(generated_labels, f"./data/cl/{filename}_labels.pt")
             # generated_imgs = torch.load("./cifar100_images.pt") if filename == "cifar100_randaugment" else torch.load("./cifar10_images.pt")
             # generated_labels = torch.load("./cifar100_labels.pt").type(torch.LongTensor) if filename == "cifar100_randaugment" else torch.load("./cifar10_labels.pt").type(torch.LongTensor)
 
-            from datasets.fixmatch_cifar import TransformRandAugmentSupervised, cifar10_mean, cifar10_std # TODO
-            transform = TransformRandAugmentSupervised(mean=cifar10_mean, std=cifar10_std) # TODO
+            from datasets.fixmatch_cifar import (
+                TransformRandAugmentSupervised,
+                cifar10_mean,
+                cifar10_std,
+            )  # TODO
+
+            transform = TransformRandAugmentSupervised(
+                mean=cifar10_mean, std=cifar10_std
+            )  # TODO
 
             gen_sup_ds = DatasetDummy(
                 generated_imgs,
                 generated_labels,
-                sup_ds.dataset.transform if new_sample_generator is None else transform # TODO
+                (
+                    sup_ds.dataset.transform
+                    if new_sample_generator is None
+                    else transform
+                ),  # TODO
             )
-            joined_sup_ds = ConcatDataset([sup_ds, gen_sup_ds]) if new_sample_generator is None else gen_sup_ds
+            joined_sup_ds = (
+                ConcatDataset([sup_ds, gen_sup_ds])
+                if new_sample_generator is None
+                else gen_sup_ds
+            )
 
             gen_unsup_ds = DatasetDummy(
-                generated_imgs,
-                generated_labels,
-                unsup_ds.dataset.transform
+                generated_imgs, generated_labels, unsup_ds.dataset.transform
             )
-            joined_unsup_ds = ConcatDataset([unsup_ds, gen_unsup_ds]) if new_sample_generator is None else gen_unsup_ds
+            joined_unsup_ds = (
+                ConcatDataset([unsup_ds, gen_unsup_ds])
+                if new_sample_generator is None
+                else gen_unsup_ds
+            )
 
         labeled_dl = DataLoader(
             dataset=joined_sup_ds,
@@ -96,7 +119,7 @@ class GenerativeReplay(CLMethod):
             batch_size=self.args.batch_size,
             shuffle=False,
             drop_last=True,
-            num_workers=self.args.num_workers
+            num_workers=self.args.num_workers,
         )
         if new_sample_generator is None:
             unlabeled_dl = DataLoader(
@@ -105,7 +128,7 @@ class GenerativeReplay(CLMethod):
                 batch_size=self.args.batch_size * 7,  # TODO
                 shuffle=False,
                 drop_last=True,
-                num_workers=self.args.num_workers
+                num_workers=self.args.num_workers,
             )
             return labeled_dl, unlabeled_dl
         return labeled_dl
