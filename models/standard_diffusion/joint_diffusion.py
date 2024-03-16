@@ -197,22 +197,33 @@ class JointDiffusionNoisyClassifier(DDPM):
         )
 
     def p_mean_variance(self, x, t, clip_denoised: bool):
-        if self.sampling_method == "conditional_to_x":
+        if (self.sampling_method == "unconditional") or (self.sample_grad_scale == 0):
+            return self.unconditional_p_mean_variance(x, t, clip_denoised)
+        elif self.sampling_method == "conditional_to_x":
+            return self.grad_guided_p_mean_variance(x, t, clip_denoised)
+        elif self.sampling_method == "conditional_to_repr":
             return self.grad_guided_p_mean_variance(x, t, clip_denoised)
         else:
-            model_out = self.apply_model(x, t)
-            if self.parameterization == "eps":
-                x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
-            elif self.parameterization == "x0":
-                x_recon = model_out
-            if clip_denoised:
-                x_recon.clamp_(-1., 1.)
+            raise NotImplementedError("Sampling method not implemented")
+    
+    def unconditional_p_mean_variance(self, x, t, clip_denoised: bool):
+        unet: AdjustedUNet = self.model.diffusion_model
+        model_out = unet.just_reconstruction(x, t)
+        if self.parameterization == "eps":
+            x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
+        elif self.parameterization == "x0":
+            x_recon = model_out
+        if clip_denoised:
+            x_recon.clamp_(-1., 1.)
 
-            model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
-            return model_mean, posterior_variance, posterior_log_variance
+        model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
+        return model_mean, posterior_variance, posterior_log_variance
 
     def grad_guided_p_mean_variance(self, x, t, clip_denoised: bool):
-        model_out = self.guided_apply_model(x, t)
+        if self.sampling_method == "conditional_to_x":
+            model_out = self.guided_apply_model(x, t)
+        elif self.sampling_method == "conditional_to_repr":
+            model_out = self.guided_repr_apply_model(x, t)
 
         if self.parameterization == "eps":
             x_recon = self.predict_start_from_noise(x, t=t, noise=model_out)
@@ -291,9 +302,9 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
 
     @torch.no_grad()
     def guided_apply_model(self, x: torch.Tensor, t):
-        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
-            return self.apply_model(x, t)
         unet: AdjustedUNet = self.model.diffusion_model
+        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
+            return unet.just_reconstruction(x, t)
 
         with torch.enable_grad():
             x = x.requires_grad_(True)
@@ -311,13 +322,104 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
                 representations)
             pred = self.classifier(pooled_representations)
 
-            x.retain_grad()
             loss = nn.functional.cross_entropy(
                 pred, self.sample_classes, reduction="sum")
-            loss.backward()
-            model_out = (pred_noise + self.sample_grad_scale * x.grad).detach()
+            grad = torch.autograd.grad(loss, x)[0]
+            s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
+            model_out = (pred_noise + s_t * grad).detach()
 
         return model_out
+    
+    @torch.no_grad()
+    def guided_repr_apply_model(self, x, t):
+        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
+            return self.apply_model(x, t)
+        t_in = t
+
+        emb = self.model.diffusion_model.get_timestep_embedding(x, t_in, None)
+        unet: AdjustedUNet = self.model.diffusion_model
+
+        with torch.enable_grad():
+            representations = unet.forward_input_blocks(x, None, emb)
+
+            pred_noise = unet.forward_output_blocks(x, None, emb, representations)
+            pred_x_start = (
+                (x - extract_into_tensor(
+                    self.sqrt_one_minus_alphas_cumprod, t, x.shape
+                ) * pred_noise) /
+                extract_into_tensor(self.sqrt_alphas_cumprod, t, x.shape)
+            )
+            repr_x0 = unet.just_representations(
+                pred_x_start, t, context=None, pooled=False)
+            pooled_representations = self.transform_representations(
+                repr_x0)
+            class_predictions = self.classifier(pooled_representations)
+            # loss = -torch.log(torch.gather(class_predictions, 1, self.sample_classes.unsqueeze(dim=1))).sum()
+            loss = -nn.functional.cross_entropy(class_predictions, self.sample_classes, reduction="sum")
+            s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
+            grads = torch.autograd.grad(loss, representations)
+            representations = [(h + self.sample_grad_scale * grad * s_t).detach() for h, grad in zip(representations, grads)]
+
+        model_out = unet.forward_output_blocks(x, None, emb, representations)
+        return model_out
+    
+    @torch.no_grad()
+    def log_images(self, batch, N=8, n_row=2, sample=True, return_keys=None, sample_classes=None, use_ema=True, grad_scales=None, **kwargs):
+        if self.sampling_method != "unconditional":
+            self.sample_classes = torch.tensor(sample_classes).to(self.device)
+        log = dict()
+        if len(batch) == 2:
+            _, _, x, _, _ = self.get_train_input(batch)
+        else:
+            x, _ = self.get_val_input(batch)
+        N = min(x.shape[0], N)
+        n_row = min(x.shape[0], n_row)
+        x = x.to(self.device)[:N]
+        log["inputs"] = x
+
+        # get diffusion row
+        diffusion_row = list()
+        x_start = x[:n_row]
+
+        for t in range(self.num_timesteps):
+            if t % self.log_every_t == 0 or t == self.num_timesteps - 1:
+                t = repeat(torch.tensor([t]), '1 -> b', b=n_row)
+                t = t.to(self.device).long()
+                noise = torch.randn_like(x_start)
+                x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
+                diffusion_row.append(x_noisy)
+
+        log["diffusion_row"] = self._get_rows_from_list(diffusion_row)
+
+        if sample:
+            # get denoise row
+            if grad_scales is None:
+                if use_ema is True:
+                    with self.ema_scope("Plotting"):
+                        samples, denoise_row = self.sample(batch_size=N, return_intermediates=True)
+                else:
+                    samples, denoise_row = self.sample(batch_size=N, return_intermediates=True)
+
+                log["samples"] = samples
+                # log["denoise_row"] = self._get_rows_from_list(denoise_row)
+            else:
+                for grad_scale in grad_scales:
+                    self.sample_grad_scale = grad_scale
+                    if use_ema is True:
+                        with self.ema_scope("Plotting"):
+                            samples, denoise_row = self.sample(batch_size=N, return_intermediates=True)
+                    else:
+                        samples, denoise_row = self.sample(batch_size=N, return_intermediates=True)
+
+                    log[f"samples_grad_scale={grad_scale}"] = samples
+                    # log[f"denoise_row_grad_scale={grad_scale}"] = self._get_rows_from_list(denoise_row)
+
+        if return_keys:
+            if np.intersect1d(list(log.keys()), return_keys).shape[0] == 0:
+                return log
+            else:
+                return {key: log[key] for key in return_keys}
+        return log
 
 
 class JointDiffusionAugmentations(JointDiffusion):
