@@ -19,19 +19,21 @@ normal_mean = (0.5, 0.5, 0.5)
 normal_std = (0.5, 0.5, 0.5)
 
 
-def get_cifar10(args, root, labels_to_tensor=False):
+def get_cifar10(args, root, labels_to_tensor=False, mean=None, std=None):
+    mean = mean if mean is not None else cifar10_mean
+    std = std if std is not None else cifar10_std
     transform_labeled = transforms.Compose(
         [
             transforms.RandomHorizontalFlip(),
             transforms.RandomCrop(size=32, padding=int(32 * 0.125), padding_mode="reflect"),
             transforms.ToTensor(),
-            transforms.Normalize(mean=cifar10_mean, std=cifar10_std),
+            transforms.Normalize(mean=mean, std=std),
         ]
     )
     transform_val = transforms.Compose(
         [
             transforms.ToTensor(),
-            transforms.Normalize(mean=cifar10_mean, std=cifar10_std),
+            transforms.Normalize(mean=mean, std=std),
         ]
     )
     base_dataset = datasets.CIFAR10(root, train=True, download=True)
@@ -52,7 +54,7 @@ def get_cifar10(args, root, labels_to_tensor=False):
         root,
         train_unlabeled_idxs,
         train=True,
-        transform=TransformFixMatch(mean=cifar10_mean, std=cifar10_std),
+        transform=TransformFixMatch(mean=mean, std=std),
         target_transform=(
             (lambda x: torch.tensor(x).type(torch.LongTensor)) if labels_to_tensor else None
         ),

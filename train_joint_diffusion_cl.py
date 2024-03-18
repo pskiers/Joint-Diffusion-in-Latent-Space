@@ -49,7 +49,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     config_path = str(args.path)
-    # config_path = "configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml"
+    # config_path = "configs/standard_diffusion/continual_learning/joint_diffusion_pooling/cifar10.yaml"
     checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
     # checkpoint_path = None
     old_generator_path = str(args.old) if args.old is not None else None
@@ -83,6 +83,8 @@ if __name__ == "__main__":
         name=dl_config["name"],
         num_labeled=dl_config["num_labeled"],
         sup_batch=dl_config["train_batches"][0],
+        mean=dl_config.get("mean", None),
+        std=dl_config.get("std", None),
     )
 
     test_dl = data.DataLoader(
@@ -186,8 +188,15 @@ if __name__ == "__main__":
                 samples = generator.sample(batch_size=batch)
 
                 unet = generator.model.diffusion_model
-                representations = unet.just_representations(samples, torch.zeros_like(generator.sample_classes), context=None, pooled=False)
-                pooled_representations = generator.transform_representations(representations)
+                representations = unet.just_representations(
+                    samples,
+                    torch.zeros_like(generator.sample_classes),
+                    context=None,
+                    pooled=False,
+                )
+                pooled_representations = generator.transform_representations(
+                    representations
+                )
                 pred = generator.classifier(pooled_representations).argmax(dim=-1)
                 ok_class = pred == labels
                 samples = samples[ok_class]
@@ -232,6 +241,8 @@ if __name__ == "__main__":
                 sup_ds=labeled_ds,
                 unsup_ds=unlabeled_ds,
                 prev_tasks=prev_tasks,
+                mean=dl_config["mean"],
+                std=dl_config["std"],
                 samples_per_task=cl_config["samples_per_class"],
                 old_sample_generator=generate_old_samples,
                 new_sample_generator=(
@@ -239,6 +250,8 @@ if __name__ == "__main__":
                 ),  # dummy for class conditioned baseline stuff
                 current_task=task,
                 filename=nowname,
+                saved_samples=cl_config.get("saved_samples", None),
+                saved_labels=cl_config.get("saved_labels", None),
             )
             if new_generator is not None:
                 del new_generator

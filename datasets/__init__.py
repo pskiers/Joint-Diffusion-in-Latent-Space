@@ -1,4 +1,4 @@
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 from dataclasses import dataclass
 import torch
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Subset
@@ -295,12 +295,14 @@ def get_cl_datasets(
     name: str,
     num_labeled: int,
     sup_batch: int,
+    mean: Optional[List[float]] = None,
+    std: Optional[List[float]] = None,
 ):
     if name == "cifar10_randaugment":
         if num_labeled is not None:
             args = RandAugmentArgs(num_labeled=num_labeled, num_classes=10, batch_size=sup_batch)
             labeled_dataset, unlabeled_dataset, test_dataset = DATASET_GETTERS["cifar10"](
-                args, "./data", labels_to_tensor=True
+                args, "./data", labels_to_tensor=True, mean=mean, std=std
             )
             tasks = [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]]
             sup_tasks_indices = cl_class_split(labeled_dataset.targets, tasks)

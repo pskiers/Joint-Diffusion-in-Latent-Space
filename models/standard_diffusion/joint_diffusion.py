@@ -29,6 +29,7 @@ class JointDiffusionNoisyClassifier(DDPM):
                  classification_key=1,
                  first_stage_key="image",
                  conditioning_key=None,
+                 sampling_method="conditional_to_x",
                  *args,
                  **kwargs):
         super().__init__(
@@ -48,7 +49,7 @@ class JointDiffusionNoisyClassifier(DDPM):
             # nn.ReLU(),
             nn.Linear(classifier_hidden, self.num_classes)
         )
-        self.sampling_method = "conditional_to_x"
+        self.sampling_method = sampling_method
         self.sample_grad_scale = sample_grad_scale
         self.classification_start = classification_start
         self.batch_classes = None
@@ -271,7 +272,6 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.x_start = None
-        self.sampling_method = "unconditional"
 
     def get_input(self, batch, k):
         out = super().get_input(batch, k)
@@ -368,10 +368,7 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
         if self.sampling_method != "unconditional":
             self.sample_classes = torch.tensor(sample_classes).to(self.device)
         log = dict()
-        if len(batch) == 2:
-            _, _, x, _, _ = self.get_train_input(batch)
-        else:
-            x, _ = self.get_val_input(batch)
+        x = self.get_input(batch, self.first_stage_key)
         N = min(x.shape[0], N)
         n_row = min(x.shape[0], n_row)
         x = x.to(self.device)[:N]

@@ -39,6 +39,8 @@ class GenerativeReplay(CLMethod):
         sup_ds: Subset,
         unsup_ds: Subset,
         prev_tasks: List,
+        mean: List[float],
+        std: List[float],
         samples_per_task: int,
         old_sample_generator: Callable[[int, List], Tuple[torch.Tensor, torch.Tensor]],
         new_sample_generator: Optional[
@@ -46,6 +48,8 @@ class GenerativeReplay(CLMethod):
         ] = None,
         current_task: Optional[List] = None,
         filename: str = "",
+        saved_samples: Optional[str] = None,
+        saved_labels: Optional[str] = None,
     ):
         if len(prev_tasks) == 0:
             joined_sup_ds = sup_ds
@@ -55,39 +59,41 @@ class GenerativeReplay(CLMethod):
             to_generate = {task: samples_per_task for task in prev_tasks}
             generated_imgs = torch.tensor([])
             generated_labels = torch.tensor([]).type(torch.LongTensor)
-            for task in to_generate.keys():
-                while to_generate[task] > 0:
-                    bs = min(self.args.sample_batch_size, to_generate[task])
-                    imgs, labels = old_sample_generator(bs, [task for _ in range(bs)])
-                    generated_imgs = torch.concat((generated_imgs, imgs))
-                    generated_labels = torch.concat((generated_labels, labels))
-                    to_generate[task] -= len(labels)
-            if new_sample_generator is not None:
-                to_generate = {task: samples_per_task for task in current_task}
+            if saved_samples is None or saved_labels is None:
                 for task in to_generate.keys():
                     while to_generate[task] > 0:
                         bs = min(self.args.sample_batch_size, to_generate[task])
-                        imgs, labels = new_sample_generator(
+                        imgs, labels = old_sample_generator(
                             bs, [task for _ in range(bs)]
                         )
                         generated_imgs = torch.concat((generated_imgs, imgs))
                         generated_labels = torch.concat((generated_labels, labels))
                         to_generate[task] -= len(labels)
+                if new_sample_generator is not None:
+                    to_generate = {task: samples_per_task for task in current_task}
+                    for task in to_generate.keys():
+                        while to_generate[task] > 0:
+                            bs = min(self.args.sample_batch_size, to_generate[task])
+                            imgs, labels = new_sample_generator(
+                                bs, [task for _ in range(bs)]
+                            )
+                            generated_imgs = torch.concat((generated_imgs, imgs))
+                            generated_labels = torch.concat((generated_labels, labels))
+                            to_generate[task] -= len(labels)
+                torch.save(generated_imgs, f"./data/cl/{filename}_imgs.pt")
+                torch.save(generated_labels, f"./data/cl/{filename}_labels.pt")
+            else:
+                imgs = torch.load(saved_samples)
+                labels = torch.load(saved_labels)
+                generated_imgs = torch.concat((generated_imgs, imgs))
+                generated_labels = torch.concat((generated_labels, labels))
 
-            torch.save(generated_imgs, f"./data/cl/{filename}_imgs.pt")
-            torch.save(generated_labels, f"./data/cl/{filename}_labels.pt")
             # generated_imgs = torch.load("./cifar100_images.pt") if filename == "cifar100_randaugment" else torch.load("./cifar10_images.pt")
             # generated_labels = torch.load("./cifar100_labels.pt").type(torch.LongTensor) if filename == "cifar100_randaugment" else torch.load("./cifar10_labels.pt").type(torch.LongTensor)
 
-            from datasets.fixmatch_cifar import (
-                TransformRandAugmentSupervised,
-                cifar10_mean,
-                cifar10_std,
-            )  # TODO
+            from datasets.fixmatch_cifar import TransformRandAugmentSupervised  # TODO
 
-            transform = TransformRandAugmentSupervised(
-                mean=cifar10_mean, std=cifar10_std
-            )  # TODO
+            transform = TransformRandAugmentSupervised(mean=mean, std=std)  # TODO
 
             gen_sup_ds = DatasetDummy(
                 generated_imgs,
