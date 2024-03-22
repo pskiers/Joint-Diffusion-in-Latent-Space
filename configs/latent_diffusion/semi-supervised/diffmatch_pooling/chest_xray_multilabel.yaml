@@ -22,7 +22,7 @@ model:
     classification_key: 1
     classification_loss_weight: 0.001
     augmentations: False
-    classification_start: 5000
+    classification_start: 0
     classifier_in_features: 4224
     classifier_hidden: 1024 #we dont use it, now computed in code
     num_classes: 14 # we can have 15 with last column 'no findings', or 14 without. AUROC always for 14- hardcoded
@@ -69,12 +69,12 @@ model:
 batch_size: 32 # we need labeled train batch also here - the code was not optimized. I could have fixed it but i just didnt
 dataloaders:
   name: chest_xray_nih_ssl
-  train_batches: [16] 
-  val_batch: 16
+  train_batches: [64] 
+  val_batch: 128
   num_workers: 12
   num_labeled: 1500
   pin_memory: True
-  persistent_workers: False
+  persistent_workers: True
   training_platform: local_sano # pls check your data paths in datasets/chest_xray_nih.py
   #training_platform: plgrid # pls check your data paths in datasets/chest_xray_nih.py
 
