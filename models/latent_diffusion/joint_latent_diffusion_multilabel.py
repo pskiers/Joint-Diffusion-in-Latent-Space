@@ -145,7 +145,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
     def validation_step(self, batch, batch_idx, dataloader_idx):
         # TODO reduce repeating code
         self.log("global_step", self.global_step,
-                    prog_bar=True, logger=True, on_step=False, on_epoch=False, add_dataloader_idx=False)
+                    prog_bar=True, logger=True, on_step=True, on_epoch=False, add_dataloader_idx=False)
         
         x, y = self.get_valid_classification_input(batch, self.first_stage_key)
         t = torch.zeros((x.shape[0],), device=self.device).long()

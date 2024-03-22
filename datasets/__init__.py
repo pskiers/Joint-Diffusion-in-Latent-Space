@@ -253,7 +253,7 @@ def ssl_basic_dl(labeled_dataset, unlabeled_dataset, val_dataset, test_dataset, 
         sampler=SequentialSampler(test_dataset),
         batch_size=batch_val,
         num_workers=num_workers)
-    print("HREEEEELENHGTS", len(labeled_dataset), len(unlabeled_dataset), len(val_dataset), len(test_dataset))
+    print("LENGTHS of train lab, train unlab, test", len(labeled_dataset), len(unlabeled_dataset), len(val_dataset), len(test_dataset))
     return (labeled_trainloader, unlabeled_trainloader), val_loader, test_loader
 
 
