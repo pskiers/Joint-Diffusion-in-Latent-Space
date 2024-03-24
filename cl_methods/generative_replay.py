@@ -4,8 +4,6 @@ import torch
 from PIL import Image
 import numpy as np
 
-from cl_methods.base import CLMethod
-
 
 class DatasetDummy(Dataset):
     def __init__(self, data, targets, transform=None):
@@ -33,7 +31,10 @@ class DatasetDummy(Dataset):
         return len(self.data)
 
 
-class GenerativeReplay(CLMethod):
+class GenerativeReplay:
+    def __init__(self, args):
+        self.args = args
+
     def get_data_for_task(
         self,
         sup_ds: Subset,
@@ -58,7 +59,7 @@ class GenerativeReplay(CLMethod):
             print("Preparing dataset for rehearsal...")
             to_generate = {task: samples_per_task for task in prev_tasks}
             generated_imgs = torch.tensor([])
-            generated_labels = torch.tensor([]).type(torch.LongTensor)
+            generated_labels = torch.tensor([], dtype=torch.int64)
             if saved_samples is None or saved_labels is None:
                 for task in to_generate.keys():
                     print(f"Sampling for label {task}")
@@ -72,6 +73,7 @@ class GenerativeReplay(CLMethod):
                         to_generate[task] -= len(labels)
                         print(f"{to_generate[task]} left for label {task}")
                 if new_sample_generator is not None:
+                    assert current_task is not None
                     to_generate = {task: samples_per_task for task in current_task}
                     for task in to_generate.keys():
                         print(f"Sampling for label {task}")
