@@ -22,7 +22,7 @@ and pray to God it does not fail.
 ## Project structure
 Project contains 3 main folders:
 * configs - some example config files; they are grouped in subfolders accordingly
-* datasets - datasets and dataloader getter for our models
+* dataloading - datasets and dataloader getter for our models
 * model - models
 
 ## Training a model

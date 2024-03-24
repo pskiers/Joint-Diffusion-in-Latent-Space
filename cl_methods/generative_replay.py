@@ -97,7 +97,7 @@ class GenerativeReplay:
             # generated_imgs = torch.load("./cifar100_images.pt") if filename == "cifar100_randaugment" else torch.load("./cifar10_images.pt")
             # generated_labels = torch.load("./cifar100_labels.pt").type(torch.LongTensor) if filename == "cifar100_randaugment" else torch.load("./cifar10_labels.pt").type(torch.LongTensor)
 
-            from datasets.fixmatch_cifar import TransformRandAugmentSupervised  # TODO
+            from dataloading.fixmatch_cifar import TransformRandAugmentSupervised  # TODO
 
             transform = TransformRandAugmentSupervised(mean=mean, std=std)  # TODO
 

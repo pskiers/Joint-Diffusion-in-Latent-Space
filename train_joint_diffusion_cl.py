@@ -5,7 +5,7 @@ from torchvision import transforms
 import torch.utils.data as data
 import pytorch_lightning as pl
 from models import get_model_class
-from datasets import get_cl_datasets
+from dataloading import get_cl_datasets
 from os import path, environ
 from pathlib import Path
 import datetime

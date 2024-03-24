@@ -4,7 +4,7 @@ from omegaconf import OmegaConf
 import argparse
 import torch
 import pytorch_lightning as pl
-from datasets import AdjustedSVHN
+from dataloading import AdjustedSVHN
 from models import WideResNet, WideResNetEncoder, DDPM_Wide_ResNet
 from callbacks import CUDACallback, SetupCallback
 

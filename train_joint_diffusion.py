@@ -4,7 +4,7 @@ import argparse
 import torch
 import pytorch_lightning as pl
 from models import get_model_class
-from datasets import get_dataloaders
+from dataloading import get_dataloaders
 from os import path, environ
 from pathlib import Path
 import datetime
@@ -22,7 +22,7 @@ if __name__ == "__main__":
     checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
 
     config = OmegaConf.load(config_path)
-    # config = OmegaConf.load("configs/standard_diffusion/semi-supervised/diffmatch_wide_resnet_unet/25_per_class/svhn.yaml")
+    # config = OmegaConf.load("configs/standard_diffusion/continual_learning/joint_diffusion_pooling/cifar10.yaml")
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
