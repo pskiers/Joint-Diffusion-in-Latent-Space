@@ -61,6 +61,7 @@ class GenerativeReplay(CLMethod):
             generated_labels = torch.tensor([]).type(torch.LongTensor)
             if saved_samples is None or saved_labels is None:
                 for task in to_generate.keys():
+                    print(f"Sampling for label {task}")
                     while to_generate[task] > 0:
                         bs = min(self.args.sample_batch_size, to_generate[task])
                         imgs, labels = old_sample_generator(
@@ -69,9 +70,11 @@ class GenerativeReplay(CLMethod):
                         generated_imgs = torch.concat((generated_imgs, imgs))
                         generated_labels = torch.concat((generated_labels, labels))
                         to_generate[task] -= len(labels)
+                        print(f"{to_generate[task]} left for label {task}")
                 if new_sample_generator is not None:
                     to_generate = {task: samples_per_task for task in current_task}
                     for task in to_generate.keys():
+                        print(f"Sampling for label {task}")
                         while to_generate[task] > 0:
                             bs = min(self.args.sample_batch_size, to_generate[task])
                             imgs, labels = new_sample_generator(
@@ -80,6 +83,7 @@ class GenerativeReplay(CLMethod):
                             generated_imgs = torch.concat((generated_imgs, imgs))
                             generated_labels = torch.concat((generated_labels, labels))
                             to_generate[task] -= len(labels)
+                            print(f"{to_generate[task]} left for label {task}")
                 torch.save(generated_imgs, f"./data/cl/{filename}_imgs.pt")
                 torch.save(generated_labels, f"./data/cl/{filename}_labels.pt")
             else:
