@@ -20,8 +20,8 @@ model:
     num_classes: 10
     dropout: 0.1
     batch_size: 16
-    classification_start: 0
-    sampling_method: "conditional_to_repr"    
+    classification_start: 100000
+    sampling_method: "conditional_to_x"    
     sample_grad_scale: 0
 
     unet_config:
@@ -44,22 +44,111 @@ cl:
   samples_per_class: 5000
   sampling_method: "conditional_to_repr"
   weight_reinit: "unused classes"
-
-dataloaders:
-  name: cifar10_randaugment
-  train_batches: [ 16 ]
-  val_batch: 256
-  num_workers: 16
-  num_labeled: 2500
   mean: [0.5, 0.5, 0.5]
   std: [0.5, 0.5, 0.5]
+
+dataloaders:
+  validation:  
+    name: "cifar10"
+    root: "data"
+    split: "test"
+    download: True
+    batch_size: 256
+    num_workers: 16
+    sampler: "none"
+    shuffle: False
+    transforms:
+      - ToTensor:
+      - Permute:
+          dims: [1, 2, 0]
+      - Normalize:
+          mean: [0.5, 0.5, 0.5]
+          std: [0.5, 0.5, 0.5]
+  train:
+    - cl_split:
+        tasks: [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]]
+        datasets:
+          - ssl_split:
+              name: "cifar10"
+              root: "data"
+              split: "train"
+              download: True
+
+              num_labeled: 250
+              min_labeled: 32
+              seed: 42
+
+              supervised:
+                batch_size: 32
+                num_workers: 16
+                sampler: "random"
+                shuffle: False
+                transforms:
+                  - ToPILImage:
+                  - RandomHorizontalFlip:
+                  - RandomCrop:
+                      size: 32
+                      padding: 4
+                      padding_mode: "reflect"
+                  - ToTensor:
+                  - Permute:
+                      dims: [1, 2, 0]
+                  - Normalize:
+                      mean: [0.5, 0.5, 0.5]
+                      std: [0.5, 0.5, 0.5]
+
+              unsupervised:
+                batch_size: 224
+                num_workers: 16
+                sampler: "random"
+                shuffle: False
+                transforms:
+                  - ParallelTransforms:
+                    -
+                      - ToTensor:
+                      - Normalize:
+                          mean: [0.5, 0.5, 0.5]
+                          std: [0.5, 0.5, 0.5] 
+                      - Permute:
+                          dims: [1, 2, 0]
+
+                    - 
+                      - ToPILImage:
+                      - RandomHorizontalFlip:
+                      - RandomCrop:
+                          size: 32
+                          padding: 4
+                          padding_mode: "reflect"
+                      - ToTensor:
+                      - Permute:
+                          dims: [1, 2, 0]
+                      - Normalize:
+                          mean: [0.5, 0.5, 0.5]
+                          std: [0.5, 0.5, 0.5] 
+                    
+                    - 
+                      - ToPILImage:
+                      - RandomHorizontalFlip:
+                      - RandomCrop:
+                          size: 32
+                          padding: 4
+                          padding_mode: "reflect"
+                      - RandAugment:
+                          n: 2
+                          m: 10
+                      - ToTensor:
+                      - Permute:
+                          dims: [1, 2, 0]
+                      - Normalize:
+                          mean: [0.5, 0.5, 0.5]
+                          std: [0.5, 0.5, 0.5]
 
 
 lightning:
   trainer:
     benchmark: True
     checkpoint_callback: True
-    max_steps: 100000
+    max_steps: 1000000
     accumulate_grad_batches: 2
 
   callbacks:
@@ -82,7 +171,7 @@ lightning:
           "inpaint": False,
           "sample_classes": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
           "use_ema": False,
-          "grad_scales": [100, 70, 0]
+          "grad_scales": [40, 20, 10, 5, 0]
       }
       mean: [0.5, 0.5, 0.5]
       std: [0.5, 0.5, 0.5]
