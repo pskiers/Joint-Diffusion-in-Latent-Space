@@ -5,7 +5,7 @@ from torchvision import transforms
 import torch.utils.data as data
 import pytorch_lightning as pl
 from models import get_model_class
-from dataloading import get_cl_datasets
+from dataloading import get_datasets
 from os import path, environ
 from pathlib import Path
 import datetime
@@ -48,8 +48,8 @@ if __name__ == "__main__":
         help="Ckpt to old tasks data generator",
     )
     args = parser.parse_args()
-    config_path = str(args.path)
-    # config_path = "configs/standard_diffusion/continual_learning/joint_diffusion_pooling/cifar10.yaml"
+    # config_path = str(args.path)
+    config_path = "configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml"
     checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
     # checkpoint_path = None
     old_generator_path = str(args.old) if args.old is not None else None
@@ -72,27 +72,17 @@ if __name__ == "__main__":
     lightning_config.trainer = trainer_config
 
     dl_config = config.pop("dataloaders")
-    reply_buff = GenerativeReplay(
-        argparse.Namespace(
-            batch_size=dl_config["train_batches"][0],
-            sample_batch_size=500,
-            num_workers=dl_config["num_workers"],
-        )
-    )
-    tasks_datasets, test_ds, tasks = get_cl_datasets(
-        name=dl_config["name"],
-        num_labeled=dl_config["num_labeled"],
-        sup_batch=dl_config["train_batches"][0],
-        mean=dl_config.get("mean", None),
-        std=dl_config.get("std", None),
-    )
+    dl_config = OmegaConf.to_container(dl_config, resolve=True)
+    tasks_datasets, tasks_bs, test_ds, test_bs, tasks = get_datasets(dl_config)
 
     test_dl = data.DataLoader(
         test_ds,
-        dl_config["val_batch"],
+        test_bs,
         shuffle=False,
-        num_workers=dl_config["num_workers"],
+        num_workers=16,
     )
+
+    reply_buff = GenerativeReplay(train_bs=tasks_bs, sample_bs=250, dl_num_workers=16)
 
     if checkpoint_path is not None:
         config.model.params["ckpt_path"] = checkpoint_path
@@ -124,13 +114,15 @@ if __name__ == "__main__":
 
     trainer_kwargs = dict()
     tags = [
-        dl_config["name"],
+        dl_config["validation"]["name"],
         (
             "all labels"
-            if dl_config["num_labeled"] is None
-            else f"{dl_config['num_labeled']} per class"
+            if next(iter(dl_config["train"][0])) == "dataset"
+            else f'{dl_config["train"][0]["cl_split"]["datasets"][0]["ssl_split"]["num_labeled"]} per class'
         ),
         config.model.get("model_type"),
+        f"task {current_task}",
+        f"learned tasks {tasks_learned}",
     ]
     trainer_kwargs["logger"] = pl.loggers.WandbLogger(
         name=nowname, id=nowname, tags=tags
@@ -203,8 +195,8 @@ if __name__ == "__main__":
                 labels = labels[ok_class]
 
                 samples = samples.cpu()
-                mean = dl_config["mean"]
-                std = dl_config["std"]
+                mean = cl_config["mean"]
+                std = cl_config["std"]
                 denormalize = transforms.Compose(
                     [
                         transforms.Normalize(
@@ -241,8 +233,6 @@ if __name__ == "__main__":
                 sup_ds=labeled_ds,
                 unsup_ds=unlabeled_ds,
                 prev_tasks=prev_tasks,
-                mean=dl_config["mean"],
-                std=dl_config["std"],
                 samples_per_task=cl_config["samples_per_class"],
                 old_sample_generator=generate_old_samples,
                 new_sample_generator=(
