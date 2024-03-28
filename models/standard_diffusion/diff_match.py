@@ -415,7 +415,12 @@ class DiffMatchFixed(DDPM):
         elif self.parameterization == "x0":
             x_recon = model_out
         if clip_denoised:
-            x_recon.clamp_(-1., 1.)
+            # x_recon.clamp_(-1., 1.)
+            x_recon[:, 0].clamp_(-1.9887, 2.0583)
+            x_recon[:, 1].clamp_(-1.9803, 2.1265)
+            x_recon[:, 2].clamp_(-1.7068, 2.1158)
+            # 2.0583, 2.1265, 2.1158
+            # -1.9887, -1.9803, -1.7068
 
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
         return model_mean, posterior_variance, posterior_log_variance
@@ -435,6 +440,9 @@ class DiffMatchFixed(DDPM):
 
         if clip_denoised:
             x_recon.clamp_(-1., 1.)
+            # x_recon[:, 0].clamp_(-1.9887, 2.0583)
+            # x_recon[:, 1].clamp_(-1.9803, 2.1265)
+            # x_recon[:, 2].clamp_(-1.7068, 2.1158)
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
         return model_mean, posterior_variance, posterior_log_variance
 
@@ -454,6 +462,12 @@ class DiffMatchFixed(DDPM):
                 ) * pred_noise) /
                 extract_into_tensor(self.sqrt_alphas_cumprod, t, x.shape)
             )
+            # pred_x_start_list = [
+            #     pred_x_start[:, 0].clamp(-1.9887, 2.0583).unsqueeze(dim=1),
+            #     pred_x_start[:, 1].clamp(-1.9803, 2.1265).unsqueeze(dim=1),
+            #     pred_x_start[:, 2].clamp(-1.7068, 2.1158).unsqueeze(dim=1),
+            # ]
+            # pred_x_start_fin = torch.concat(pred_x_start_list, dim=1)
             representations = unet.just_representations(
                 pred_x_start, t, context=None, pooled=False)
             pooled_representations = self.transform_representations(
@@ -487,6 +501,12 @@ class DiffMatchFixed(DDPM):
                 ) * pred_noise) /
                 extract_into_tensor(self.sqrt_alphas_cumprod, t, x.shape)
             )
+            # pred_x_start_list = [
+            #     pred_x_start[:, 0].clamp(-1.9887, 2.0583).unsqueeze(dim=1),
+            #     pred_x_start[:, 1].clamp(-1.9803, 2.1265).unsqueeze(dim=1),
+            #     pred_x_start[:, 2].clamp(-1.7068, 2.1158).unsqueeze(dim=1),
+            # ]
+            # pred_x_start_fin = torch.concat(pred_x_start_list, dim=1)
             repr_x0 = unet.just_representations(
                 pred_x_start, t, context=None, pooled=False)
             pooled_representations = self.transform_representations(
