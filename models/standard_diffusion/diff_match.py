@@ -406,7 +406,7 @@ class DiffMatchFixed(DDPM):
             return self.grad_guided_p_mean_variance(x, t, clip_denoised)
         else:
             raise NotImplementedError("Sampling method not implemented")
-    
+
     def unconditional_p_mean_variance(self, x, t, clip_denoised: bool):
         unet: AdjustedUNet = self.model.diffusion_model
         model_out = unet.just_reconstruction(x, t)
@@ -650,12 +650,14 @@ class DiffMatchFixedAttention(DiffMatchFixed):
 
 class DiffMatchFixedPooling(DiffMatchFixed):
     def __init__(self,
+                 base_learning_rate,
                  classifier_in_features,
                  classifier_hidden,
                  num_classes,
                  dropout=0,
                  *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.learning_rate = base_learning_rate
         self.classifier = nn.Sequential(
             nn.Linear(classifier_in_features, classifier_hidden),
             nn.LeakyReLU(negative_slope=0.2),
@@ -665,10 +667,17 @@ class DiffMatchFixedPooling(DiffMatchFixed):
         if self.use_ema:
             self.model_ema = FixMatchEma(self, decay=0.999)
             print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
+        self.optim = None
+        self.optim = self.configure_optimizers()
         if kwargs.get("ckpt_path", None) is not None:
             ignore_keys = kwargs.get("ignore_keys", [])
             only_model = kwargs.get("load_only_unet", False)
             self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
+            self.init_optim_from_ckpt(kwargs["ckpt_path"])
+
+    def init_optim_from_ckpt(self, path):
+        sd = torch.load(path, map_location="cpu")
+        self.optim.load_state_dict(sd["optimizer_states"][0])
 
     def transform_representations(self, representations):
         representations = self.model.diffusion_model.pool_representations(representations)
@@ -678,6 +687,8 @@ class DiffMatchFixedPooling(DiffMatchFixed):
         return representations
 
     def configure_optimizers(self):
+        if self.optim is not None:
+            return self.optim
         no_decay = ['bias', 'bn']
         grouped_parameters = [
             {'params': [p for n, p in self.classifier.named_parameters() if not any(

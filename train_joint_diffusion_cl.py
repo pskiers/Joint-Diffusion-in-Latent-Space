@@ -48,14 +48,14 @@ if __name__ == "__main__":
         help="Ckpt to old tasks data generator",
     )
     args = parser.parse_args()
-    # config_path = str(args.path)
-    config_path = "configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml"
+    config_path = str(args.path)
+    # config_path = "configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml"
     checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
-    # checkpoint_path = None
+    # checkpoint_path = "pulled_checkpoints/cifar10-t1-s220.ckpt"
     old_generator_path = str(args.old) if args.old is not None else None
-    # old_generator_path = "pulled_checkpoints/fixed_cl_cifa10_task0_90.ckpt"
+    # old_generator_path = None
     new_generator_path = str(args.new) if args.new is not None else None
-    # new_generator_path = "pulled_checkpoints/fixed_cl_cifa10_task1_70.ckpt"
+    # new_generator_path = None
     current_task = args.task
     # current_task = 1
     tasks_learned = args.learned if args.learned is not None else []
