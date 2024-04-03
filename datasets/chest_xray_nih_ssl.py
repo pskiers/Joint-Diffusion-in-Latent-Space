@@ -53,12 +53,29 @@ class ChestXRay_nih_ssl(ChestXRay_nih):
         y = self.train_val_image_df.loc[:, [*self.labels, "no_finding"]]
         y = y.to_numpy()
         X = X.to_numpy()
-        np.random.seed(402)
-        self.X_unlabeled, self.y_unlabeled, X_labeled, y_labeled = iterative_train_test_split(X, y, test_size = 0.02)
-        #self.X_labeled_train, self.y_labeled_train, self.X_labeled_val, self.y_labeled_val = iterative_train_test_split(X_labeled, y_labeled, test_size = 0.33)
+
+        #### iterative multilabel splits 
+        # np.random.seed(402)
+        # self.X_unlabeled, self.y_unlabeled, X_labeled, y_labeled = iterative_train_test_split(X, y, test_size = 0.02)
+        # #self.X_labeled_train, self.y_labeled_train, self.X_labeled_val, self.y_labeled_val = iterative_train_test_split(X_labeled, y_labeled, test_size = 0.33)
+        # print("We have val only to avoid errors")
+        # self.X_labeled_train, self.y_labeled_train, self.X_labeled_val, self.y_labeled_val = X_labeled, y_labeled, X_labeled, y_labeled
+
+        #### splits from ACPL
+        split_file = open("datasets/chest_xray_ssl_train_list_2_3.txt", "r") 
+        split_data = [os.path.join(self.data_path, "images", l) for l in split_file.read().splitlines()]
+        split_file.close() 
+        train_idxs = np.isin(X, split_data).squeeze()
+        self.X_labeled_train = X[train_idxs].copy()
+        self.y_labeled_train = y[train_idxs].copy()
         print("We have val only to avoid errors")
-        self.X_labeled_train, self.y_labeled_train, self.X_labeled_val, self.y_labeled_val = X_labeled, y_labeled, X_labeled, y_labeled
-        
+        self.X_labeled_val = X[train_idxs].copy()
+        self.y_labeled_val = y[train_idxs].copy()
+
+        self.X_unlabeled_train = X[~train_idxs].copy()
+        self.y_unlabeled_train = y[~train_idxs].copy()
+        ####
+
         if self.labeled:
             if self.mode=="train":
                 self.final_image_df = self.X_labeled_train.copy()
@@ -70,9 +87,6 @@ class ChestXRay_nih_ssl(ChestXRay_nih):
         else:
             self.final_image_df = self.X_unlabeled.copy()
             self.final_label = self.y_unlabeled.copy()
-        
-        # self.final_image_df = self.final_image_df[:4000]
-        # self.final_label = self.final_label[:4000]
 
         
         del self.X_unlabeled, self.y_unlabeled, X_labeled, self.X_labeled_train, self.y_labeled_train, self.X_labeled_val, self.y_labeled_val, X, y
