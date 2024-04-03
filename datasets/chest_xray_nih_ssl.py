@@ -72,8 +72,8 @@ class ChestXRay_nih_ssl(ChestXRay_nih):
         self.X_labeled_val = X[train_idxs].copy()
         self.y_labeled_val = y[train_idxs].copy()
 
-        self.X_unlabeled_train = X[~train_idxs].copy()
-        self.y_unlabeled_train = y[~train_idxs].copy()
+        self.X_unlabeled = X[~train_idxs].copy()
+        self.y_unlabeled = y[~train_idxs].copy()
         ####
 
         if self.labeled:
@@ -89,7 +89,8 @@ class ChestXRay_nih_ssl(ChestXRay_nih):
             self.final_label = self.y_unlabeled.copy()
 
         
-        del self.X_unlabeled, self.y_unlabeled, X_labeled, self.X_labeled_train, self.y_labeled_train, self.X_labeled_val, self.y_labeled_val, X, y
+        #del self.X_unlabeled, self.y_unlabeled, X_labeled, y_labeled, self.X_labeled_train, self.y_labeled_train, self.X_labeled_val, self.y_labeled_val, X, y
+        del self.X_unlabeled, self.y_unlabeled, self.X_labeled_train, self.y_labeled_train, self.X_labeled_val, self.y_labeled_val, X, y
 
         self.fixmatch_transform = TransformFixMatch(mean=0.5, std=0.5)
         
