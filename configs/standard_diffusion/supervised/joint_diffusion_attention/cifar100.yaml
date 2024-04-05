@@ -73,8 +73,6 @@ dataloaders:
         - ParallelTransforms:
           -
             - ToTensor:
-            - Permute:
-                dims: [1, 2, 0]
             - Normalize:
                 mean: [0.5, 0.5, 0.5]
                 std: [0.5, 0.5, 0.5]
@@ -89,8 +87,6 @@ dataloaders:
                 n: 2
                 m: 10
             - ToTensor:
-            - Permute:
-                dims: [1, 2, 0]
             - Normalize:
                 mean: [0.5, 0.5, 0.5]
                 std: [0.5, 0.5, 0.5]

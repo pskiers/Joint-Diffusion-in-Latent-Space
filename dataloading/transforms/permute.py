@@ -7,5 +7,4 @@ class Permute(object):
         self.dims = dims
 
     def __call__(self, img: torch.Tensor):
-        img.permute(dims=self.dims)
-        return img
+        return img.permute(dims=self.dims)

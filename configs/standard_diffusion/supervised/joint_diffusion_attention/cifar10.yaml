@@ -54,46 +54,40 @@ dataloaders:
     shuffle: False
     transforms:
       - ToTensor:
-      - Permute:
-          dims: [1, 2, 0]
       - Normalize:
           mean: [0.5, 0.5, 0.5]
           std: [0.5, 0.5, 0.5]
   train:
-    dataset:
-      name: "cifar10"
-      root: "data"
-      split: "train"
-      download: True
-      batch_size: 256
-      num_workers: 16
-      sampler: "none"
-      shuffle: True
-      transforms:
-        - ParallelTransforms:
-          -
-            - ToTensor:
-            - Permute:
-                dims: [1, 2, 0]
-            - Normalize:
-                mean: [0.5, 0.5, 0.5]
-                std: [0.5, 0.5, 0.5]
-          -
-            - ToPILImage:
-            - RandomHorizontalFlip:
-            - RandomCrop:
-                size: 32
-                padding: 4
-                padding_mode: "reflect"
-            - RandAugment:
-                n: 2
-                m: 10
-            - ToTensor:
-            - Permute:
-                dims: [1, 2, 0]
-            - Normalize:
-                mean: [0.5, 0.5, 0.5]
-                std: [0.5, 0.5, 0.5]
+    - dataset:
+        name: "cifar10"
+        root: "data"
+        split: "train"
+        download: True
+        batch_size: 256
+        num_workers: 16
+        sampler: "none"
+        shuffle: True
+        transforms:
+          - ParallelTransforms:
+            -
+              - ToTensor:
+              - Normalize:
+                  mean: [0.5, 0.5, 0.5]
+                  std: [0.5, 0.5, 0.5]
+            -
+              - ToPILImage:
+              - RandomHorizontalFlip:
+              - RandomCrop:
+                  size: 32
+                  padding: 4
+                  padding_mode: "reflect"
+              - RandAugment:
+                  n: 2
+                  m: 10
+              - ToTensor:
+              - Normalize:
+                  mean: [0.5, 0.5, 0.5]
+                  std: [0.5, 0.5, 0.5]
 
 
 lightning:

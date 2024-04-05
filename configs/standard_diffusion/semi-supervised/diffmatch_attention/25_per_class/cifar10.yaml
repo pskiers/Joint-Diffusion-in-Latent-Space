@@ -54,8 +54,6 @@ dataloaders:
     shuffle: False
     transforms:
       - ToTensor:
-      - Permute:
-          dims: [1, 2, 0]
       - Normalize:
           mean: [0.5, 0.5, 0.5]
           std: [0.5, 0.5, 0.5]
@@ -83,8 +81,6 @@ dataloaders:
                 padding: 4
                 padding_mode: "reflect"
             - ToTensor:
-            - Permute:
-                dims: [1, 2, 0]
             - Normalize:
                 mean: [0.5, 0.5, 0.5]
                 std: [0.5, 0.5, 0.5]
@@ -101,8 +97,6 @@ dataloaders:
                 - Normalize:
                     mean: [0.5, 0.5, 0.5]
                     std: [0.5, 0.5, 0.5] 
-                - Permute:
-                    dims: [1, 2, 0]
 
               - 
                 - ToPILImage:
@@ -112,8 +106,6 @@ dataloaders:
                     padding: 4
                     padding_mode: "reflect"
                 - ToTensor:
-                - Permute:
-                    dims: [1, 2, 0]
                 - Normalize:
                     mean: [0.5, 0.5, 0.5]
                     std: [0.5, 0.5, 0.5] 
@@ -129,8 +121,6 @@ dataloaders:
                     n: 2
                     m: 10
                 - ToTensor:
-                - Permute:
-                    dims: [1, 2, 0]
                 - Normalize:
                     mean: [0.5, 0.5, 0.5]
                     std: [0.5, 0.5, 0.5]
