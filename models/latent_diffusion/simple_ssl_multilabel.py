@@ -122,7 +122,7 @@ class LatentSSLPoolingMultilabel(JointLatentDiffusionMultilabel):
         )
 
     def training_step(self, batch, batch_idx):
-        if self.global_step%10!=0:
+        if self.global_step%4!=0:
             cat_x = torch.cat((batch[0][0], batch[1][0]))
             cat_y = torch.cat((batch[0][1], batch[1][1]))
             loss, loss_dict = self.shared_step((cat_x,cat_y))
@@ -143,7 +143,7 @@ class LatentSSLPoolingMultilabel(JointLatentDiffusionMultilabel):
         if self.classification_start > self.global_step:
             return loss
         
-        if self.global_step%10!=0:
+        if self.global_step%4!=0:
             return loss
         
         loss_dict = {}
