@@ -14,6 +14,7 @@ from .chest_xray_nih_patches import ChestXRay_nih_patches
 from .chest_xray_nih_densenet_patches import ChestXRay_nih_densenet_patches
 from .chest_xray_nih_bbox import ChestXRay_nih_bbox
 from .arch.chest_xray_nih_64 import ChestXRay_nih_64
+from .isic2019 import ISIC2019
 from .mnist import AdjustedMNIST
 from .cleba import AdjustedCelbA
 from .fashionMNIST import AdjustedFashionMNIST
@@ -108,6 +109,13 @@ def get_dataloaders(name: str,
                 persistent_workers = persistent_workers
             )
             return dl
+    if name=='isic2019_encoder':
+        train_ds = ISIC2019(mode='train', training_platform = training_platform, extend_with_test=True)
+        val_ds = ISIC2019(mode='test', training_platform = training_platform)
+        test_ds = ISIC2019(mode='test', training_platform = training_platform)
+        return train_test_val_dl(
+            train_ds, val_ds, test_ds, train_batches, val_batch, num_workers, 
+            pin_memory=pin_memory, persistent_workers=persistent_workers)
 
     # elif name == "cifar10_randaugment":
     #     if num_labeled is not None:
