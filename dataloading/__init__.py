@@ -1,7 +1,13 @@
 from typing import Dict, List, Tuple, Callable, Union
 from torch.utils.data import DataLoader, RandomSampler
 from .splitting import ssl_dataset_split, cl_dataset_split
-from .datasets import get_dataset_cls, str_to_split, Split, BaseDataset, BaseTensorDataset
+from .datasets import (
+    get_dataset_cls,
+    str_to_split,
+    Split,
+    BaseDataset,
+    BaseTensorDataset,
+)
 from .transforms import get_transform
 
 
@@ -12,7 +18,11 @@ def make_dataloader(
     sampler: str = "none",
     shuffle: bool = True,
 ) -> DataLoader:
-    sampl = None if sampler == "none" else RandomSampler(dataset)
+    sampl = (
+        None
+        if sampler == "none"
+        else RandomSampler(dataset, num_samples=max(len(dataset), batch_size * 500))
+    )
     return DataLoader(
         dataset=dataset,
         batch_size=batch_size,

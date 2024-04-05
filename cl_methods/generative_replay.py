@@ -76,11 +76,11 @@ class GenerativeReplay:
 
             # generated_imgs = torch.load("./cifar100_images.pt") if filename == "cifar100_randaugment" else torch.load("./cifar10_images.pt")
             # generated_labels = torch.load("./cifar100_labels.pt").type(torch.LongTensor) if filename == "cifar100_randaugment" else torch.load("./cifar10_labels.pt").type(torch.LongTensor)
- 
+
             gen_sup_ds = BaseTensorDataset(
                 data=generated_imgs,
                 targets=generated_labels,
-                transform=sup_ds.transform
+                transform=sup_ds.transform,
             )
             joined_sup_ds = (
                 ConcatDataset([sup_ds, gen_sup_ds])
@@ -89,9 +89,9 @@ class GenerativeReplay:
             )
 
             gen_unsup_ds = BaseTensorDataset(
-                data=generated_imgs, 
+                data=generated_imgs,
                 targets=generated_labels,
-                transform=unsup_ds.transform
+                transform=unsup_ds.transform,
             )
             joined_unsup_ds = (
                 ConcatDataset([unsup_ds, gen_unsup_ds])
@@ -99,10 +99,15 @@ class GenerativeReplay:
                 else gen_unsup_ds
             )
 
+        labeled_bs = (
+            self.train_bs if isinstance(self.train_bs, int) else self.train_bs[0]
+        )
         labeled_dl = DataLoader(
             dataset=joined_sup_ds,
-            sampler=RandomSampler(joined_sup_ds),
-            batch_size=self.train_bs if isinstance(self.train_bs, int) else self.train_bs[0],
+            sampler=RandomSampler(
+                joined_sup_ds, num_samples=max(len(joined_sup_ds), labeled_bs * 500)
+            ),
+            batch_size=labeled_bs,
             shuffle=False,
             drop_last=True,
             num_workers=self.dl_num_workers,
@@ -111,7 +116,10 @@ class GenerativeReplay:
             assert isinstance(self.train_bs, list)
             unlabeled_dl = DataLoader(
                 dataset=joined_unsup_ds,
-                sampler=RandomSampler(joined_unsup_ds),
+                sampler=RandomSampler(
+                    joined_unsup_ds,
+                    num_samples=max(len(joined_unsup_ds), self.train_bs[1] * 500),
+                ),
                 batch_size=self.train_bs[1],
                 shuffle=False,
                 drop_last=True,
