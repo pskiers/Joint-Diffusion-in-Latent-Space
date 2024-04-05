@@ -39,7 +39,7 @@ class ChestXRay_nih(torch.utils.data.Dataset):
             df = df[df["image_index"].isin(image_list)]
             df["image_path"] = self.data_path+"/images/"+df["image_index"]
             df.drop(columns=["image_index"], inplace=True)
-            #df = df.sample(frac=1, random_state=45654).reset_index(drop=True) # for rough tests on subsets
+            df = df.sample(frac=1, random_state=45654).reset_index(drop=True)
             self.split_idx = int(0.1*len(df))
             self.train_val_image_df = df
             
