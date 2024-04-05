@@ -29,9 +29,9 @@ class ISIC2019(torch.utils.data.Dataset):
         df = pd.read_csv(os.path.join(self.data_path, "ISIC_2019_Training_GroundTruth.csv"))
         self.split_idx = self.split_idx_val = int(0.0*len(df))
 
-        # PART USED ONLY FOR SPLIT to CSV
+        # # PART USED ONLY FOR SPLIT to CSV
         # df.rename(columns=lambda x: x.replace(" ", "_").lower(), inplace=True)
-        # df["image_path"] = self.data_path+"/images/"+df["image"]+'.jpg'
+        # df["image_path"] = df["image"]+'.jpg'
         # df.drop(columns=["image"], inplace=True)
         # df = df.sample(frac=1, random_state=45654).reset_index(drop=True) 
         # self.split_idx_test = int(0.2*len(df))
@@ -43,6 +43,7 @@ class ISIC2019(torch.utils.data.Dataset):
         
         if mode in ['val', 'train']:
             self.final_image_df = pd.read_csv(os.path.join(self.data_path, "train_val_split.csv"), index_col=0)
+            self.final_image_df["image_path"] = self.data_path+"/images/"+ self.final_image_df["image_path"]
             self.labels = self.final_image_df.columns[~self.final_image_df.columns.isin(['image_path', "unk"])]
 
             if mode =='val':
@@ -75,6 +76,7 @@ class ISIC2019(torch.utils.data.Dataset):
 
         elif mode == 'test':
             self.final_image_df = pd.read_csv(os.path.join(self.data_path, "test_split.csv"), index_col=0).reset_index(drop=True)
+            self.final_image_df["image_path"] = self.data_path+"/images/"+ self.final_image_df["image_path"]
             self.labels = self.final_image_df.columns[~self.final_image_df.columns.isin(['image_path', "unk"])]
 
             transformList = []
