@@ -14,17 +14,17 @@ from callbacks import ImageLogger, CUDACallback, SetupCallback, FIDScoreLogger
 if __name__ == "__main__":
     environ["WANDB__SERVICE_WAIT"] = "300"
 
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument("--path", "-p", type=Path, required=True, help="path to config file")
-    # parser.add_argument("--checkpoint", "-c", type=Path, required=False, help="path to model checkpoint file")
-    # args = parser.parse_args()
-    # config_path = str(args.path)
-    # checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--path", "-p", type=Path, required=True, help="path to config file")
+    parser.add_argument("--checkpoint", "-c", type=Path, required=False, help="path to model checkpoint file")
+    args = parser.parse_args()
+    config_path = str(args.path)
+    checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
 
-    # config = OmegaConf.load(config_path)
-    config = OmegaConf.load(
-        "configs/standard_diffusion/semi-supervised/diffmatch_attention/stl10.yaml"
-    )
+    config = OmegaConf.load(config_path)
+    # config = OmegaConf.load(
+    #     "configs/baselines/class_conditioned_ddpm/cifar10.yaml"
+    # )
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
@@ -37,8 +37,8 @@ if __name__ == "__main__":
     dl_config = OmegaConf.to_container(dl_config, resolve=True)
     train_dls, test_dl = get_dataloaders(dl_config)
 
-    # if checkpoint_path is not None:
-    # config.model.params["ckpt_path"] = checkpoint_path
+    if checkpoint_path is not None:
+        config.model.params["ckpt_path"] = checkpoint_path
     # config.model.params["ckpt_path"] = f"logs/JointDiffusionAttention_2023-10-08T22-42-51/checkpoints/last.ckpt"
 
     model = get_model_class(config.model.get("model_type"))(

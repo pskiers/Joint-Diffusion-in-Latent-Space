@@ -113,13 +113,13 @@ if __name__ == "__main__":
     cfgdir = path.join(logdir, "configs")
 
     trainer_kwargs = dict()
+    try:
+        per_class = f'{dl_config["train"][0]["cl_split"]["datasets"][0]["ssl_split"]["num_labeled"]} per class'
+    except Exception:
+        per_class = "all labels"
     tags = [
         dl_config["validation"]["name"],
-        (
-            "all labels"
-            if next(iter(dl_config["train"][0])) == "dataset"
-            else f'{dl_config["train"][0]["cl_split"]["datasets"][0]["ssl_split"]["num_labeled"]} per class'
-        ),
+        per_class,
         config.model.get("model_type"),
         f"task {current_task}",
         f"learned tasks {tasks_learned}",
@@ -227,7 +227,7 @@ if __name__ == "__main__":
             if new_generator is not None:
                 new_generator.to(torch.device("cuda"))
             (labeled_ds, unlabeled_ds) = (
-                datasets if len(datasets) == 2 else (datasets, None)
+                datasets if len(datasets) == 2 else (datasets[0], None)
             )
             train_dls = reply_buff.get_data_for_task(
                 sup_ds=labeled_ds,
