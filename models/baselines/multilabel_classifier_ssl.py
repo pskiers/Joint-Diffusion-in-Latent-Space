@@ -6,7 +6,6 @@ import numpy as np
 from sklearn.metrics import accuracy_score
 from torchmetrics import AUROC
 from ldm.modules.distributions.distributions import normal_kl, DiagonalGaussianDistribution
-from torch.optim.lr_scheduler import LambdaLR
 
 
 import torch
@@ -39,12 +38,7 @@ def instantiate_from_config(config):
         raise KeyError("Expected key `target` to instantiate.")
     return get_obj_from_str(config["target"])(**config.get("params", dict()))
 
-def lr_lambda(epoch: int):
-        if epoch > 15:
-            return 0.1
-        else:
-            return 1.0
-class MultilabelClassifier(pl.LightningModule):
+class MultilabelClassifierSSL(pl.LightningModule):
     def __init__(
             self,
             image_size: int,
@@ -180,16 +174,17 @@ class MultilabelClassifier(pl.LightningModule):
             out = self.densenet(imgs)
         return out
     
-    
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay = self.weight_decay, eps=0.1, betas=(0.9, 0.99))
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay = self.weight_decay)
         scheduler = {
-        'scheduler': LambdaLR(optimizer, lr_lambda=lr_lambda),
+        'scheduler': torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor = 0.1, patience = 5, mode = 'min'),
+        'monitor': "val/loss"
     }
         return [optimizer], [scheduler]
-        return optimizer
 
     def training_step(self, batch, batch_idx):
+        if batch_idx==1:
+            return
         loss_dict = {}
         x, y = batch
         if len(x)<4:
@@ -212,7 +207,7 @@ class MultilabelClassifier(pl.LightningModule):
     @torch.no_grad()
     def validation_step(self, batch, batch_idx, dataloader_idx):
         self.log("global_step", self.global_step,
-                    prog_bar=True, logger=True, on_step=True, on_epoch=False)
+                    prog_bar=True, logger=True, on_step=False, on_epoch=False)
         x, y = batch
         if len(x)<4:
             x = x.unsqueeze(1)

@@ -87,7 +87,7 @@ if __name__ == "__main__":
 
     ]
 
-    trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
+    trainer = pl.Trainer.from_argparse_args(trainer_opt, check_val_every_n_epoch=10, **trainer_kwargs)
     trainer.logdir = logdir
 
     trainer.fit(

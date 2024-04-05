@@ -4,4 +4,5 @@ from .classifier_on_latent_diffusion import ClassifierOnLatentDiffusion
 from .fixmatch import FixMatch, MeanMatch
 from .ddpm_wideresnet import DDPM_Wide_ResNet
 from .multilabel_classifier import MultilabelClassifier
+from .multilabel_classifier_ssl import MultilabelClassifierSSL
 from .multilabel_classifier_on_latent_diffusion import MultilabelClassifierOnLatentDiffusion

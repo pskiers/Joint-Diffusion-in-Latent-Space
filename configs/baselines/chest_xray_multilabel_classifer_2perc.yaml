@@ -1,0 +1,64 @@
+### THIS ISVERY ROUGH CONFIG, SOME FIELDS ARE REALLY USELESS. CHECK IN CODE WHAT TO SET WHERE
+
+model:
+  #logdir: /net/tscratch/people/plgjoaxkal/Joint-Diffusion-in-Latent-Space/
+  logdir: .
+  model_type: multilabel_classifier
+  params:
+    classifier_test_mode: "densenet"
+    image_size: 512 # 32 for latent
+    channels: 4
+    monitor: test/auroc
+    in_features: 1024 # encoder+resnet18 512, resnet50 2048, linear 4096; densenest121 1024
+    num_classes: 14
+    dropout: 0.0
+    learning_rate: 0.03
+    weight_decay: 0.0000
+    ft_enc: False
+
+    first_stage_config:
+      target: ldm.models.autoencoder.AutoencoderKL
+      params:
+        embed_dim: 4
+        monitor: "val/rec_loss"
+        ckpt_path: "/home/jk/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_all_randomresizedcrop_Autoencoder_2024-01-17T13-15-27/checkpoints/epoch=000025.ckpt"
+        ddconfig:
+          double_z: True
+          z_channels: 4
+          resolution: 256
+          in_channels: 1
+          out_ch: 1
+          ch: 128
+          ch_mult: [ 1,2,4,4 ]  # num_down = len(ch_mult)-1
+          num_res_blocks: 2
+          attn_resolutions: []
+          dropout: 0.0
+        lossconfig:
+          target: torch.nn.Identity
+    weights: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    #14 classes, log
+    #weights: [0.741790821, 1.485960814, 1.253424332, 1.581670469, 0.718735907, 1.567343026, 1.624709854, 2.581797199, 0.464784148, 1.092677857, 1.019675586, 1.363090079, 1.782541339, 1.289286516]
+    # 14 classes sqrt
+    #weights: [2.349067037, 5.533251459, 4.233622847, 6.177819776, 2.287536085, 6.076752008, 6.491647465, 19.53883204, 1.707623308, 3.518349097, 3.234728186, 4.80335892, 7.785216056, 4.412078777]
+    # 14 classes abs
+    # weights: [5.518115942, 30.6168717, 17.92356241, 38.16545718, 5.232821342, 36.92691497, 42.14148681, 381.7659574, 2.915977362, 12.37878037, 10.46346644, 23.07225691, 60.60958904, 19.46643914]
+    
+dataloaders:
+  name: chest_xray_nih_densenet_2perc
+  train_batches: [ 32 ]
+  val_batch: 32
+  num_workers: 4
+  num_labeled: null
+  pin_memory: True
+  persistent_workers: True
+  training_platform: local_sano
+
+
+lightning:
+  trainer:
+    benchmark: True
+    checkpoint_callback: True
+    max_steps: 1000000
+    gpus: -1
+    accelerator: ddp
+    # accumulate_grad_batches: 2

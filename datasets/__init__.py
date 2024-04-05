@@ -8,6 +8,7 @@ from .cifar10 import AdjustedCIFAR10
 from .cifar100 import AdjustedCIFAR100
 from .chest_xray_nih import ChestXRay_nih
 from .chest_xray_nih_densenet import ChestXRay_nih_densenet
+from .chest_xray_nih_densenet_2perc import ChestXRay_nih_densenet_2perc
 from .chest_xray_nih_ssl import ChestXRay_nih_ssl
 from .arch.chest_xray import ChestXRay
 from .chest_xray_nih_patches import ChestXRay_nih_patches
@@ -96,7 +97,14 @@ def get_dataloaders(name: str,
         return train_test_val_dl(
             train_ds, val_ds, test_ds, train_batches, val_batch, num_workers, 
             pin_memory=pin_memory, persistent_workers=persistent_workers)
-    
+    elif name=='chest_xray_nih_densenet_2perc':
+        train_ds = ChestXRay_nih_densenet_2perc(mode='train', 
+                                       training_platform = training_platform)
+        val_ds = ChestXRay_nih_densenet_2perc(mode='val', training_platform = training_platform)
+        test_ds = ChestXRay_nih_densenet_2perc(mode='test', training_platform = training_platform)
+        return train_test_val_dl(
+            train_ds, val_ds, test_ds, train_batches, val_batch, num_workers, 
+            pin_memory=pin_memory, persistent_workers=persistent_workers)
     elif name=='chest_xray_nih_densenet_patches':
             ds = ChestXRay_nih_densenet_patches(training_platform = training_platform)
             dl = torch.utils.data.DataLoader(
