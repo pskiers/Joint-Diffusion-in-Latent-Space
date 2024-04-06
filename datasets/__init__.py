@@ -51,6 +51,13 @@ def get_dataloaders(name: str,
         return train_test_val_dl(
             train_ds, val_ds, test_ds, train_batches, val_batch, num_workers, 
             pin_memory=pin_memory, persistent_workers=persistent_workers)
+    if name=='chest_xray_nih_encoder':
+        train_ds = ChestXRay_nih(mode='train', training_platform = training_platform, val_split_ratio=0)
+        val_ds = ChestXRay_nih(mode='test', training_platform = training_platform)
+        test_ds = ChestXRay_nih(mode='test', training_platform = training_platform)
+        return train_test_val_dl(
+            train_ds, val_ds, test_ds, train_batches, val_batch, num_workers, 
+            pin_memory=pin_memory, persistent_workers=persistent_workers)
     
     elif name=='chest_xray_nih_2perc':
         train_ds = ChestXRay_nih_ssl(mode='train', 
@@ -110,7 +117,7 @@ def get_dataloaders(name: str,
             )
             return dl
     if name=='isic2019_encoder':
-        train_ds = ISIC2019(mode='train', training_platform = training_platform, extend_with_test=True)
+        train_ds = ISIC2019(mode='train', training_platform = training_platform, extend_with_test=True, val_split_ratio=0)
         val_ds = ISIC2019(mode='test', training_platform = training_platform)
         test_ds = ISIC2019(mode='test', training_platform = training_platform)
         return train_test_val_dl(

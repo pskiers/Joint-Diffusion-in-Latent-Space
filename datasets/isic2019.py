@@ -14,7 +14,7 @@ import PIL
 
 
 class ISIC2019(torch.utils.data.Dataset):
-    def __init__(self, mode='train', training_platform: str = 'local_sano', extend_with_test = False) -> None:
+    def __init__(self, mode='train', training_platform: str = 'local_sano', extend_with_test = False, val_split_ratio=0.1) -> None:
         super().__init__()
 
         assert training_platform in ['plgrid', 'local_sano', "de"]
@@ -27,7 +27,7 @@ class ISIC2019(torch.utils.data.Dataset):
         
         assert mode in ['val', 'train', 'test']
         df = pd.read_csv(os.path.join(self.data_path, "ISIC_2019_Training_GroundTruth.csv"))
-        self.split_idx = self.split_idx_val = int(0.0*len(df))
+        self.split_idx = self.split_idx_val = int(val_split_ratio*len(df))
 
         # # PART USED ONLY FOR SPLIT to CSV
         # df.rename(columns=lambda x: x.replace(" ", "_").lower(), inplace=True)

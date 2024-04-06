@@ -13,7 +13,7 @@ from torchvision import datasets, models, transforms
 import PIL
 
 class ChestXRay_nih(torch.utils.data.Dataset):
-    def __init__(self, mode='train', training_platform: str = 'local_sano') -> None:
+    def __init__(self, mode='train', training_platform: str = 'local_sano', val_split_ratio=0.1) -> None:
         super().__init__()
 
         assert training_platform in ['plgrid', 'local_sano', "de"]
@@ -40,7 +40,7 @@ class ChestXRay_nih(torch.utils.data.Dataset):
             df["image_path"] = self.data_path+"/images/"+df["image_index"]
             df.drop(columns=["image_index"], inplace=True)
             df = df.sample(frac=1, random_state=45654).reset_index(drop=True)
-            self.split_idx = int(0.1*len(df))
+            self.split_idx = int(val_split_ratio*len(df))
             self.train_val_image_df = df
             
             if mode =='val':
