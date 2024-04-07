@@ -9,7 +9,7 @@ from contextlib import contextmanager
 import kornia as K
 from ldm.models.diffusion.ddpm import DDPM
 from ldm.util import default
-from ldm.modules.diffusionmodules.util import extract_into_tensor
+from ldm.modules.diffusionmodules.util import extract_into_tensor, noise_like
 from .ssl_joint_diffusion import SSLJointDiffusion
 from ..representation_transformer import RepresentationTransformer
 from ..utils import FixMatchEma, interleave, de_interleave
@@ -17,29 +17,21 @@ from ..adjusted_unet import AdjustedUNet
 
 
 class DiffMatch(SSLJointDiffusion):
-    def __init__(
-            self,
-            min_confidence=0.95,
-            *args,
-            **kwargs
-        ):
-        super().__init__(
-            *args,
-            **kwargs
-        )
+    def __init__(self, min_confidence=0.95, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.min_confidence = min_confidence
         self.raw_imgs = None
         self.augmentation = K.augmentation.ImageSequential(
-            K.augmentation.RandomAffine(degrees=0, translate=(0.125, 0.125)))
+            K.augmentation.RandomAffine(degrees=0, translate=(0.125, 0.125))
+        )
         self.strong_augmentation = K.augmentation.AugmentationSequential(
-            K.augmentation.auto.RandAugment(n=2, m=10))
+            K.augmentation.auto.RandAugment(n=2, m=10)
+        )
         if kwargs.get("ckpt_path", None) is not None:
             ignore_keys = kwargs.get("ignore_keys", [])
             only_model = kwargs.get("load_only_unet", False)
             self.init_from_ckpt(
-                kwargs["ckpt_path"],
-                ignore_keys=ignore_keys,
-                only_model=only_model
+                kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model
             )
 
     def get_input(self, batch, k):
@@ -47,9 +39,10 @@ class DiffMatch(SSLJointDiffusion):
             self.raw_imgs = batch[k]
             if len(self.raw_imgs.shape) == 3:
                 self.raw_imgs = self.raw_imgs[..., None]
-            self.raw_imgs = rearrange(self.raw_imgs, 'b h w c -> b c h w')
+            self.raw_imgs = rearrange(self.raw_imgs, "b h w c -> b c h w")
             self.raw_imgs = self.raw_imgs.to(
-                memory_format=torch.contiguous_format).float()
+                memory_format=torch.contiguous_format
+            ).float()
             self.raw_imgs = self.raw_imgs.to(self.device)
         return super().get_input(batch, k)
 
@@ -58,42 +51,49 @@ class DiffMatch(SSLJointDiffusion):
 
         if not self.training:
             return loss, loss_dict
-        prefix = 'train'
+        prefix = "train"
 
         with torch.no_grad():
             weakly_augmented = self.augmentation(self.raw_imgs).detach()
             weak_rep = self.model.diffusion_model.just_representations(
                 weakly_augmented,
                 torch.ones(weakly_augmented.shape[0], device=self.device),
-                pooled=False
+                pooled=False,
             )
             if isinstance(weak_rep, list):  # TODO refactor this shit
                 weak_rep = self.transform_representations(weak_rep)
                 weak_preds = nn.functional.softmax(
-                    self.classifier(weak_rep), dim=1).detach()
+                    self.classifier(weak_rep), dim=1
+                ).detach()
             else:
                 weak_preds = nn.functional.softmax(weak_rep, dim=1).detach()
             pseudo_labels = weak_preds.argmax(dim=1)
-            above_threshold_idx, = (
+            (above_threshold_idx,) = (
                 weak_preds.max(dim=1).values > self.min_confidence
             ).nonzero(as_tuple=True)
             pseudo_labels = pseudo_labels[above_threshold_idx]
 
             loss_dict.update(
-                {f'{prefix}/ssl_above_threshold': len(above_threshold_idx) / len(weak_preds)})
-            loss_dict.update({f'{prefix}/ssl_max_confidence': weak_preds.max()})
+                {
+                    f"{prefix}/ssl_above_threshold": len(above_threshold_idx)
+                    / len(weak_preds)
+                }
+            )
+            loss_dict.update({f"{prefix}/ssl_max_confidence": weak_preds.max()})
             if len(above_threshold_idx) == 0:
                 return loss, loss_dict
 
-            strongly_augmented = self.strong_augmentation((self.raw_imgs[above_threshold_idx]))
+            strongly_augmented = self.strong_augmentation(
+                (self.raw_imgs[above_threshold_idx])
+            )
             strongly_augmented = self.cutout(strongly_augmented, level=1).detach()
 
         strong_rep = self.model.diffusion_model.just_representations(
             strongly_augmented,
             torch.ones(strongly_augmented.shape[0], device=self.device),
-            pooled=False
+            pooled=False,
         )
-        if isinstance(strong_rep, list): # TODO refactor this shit
+        if isinstance(strong_rep, list):  # TODO refactor this shit
             strong_rep = self.transform_representations(strong_rep)
             preds = self.classifier(strong_rep)
         else:
@@ -101,16 +101,16 @@ class DiffMatch(SSLJointDiffusion):
         ssl_loss = nn.functional.cross_entropy(preds, pseudo_labels)
 
         loss += ssl_loss * len(preds) / len(weak_preds)
-        loss_dict.update({f'{prefix}/loss_ssl_classification': ssl_loss})
-        loss_dict.update({f'{prefix}/loss': loss})
-        accuracy = torch.sum(
-            torch.argmax(preds, dim=1) == pseudo_labels) / len(pseudo_labels)
-        loss_dict.update({f'{prefix}/ssl_accuracy': accuracy})
+        loss_dict.update({f"{prefix}/loss_ssl_classification": ssl_loss})
+        loss_dict.update({f"{prefix}/loss": loss})
+        accuracy = torch.sum(torch.argmax(preds, dim=1) == pseudo_labels) / len(
+            pseudo_labels
+        )
+        loss_dict.update({f"{prefix}/ssl_accuracy": accuracy})
 
         return loss, loss_dict
 
     def cutout(self, img_batch, level, fill=0.5):
-
         """
         Apply cutout to torch tensor of shape (batch, height, width, channel) at the specified level.
         """
@@ -118,16 +118,18 @@ class DiffMatch(SSLJointDiffusion):
         batch, img_height, img_width = img_batch.shape[0:3]
         height_loc = torch.randint(low=0, high=img_height, size=[batch])
         width_loc = torch.randint(low=0, high=img_width, size=[batch])
-        x_uppers = (height_loc - size // 2)
-        x_uppers *= (x_uppers >= 0)
-        x_lowers = (height_loc + size // 2)
+        x_uppers = height_loc - size // 2
+        x_uppers *= x_uppers >= 0
+        x_lowers = height_loc + size // 2
         x_lowers -= (x_lowers >= img_height) * (x_lowers - img_height - 1)
-        y_uppers = (width_loc - size // 2)
-        y_uppers *= (y_uppers >= 0)
-        y_lowers = (width_loc + size // 2)
+        y_uppers = width_loc - size // 2
+        y_uppers *= y_uppers >= 0
+        y_lowers = width_loc + size // 2
         y_lowers -= (y_lowers >= img_width) * (y_lowers - img_width - 1)
 
-        for img, x_upper, x_lower, y_upper, y_lower in zip(img_batch, x_uppers, x_lowers, y_uppers, y_lowers):
+        for img, x_upper, x_lower, y_upper, y_lower in zip(
+            img_batch, x_uppers, x_lowers, y_uppers, y_lowers
+        ):
             img[x_upper:x_lower, y_upper:y_lower] = fill
         return img_batch
 
@@ -139,48 +141,54 @@ class DiffMatchAttention(DiffMatch):
             classifier_hidden=0,
             num_classes=0,
             *args,
-            **kwargs
+            **kwargs,
         )
         self.classifier = RepresentationTransformer(**attention_config)
         if kwargs.get("ckpt_path", None) is not None:
             ignore_keys = kwargs.get("ignore_keys", [])
             only_model = kwargs.get("load_only_unet", False)
-            self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
+            self.init_from_ckpt(
+                kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model
+            )
 
     def transform_representations(self, representations):
         return representations
 
 
 class DiffMatchFixed(DDPM):
-    def __init__(self,
-                 min_confidence=0.95,
-                 mu=7,
-                 batch_size=64,
-                 img_key=0,
-                 label_key=1,
-                 unsup_img_key=0,
-                 classification_start=0,
-                 classification_loss_weight=1,
-                 classification_loss_weight_max=1,
-                 classification_loss_weight_increments=0,
-                 sampling_method="unconditional",
-                 sample_grad_scale=0,
-                 *args,
-                 **kwargs):
+    def __init__(
+        self,
+        base_learning_rate,
+        min_confidence=0.95,
+        img_key=0,
+        label_key=1,
+        unsup_img_key=0,
+        classification_start=0,
+        classification_loss_weight=1,
+        classification_loss_weight_max=1,
+        classification_loss_weight_increments=0,
+        sampling_method="unconditional",
+        sampling_recurence_steps=1,
+        sample_grad_scale=0,
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
+        self.learning_rate = base_learning_rate
         self.min_confidence = min_confidence
-        self.mu = mu
-        self.batch_size = batch_size
         self.img_key = img_key
         self.label_key = label_key
         self.unsup_img_key = unsup_img_key
         self.classification_start = classification_start
         self.classification_loss_weight = classification_loss_weight
         self.classification_loss_weight_max = classification_loss_weight_max
-        self.classification_loss_weight_increments = classification_loss_weight_increments
+        self.classification_loss_weight_increments = (
+            classification_loss_weight_increments
+        )
         self.scheduler = None
         self.sampling_method = sampling_method
         self.sample_grad_scale = sample_grad_scale
+        self.sampling_recurence_steps = sampling_recurence_steps
         if self.use_ema:
             self.model_ema = FixMatchEma(self, decay=0.999)
             print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
@@ -188,6 +196,10 @@ class DiffMatchFixed(DDPM):
         self.val_labels = torch.tensor([])
         self.val_preds = torch.tensor([])
         self.val_preds_ema = torch.tensor([])
+    
+    def init_optim_from_ckpt(self, path):
+        sd = torch.load(path, map_location="cpu")
+        self.optim.load_state_dict(sd["optimizer_states"][0])
 
     @contextmanager
     def ema_scope(self, context=None):
@@ -205,8 +217,13 @@ class DiffMatchFixed(DDPM):
                     print(f"{context}: Restored training weights")
 
     def on_train_batch_end(self, *args, **kwargs):
-        if self.classification_loss_weight_increments > 0 and self.classification_start <= 0:
-            step = (self.classification_loss_weight_max - self.classification_loss_weight) / self.classification_loss_weight_increments
+        if (
+            self.classification_loss_weight_increments > 0
+            and self.classification_start <= 0
+        ):
+            step = (
+                self.classification_loss_weight_max - self.classification_loss_weight
+            ) / self.classification_loss_weight_increments
             self.classification_loss_weight += step
             self.classification_loss_weight_increments -= 1
         if self.scheduler is not None:
@@ -217,19 +234,35 @@ class DiffMatchFixed(DDPM):
         return
 
     def configure_optimizers(self):
-        no_decay = ['bias', 'bn']
+        if self.optim is not None:
+            return self.optim
+        no_decay = ["bias", "bn"]
         # grouped_parameters = [
         #     {'params': [p for n, p in self.named_parameters() if not any(
         #         nd in n for nd in no_decay)], 'weight_decay': 5e-4},
         #     {'params': [p for n, p in self.named_parameters() if any(
         #         nd in n for nd in no_decay)], 'weight_decay': 0.0}
         # ]
-        decay = ['fc']
+        decay = ["fc"]
         grouped_parameters = [
-            {'params': [p for n, p in self.named_parameters() if any(
-                nd in n for nd in decay) and not any(nd in n for nd in no_decay)], 'weight_decay': 0.0},
-            {'params': [p for n, p in self.named_parameters() if not any(
-                nd in n for nd in decay) or any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+            {
+                "params": [
+                    p
+                    for n, p in self.named_parameters()
+                    if any(nd in n for nd in decay)
+                    and not any(nd in n for nd in no_decay)
+                ],
+                "weight_decay": 0.0,
+            },
+            {
+                "params": [
+                    p
+                    for n, p in self.named_parameters()
+                    if not any(nd in n for nd in decay)
+                    or any(nd in n for nd in no_decay)
+                ],
+                "weight_decay": 0.0,
+            },
         ]
         optimizer = torch.optim.Adam(
             grouped_parameters,
@@ -262,21 +295,23 @@ class DiffMatchFixed(DDPM):
         elif self.parameterization == "x0":
             target = x_start
         else:
-            raise NotImplementedError(f"Paramterization {self.parameterization} not yet supported")
+            raise NotImplementedError(
+                f"Paramterization {self.parameterization} not yet supported"
+            )
 
         loss = self.get_loss(model_out, target, mean=False).mean(dim=[1, 2, 3])
 
-        log_prefix = 'train' if self.training else 'val'
+        log_prefix = "train" if self.training else "val"
 
-        loss_dict.update({f'{log_prefix}/loss_simple': loss.mean()})
+        loss_dict.update({f"{log_prefix}/loss_simple": loss.mean()})
         loss_simple = loss.mean() * self.l_simple_weight
 
         loss_vlb = (self.lvlb_weights[t] * loss).mean()
-        loss_dict.update({f'{log_prefix}/loss_vlb': loss_vlb})
+        loss_dict.update({f"{log_prefix}/loss_vlb": loss_vlb})
 
         loss = loss_simple + self.original_elbo_weight * loss_vlb
 
-        loss_dict.update({f'{log_prefix}/loss': loss})
+        loss_dict.update({f"{log_prefix}/loss": loss})
 
         return loss, loss_dict
 
@@ -295,53 +330,64 @@ class DiffMatchFixed(DDPM):
         x, y, img, weak_img, strong_img = self.get_train_input(batch)
         loss, loss_dict = self(img)
         if self.classification_start <= 0:
-            inputs = interleave(
-                torch.cat((x, weak_img, strong_img)), 2*self.mu+1)
+            mu = img.shape[0] // x.shape[0]
+            batch_size = x.shape[0]
+            inputs = interleave(torch.cat((x, weak_img, strong_img)), 2 * mu + 1)
             logits = self.model.diffusion_model.just_representations(
-                inputs,
-                torch.zeros(inputs.shape[0], device=self.device),
-                pooled=False
+                inputs, torch.zeros(inputs.shape[0], device=self.device), pooled=False
             )
-            if isinstance(logits, list): # TODO refactor this shit
+            if isinstance(logits, list):  # TODO refactor this shit
                 logits = self.transform_representations(logits)
                 logits = self.classifier(logits)
-            logits = de_interleave(logits, 2*self.mu+1)
-            preds_x = logits[:self.batch_size]
-            preds_weak, preds_strong = logits[self.batch_size:].chunk(2)
+            logits = de_interleave(logits, 2 * mu + 1)
+            preds_x = logits[: batch_size]
+            preds_weak, preds_strong = logits[batch_size :].chunk(2)
             del logits
 
-            loss_classification = nn.functional.cross_entropy(preds_x, y, reduction="mean")
+            loss_classification = nn.functional.cross_entropy(
+                preds_x, y, reduction="mean"
+            )
             loss += loss_classification * self.classification_loss_weight
             accuracy = torch.sum(torch.argmax(preds_x, dim=1) == y) / len(y)
-            loss_dict.update(
-                {'train/loss_classification': loss_classification})
-            loss_dict.update({'train/loss': loss})
-            loss_dict.update({'train/accuracy': accuracy})
+            loss_dict.update({"train/loss_classification": loss_classification})
+            loss_dict.update({"train/loss": loss})
+            loss_dict.update({"train/accuracy": accuracy})
 
             pseudo_label = torch.softmax(preds_weak.detach(), dim=-1)
             max_probs, targets_u = torch.max(pseudo_label, dim=-1)
             mask = max_probs.ge(self.min_confidence).float()
-            ssl_loss = (nn.functional.cross_entropy(
-                preds_strong, targets_u, reduction='none') * mask).mean()
+            ssl_loss = (
+                nn.functional.cross_entropy(preds_strong, targets_u, reduction="none")
+                * mask
+            ).mean()
             loss += ssl_loss * self.classification_loss_weight
-            accuracy = torch.sum(
-                (torch.argmax(preds_strong, dim=1) == targets_u) * mask
-            ) / mask.sum() if mask.sum() > 0 else 0
-            loss_dict.update(
-                    {'train/ssl_above_threshold': mask.mean().item()})
-            loss_dict.update({'train/ssl_max_confidence': mask.max().item()})
-            loss_dict.update({'train/loss_ssl_classification': ssl_loss})
-            loss_dict.update({'train/loss': loss})
-            loss_dict.update({'train/ssl_accuracy': accuracy})
+            accuracy = (
+                torch.sum((torch.argmax(preds_strong, dim=1) == targets_u) * mask)
+                / mask.sum()
+                if mask.sum() > 0
+                else 0
+            )
+            loss_dict.update({"train/ssl_above_threshold": mask.mean().item()})
+            loss_dict.update({"train/ssl_max_confidence": mask.max().item()})
+            loss_dict.update({"train/loss_ssl_classification": ssl_loss})
+            loss_dict.update({"train/loss": loss})
+            loss_dict.update({"train/ssl_accuracy": accuracy})
         else:
             self.classification_start -= 1
 
         # lr = self.optimizers().param_groups[0]['lr']
         # self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
-        self.log_dict(loss_dict, prog_bar=True,
-                      logger=True, on_step=True, on_epoch=True)
-        self.log("global_step", self.global_step,
-                 prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        self.log_dict(
+            loss_dict, prog_bar=True, logger=True, on_step=True, on_epoch=True
+        )
+        self.log(
+            "global_step",
+            self.global_step,
+            prog_bar=True,
+            logger=True,
+            on_step=True,
+            on_epoch=False,
+        )
         return loss
 
     @torch.no_grad()
@@ -349,38 +395,42 @@ class DiffMatchFixed(DDPM):
         x, y = self.get_val_input(batch)
         _, loss_dict_no_ema = self(x)
         preds = self.model.diffusion_model.just_representations(
-            x,
-            torch.zeros(x.shape[0], device=self.device),
-            pooled=False
+            x, torch.zeros(x.shape[0], device=self.device), pooled=False
         )
-        if isinstance(preds, list): # TODO refactor this shit
+        if isinstance(preds, list):  # TODO refactor this shit
             preds = self.transform_representations(preds)
             preds = self.classifier(preds)
         loss = nn.functional.cross_entropy(preds, y, reduction="mean")
         accuracy = torch.sum(torch.argmax(preds, dim=1) == y) / len(y)
-        loss_dict_no_ema.update({'val/loss': loss})
-        loss_dict_no_ema.update({'val/accuracy': accuracy})
+        loss_dict_no_ema.update({"val/loss": loss})
+        loss_dict_no_ema.update({"val/accuracy": accuracy})
         self.val_labels = torch.concat([self.val_labels, y.detach().cpu()])
-        self.val_preds = torch.concat([self.val_preds, preds.argmax(dim=1).detach().cpu()])
+        self.val_preds = torch.concat(
+            [self.val_preds, preds.argmax(dim=1).detach().cpu()]
+        )
         with self.ema_scope():
             x, y = self.get_val_input(batch)
             _, loss_dict_ema = self(x)
             preds = self.model.diffusion_model.just_representations(
-                x,
-                torch.ones(x.shape[0], device=self.device),
-                pooled=False
+                x, torch.ones(x.shape[0], device=self.device), pooled=False
             )
-            if isinstance(preds, list): # TODO refactor this shit
+            if isinstance(preds, list):  # TODO refactor this shit
                 preds = self.transform_representations(preds)
                 preds = self.classifier(preds)
             loss = nn.functional.cross_entropy(preds, y, reduction="mean")
             accuracy = torch.sum(torch.argmax(preds, dim=1) == y) / len(y)
-            loss_dict_ema.update({'val/loss': loss})
-            loss_dict_ema.update({'val/accuracy': accuracy})
-            self.val_preds_ema = torch.concat([self.val_preds_ema, preds.argmax(dim=1).detach().cpu()])
-            loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
-        self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
-        self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
+            loss_dict_ema.update({"val/loss": loss})
+            loss_dict_ema.update({"val/accuracy": accuracy})
+            self.val_preds_ema = torch.concat(
+                [self.val_preds_ema, preds.argmax(dim=1).detach().cpu()]
+            )
+            loss_dict_ema = {key + "_ema": loss_dict_ema[key] for key in loss_dict_ema}
+        self.log_dict(
+            loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True
+        )
+        self.log_dict(
+            loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True
+        )
 
     def on_validation_epoch_end(self) -> None:
         # wandb.log({"val/conf_mat": wandb.plot.confusion_matrix(
@@ -422,7 +472,9 @@ class DiffMatchFixed(DDPM):
             # 2.0583, 2.1265, 2.1158
             # -1.9887, -1.9803, -1.7068
 
-        model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
+        model_mean, posterior_variance, posterior_log_variance = self.q_posterior(
+            x_start=x_recon, x_t=x, t=t
+        )
         return model_mean, posterior_variance, posterior_log_variance
 
     def grad_guided_p_mean_variance(self, x, t, clip_denoised: bool):
@@ -439,29 +491,26 @@ class DiffMatchFixed(DDPM):
             raise NotImplementedError()
 
         if clip_denoised:
-            x_recon.clamp_(-1., 1.)
-            # x_recon[:, 0].clamp_(-1.9887, 2.0583)
-            # x_recon[:, 1].clamp_(-1.9803, 2.1265)
-            # x_recon[:, 2].clamp_(-1.7068, 2.1158)
-        model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
+            x_recon.clamp_(-1.0, 1.0)
+        model_mean, posterior_variance, posterior_log_variance = self.q_posterior(
+            x_start=x_recon, x_t=x, t=t
+        )
         return model_mean, posterior_variance, posterior_log_variance
 
     @torch.no_grad()
     def guided_apply_model(self, x: torch.Tensor, t):
         unet: AdjustedUNet = self.model.diffusion_model
-        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
+        if not hasattr(self.model.diffusion_model, "forward_input_blocks"):
             return unet.just_reconstruction(x, t)
 
         with torch.enable_grad():
             x = x.requires_grad_(True)
-            pred_noise = unet.just_reconstruction(
-                x, t, context=None)
+            pred_noise = unet.just_reconstruction(x, t, context=None)
             pred_x_start = (
-                (x - extract_into_tensor(
-                    self.sqrt_one_minus_alphas_cumprod, t, x.shape
-                ) * pred_noise) /
-                extract_into_tensor(self.sqrt_alphas_cumprod, t, x.shape)
-            )
+                x
+                - extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x.shape)
+                * pred_noise
+            ) / extract_into_tensor(self.sqrt_alphas_cumprod, t, x.shape)
             # pred_x_start_list = [
             #     pred_x_start[:, 0].clamp(-1.9887, 2.0583).unsqueeze(dim=1),
             #     pred_x_start[:, 1].clamp(-1.9803, 2.1265).unsqueeze(dim=1),
@@ -469,22 +518,26 @@ class DiffMatchFixed(DDPM):
             # ]
             # pred_x_start_fin = torch.concat(pred_x_start_list, dim=1)
             representations = unet.just_representations(
-                pred_x_start, t, context=None, pooled=False)
-            pooled_representations = self.transform_representations(
-                representations)
+                pred_x_start, t, context=None, pooled=False
+            )
+            pooled_representations = self.transform_representations(representations)
             pred = self.classifier(pooled_representations)
 
             loss = nn.functional.cross_entropy(
-                pred, self.sample_classes, reduction="sum")
+                pred, self.sample_classes, reduction="sum"
+            )
             grad = torch.autograd.grad(loss, x)[0]
-            s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
+            s_t = (
+                self.sample_grad_scale
+                * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
+            )
             model_out = (pred_noise + s_t * grad).detach()
 
         return model_out
 
     @torch.no_grad()
     def guided_repr_apply_model(self, x, t):
-        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
+        if not hasattr(self.model.diffusion_model, "forward_input_blocks"):
             return self.apply_model(x, t)
         t_in = t
 
@@ -496,11 +549,10 @@ class DiffMatchFixed(DDPM):
 
             pred_noise = unet.forward_output_blocks(x, None, emb, representations)
             pred_x_start = (
-                (x - extract_into_tensor(
-                    self.sqrt_one_minus_alphas_cumprod, t, x.shape
-                ) * pred_noise) /
-                extract_into_tensor(self.sqrt_alphas_cumprod, t, x.shape)
-            )
+                x
+                - extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x.shape)
+                * pred_noise
+            ) / extract_into_tensor(self.sqrt_alphas_cumprod, t, x.shape)
             # pred_x_start_list = [
             #     pred_x_start[:, 0].clamp(-1.9887, 2.0583).unsqueeze(dim=1),
             #     pred_x_start[:, 1].clamp(-1.9803, 2.1265).unsqueeze(dim=1),
@@ -508,29 +560,63 @@ class DiffMatchFixed(DDPM):
             # ]
             # pred_x_start_fin = torch.concat(pred_x_start_list, dim=1)
             repr_x0 = unet.just_representations(
-                pred_x_start, t, context=None, pooled=False)
-            pooled_representations = self.transform_representations(
-                repr_x0)
+                pred_x_start, t, context=None, pooled=False
+            )
+            pooled_representations = self.transform_representations(repr_x0)
             class_predictions = self.classifier(pooled_representations)
             # loss = -torch.log(torch.gather(class_predictions, 1, self.sample_classes.unsqueeze(dim=1))).sum()
-            loss = -nn.functional.cross_entropy(class_predictions, self.sample_classes, reduction="sum")
-            s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
+            loss = -nn.functional.cross_entropy(
+                class_predictions, self.sample_classes, reduction="sum"
+            )
+            s_t = (
+                self.sample_grad_scale
+                * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
+            )
             grads = torch.autograd.grad(loss, representations)
-            representations = [(h + self.sample_grad_scale * grad * s_t).detach() for h, grad in zip(representations, grads)]
+            representations = [
+                (h + self.sample_grad_scale * grad * s_t).detach()
+                for h, grad in zip(representations, grads)
+            ]
 
         model_out = unet.forward_output_blocks(x, None, emb, representations)
         return model_out
 
     @torch.no_grad()
-    def p_sample_loop(self, shape, return_intermediates=False, x_start=None, t_start=None):
+    def p_sample_loop(
+        self, shape, return_intermediates=False, x_start=None, t_start=None
+    ):
         device = self.betas.device
         b = shape[0]
-        img = torch.randn(shape, device=device) if x_start is None else x_start.clone().to(device)
+        img = (
+            torch.randn(shape, device=device)
+            if x_start is None
+            else x_start.clone().to(device)
+        )
         num_timesteps = self.num_timesteps if t_start is None else t_start
         intermediates = [img]
-        for i in tqdm(reversed(range(0, num_timesteps)), desc='Sampling t', total=num_timesteps):
-            img = self.p_sample(img, torch.full((b,), i, device=device, dtype=torch.long),
-                                clip_denoised=self.clip_denoised)
+        for i in tqdm(
+            reversed(range(0, num_timesteps)), desc="Sampling t", total=num_timesteps
+        ):
+            t = torch.full((b,), i, device=device, dtype=torch.long)
+            for _ in range(self.sampling_recurence_steps - 1):
+                z_t_minus_1 = self.p_sample(
+                    img,
+                    t,
+                    clip_denoised=self.clip_denoised,
+                )
+                eps = noise_like(img.shape, img.device)
+                alph_t_minus_one = (
+                    extract_into_tensor(self.alphas_cumprod, t - 1, (1,))[0]
+                    if i != 0
+                    else torch.tensor(1, device=img.device, dtype=float)
+                )
+                alpha_coef = extract_into_tensor(self.alphas_cumprod, t, (1,))[0] / alph_t_minus_one
+                img = torch.sqrt(alpha_coef) * z_t_minus_1 + torch.sqrt(1 - alpha_coef) * eps
+            img = self.p_sample(
+                img,
+                t,
+                clip_denoised=self.clip_denoised,
+            )
             if i % self.log_every_t == 0 or i == self.num_timesteps - 1:
                 intermediates.append(img)
         if return_intermediates:
@@ -538,14 +624,31 @@ class DiffMatchFixed(DDPM):
         return img
 
     @torch.no_grad()
-    def sample(self, batch_size=16, return_intermediates=False, x_start=None, t_start=None):
+    def sample(
+        self, batch_size=16, return_intermediates=False, x_start=None, t_start=None
+    ):
         image_size = self.image_size
         channels = self.channels
-        return self.p_sample_loop((batch_size, channels, image_size, image_size),
-                                  return_intermediates=return_intermediates, x_start=x_start, t_start=t_start)
+        return self.p_sample_loop(
+            (batch_size, channels, image_size, image_size),
+            return_intermediates=return_intermediates,
+            x_start=x_start,
+            t_start=t_start,
+        )
 
     @torch.no_grad()
-    def log_images(self, batch, N=8, n_row=2, sample=True, return_keys=None, sample_classes=None, use_ema=True, grad_scales=None, **kwargs):
+    def log_images(
+        self,
+        batch,
+        N=8,
+        n_row=2,
+        sample=True,
+        return_keys=None,
+        sample_classes=None,
+        use_ema=True,
+        grad_scales=None,
+        **kwargs,
+    ):
         if self.sampling_method != "unconditional":
             self.sample_classes = torch.tensor(sample_classes).to(self.device)
         log = dict()
@@ -564,7 +667,7 @@ class DiffMatchFixed(DDPM):
 
         for t in range(self.num_timesteps):
             if t % self.log_every_t == 0 or t == self.num_timesteps - 1:
-                t = repeat(torch.tensor([t]), '1 -> b', b=n_row)
+                t = repeat(torch.tensor([t]), "1 -> b", b=n_row)
                 t = t.to(self.device).long()
                 noise = torch.randn_like(x_start)
                 x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
@@ -577,9 +680,13 @@ class DiffMatchFixed(DDPM):
             if grad_scales is None:
                 if use_ema is True:
                     with self.ema_scope("Plotting"):
-                        samples, denoise_row = self.sample(batch_size=N, return_intermediates=True)
+                        samples, denoise_row = self.sample(
+                            batch_size=N, return_intermediates=True
+                        )
                 else:
-                    samples, denoise_row = self.sample(batch_size=N, return_intermediates=True)
+                    samples, denoise_row = self.sample(
+                        batch_size=N, return_intermediates=True
+                    )
 
                 log["samples"] = samples
                 # log["denoise_row"] = self._get_rows_from_list(denoise_row)
@@ -588,9 +695,13 @@ class DiffMatchFixed(DDPM):
                     self.sample_grad_scale = grad_scale
                     if use_ema is True:
                         with self.ema_scope("Plotting"):
-                            samples, denoise_row = self.sample(batch_size=N, return_intermediates=True)
+                            samples, denoise_row = self.sample(
+                                batch_size=N, return_intermediates=True
+                            )
                     else:
-                        samples, denoise_row = self.sample(batch_size=N, return_intermediates=True)
+                        samples, denoise_row = self.sample(
+                            batch_size=N, return_intermediates=True
+                        )
 
                     log[f"samples_grad_scale={grad_scale}"] = samples
                     # log[f"denoise_row_grad_scale={grad_scale}"] = self._get_rows_from_list(denoise_row)
@@ -607,10 +718,13 @@ class DiffMatchFixedAttention(DiffMatchFixed):
     def __init__(self, attention_config, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.classifier = RepresentationTransformer(**attention_config)
+        self.optim = self.configure_optimizers()
         if kwargs.get("ckpt_path", None) is not None:
             ignore_keys = kwargs.get("ignore_keys", [])
             only_model = kwargs.get("load_only_unet", False)
-            self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
+            self.init_from_ckpt(
+                kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model
+            )
         if self.use_ema:
             self.model_ema = FixMatchEma(self, decay=0.999)
             print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
@@ -619,14 +733,30 @@ class DiffMatchFixedAttention(DiffMatchFixed):
         return representations
 
     def configure_optimizers(self):
-        no_decay = ['bias', 'bn']
+        if self.optim is not None:
+            return self.optim
+        no_decay = ["bias", "bn"]
         grouped_parameters = [
-            {'params': [p for n, p in self.classifier.named_parameters() if not any(
-                nd in n for nd in no_decay)], 'weight_decay': 0.0},
-            {'params': [p for n, p in self.classifier.named_parameters() if any(
-                nd in n for nd in no_decay)], 'weight_decay': 0.0}
+            {
+                "params": [
+                    p
+                    for n, p in self.classifier.named_parameters()
+                    if not any(nd in n for nd in no_decay)
+                ],
+                "weight_decay": 0.0,
+            },
+            {
+                "params": [
+                    p
+                    for n, p in self.classifier.named_parameters()
+                    if any(nd in n for nd in no_decay)
+                ],
+                "weight_decay": 0.0,
+            },
         ]
-        grouped_parameters[1]["params"] = grouped_parameters[1]["params"] + list(self.model.parameters())
+        grouped_parameters[1]["params"] = grouped_parameters[1]["params"] + list(
+            self.model.parameters()
+        )
         optimizer = torch.optim.Adam(
             grouped_parameters,
             lr=self.learning_rate,
@@ -649,20 +779,21 @@ class DiffMatchFixedAttention(DiffMatchFixed):
 
 
 class DiffMatchFixedPooling(DiffMatchFixed):
-    def __init__(self,
-                 base_learning_rate,
-                 classifier_in_features,
-                 classifier_hidden,
-                 num_classes,
-                 dropout=0,
-                 *args, **kwargs):
+    def __init__(
+        self,
+        classifier_in_features,
+        classifier_hidden,
+        num_classes,
+        dropout=0,
+        *args,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
-        self.learning_rate = base_learning_rate
         self.classifier = nn.Sequential(
             nn.Linear(classifier_in_features, classifier_hidden),
             nn.LeakyReLU(negative_slope=0.2),
             nn.Dropout(p=dropout),
-            nn.Linear(classifier_hidden, num_classes)
+            nn.Linear(classifier_hidden, num_classes),
         )
         if self.use_ema:
             self.model_ema = FixMatchEma(self, decay=0.999)
@@ -672,31 +803,44 @@ class DiffMatchFixedPooling(DiffMatchFixed):
         if kwargs.get("ckpt_path", None) is not None:
             ignore_keys = kwargs.get("ignore_keys", [])
             only_model = kwargs.get("load_only_unet", False)
-            self.init_from_ckpt(kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model)
+            self.init_from_ckpt(
+                kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model
+            )
             self.init_optim_from_ckpt(kwargs["ckpt_path"])
 
-    def init_optim_from_ckpt(self, path):
-        sd = torch.load(path, map_location="cpu")
-        self.optim.load_state_dict(sd["optimizer_states"][0])
-
     def transform_representations(self, representations):
-        representations = self.model.diffusion_model.pool_representations(representations)
-        representations = [torch.flatten(z_i, start_dim=1)
-                           for z_i in representations]
+        representations = self.model.diffusion_model.pool_representations(
+            representations
+        )
+        representations = [torch.flatten(z_i, start_dim=1) for z_i in representations]
         representations = torch.concat(representations, dim=1)
         return representations
 
     def configure_optimizers(self):
         if self.optim is not None:
             return self.optim
-        no_decay = ['bias', 'bn']
+        no_decay = ["bias", "bn"]
         grouped_parameters = [
-            {'params': [p for n, p in self.classifier.named_parameters() if not any(
-                nd in n for nd in no_decay)], 'weight_decay': 0.0},
-            {'params': [p for n, p in self.classifier.named_parameters() if any(
-                nd in n for nd in no_decay)], 'weight_decay': 0.0}
+            {
+                "params": [
+                    p
+                    for n, p in self.classifier.named_parameters()
+                    if not any(nd in n for nd in no_decay)
+                ],
+                "weight_decay": 0.0,
+            },
+            {
+                "params": [
+                    p
+                    for n, p in self.classifier.named_parameters()
+                    if any(nd in n for nd in no_decay)
+                ],
+                "weight_decay": 0.0,
+            },
         ]
-        grouped_parameters[1]["params"] = grouped_parameters[1]["params"] + list(self.model.parameters())
+        grouped_parameters[1]["params"] = grouped_parameters[1]["params"] + list(
+            self.model.parameters()
+        )
         optimizer = torch.optim.Adam(
             grouped_parameters,
             lr=self.learning_rate,
@@ -719,18 +863,20 @@ class DiffMatchFixedPooling(DiffMatchFixed):
 
 
 class DiffMatchMulti(DiffMatchFixed):
-    def __init__(self,
-                 min_confidence=0.95,
-                 mu=7,
-                 batch_size=2,
-                 img_key=0,
-                 label_key=1,
-                 unsup_img_key=0,
-                 classification_start=0,
-                 classification_loss_weight=1,
-                 sample_multi=10,
-                 *args,
-                 **kwargs):
+    def __init__(
+        self,
+        min_confidence=0.95,
+        mu=7,
+        batch_size=2,
+        img_key=0,
+        label_key=1,
+        unsup_img_key=0,
+        classification_start=0,
+        classification_loss_weight=1,
+        sample_multi=10,
+        *args,
+        **kwargs,
+    ):
         super().__init__(
             min_confidence=min_confidence,
             mu=mu,
@@ -740,24 +886,25 @@ class DiffMatchMulti(DiffMatchFixed):
             unsup_img_key=unsup_img_key,
             classification_start=classification_start,
             classification_loss_weight=classification_loss_weight,
-            *args, **kwargs
+            *args,
+            **kwargs,
         )
         self.sample_multi = sample_multi
 
         self.class_emb = nn.Sequential(
             nn.Linear(
                 self.model.diffusion_model.num_classes,
-                self.model.diffusion_model.time_embed_dim
+                self.model.diffusion_model.time_embed_dim,
             ),
             nn.SiLU(),
             nn.Linear(
                 self.model.diffusion_model.time_embed_dim,
-                self.model.diffusion_model.time_embed_dim
-            )
+                self.model.diffusion_model.time_embed_dim,
+            ),
         )
 
     def configure_optimizers(self):
-        no_decay = ['bias', 'bn']
+        no_decay = ["bias", "bn"]
         # grouped_parameters = [
         #     {'params': [p for n, p in self.named_parameters() if not any(
         #         nd in n for nd in no_decay)], 'weight_decay': 5e-4},
@@ -772,24 +919,22 @@ class DiffMatchMulti(DiffMatchFixed):
         #         nd in n for nd in decay) or any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         # ]
         optimizer = torch.optim.Adam(
-            self.parameters(),  # grouped_parameters,
-            lr=0.0003,
-            betas=(0.9, 0.999)
+            self.parameters(), lr=0.0003, betas=(0.9, 0.999)  # grouped_parameters,
         )
 
         def _lr_lambda(current_step):
             num_warmup_steps = 0
             num_training_steps = 2**20
-            num_cycles = 7./16.
+            num_cycles = 7.0 / 16.0
 
             if current_step < num_warmup_steps:
                 return float(current_step) / float(max(1, num_warmup_steps))
-            no_progress = float(current_step - num_warmup_steps) / \
-                float(max(1, num_training_steps - num_warmup_steps))
-            return max(0., math.cos(math.pi * num_cycles * no_progress))
+            no_progress = float(current_step - num_warmup_steps) / float(
+                max(1, num_training_steps - num_warmup_steps)
+            )
+            return max(0.0, math.cos(math.pi * num_cycles * no_progress))
 
-        self.scheduler = torch.optim.lr_scheduler.LambdaLR(
-            optimizer, _lr_lambda, -1)
+        self.scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda, -1)
         return optimizer
 
     def get_train_input(self, batch):
@@ -809,29 +954,26 @@ class DiffMatchMulti(DiffMatchFixed):
         x, y, weak_img, strong_img = self.get_train_input(batch)
         loss, loss_dict = self(weak_img)
         if self.classification_start <= 0:
-            inputs = interleave(
-                torch.cat((x, weak_img, strong_img)), 2*self.mu+1)
+            inputs = interleave(torch.cat((x, weak_img, strong_img)), 2 * self.mu + 1)
             logits = self.model.diffusion_model.just_representations(
-                inputs,
-                torch.zeros(inputs.shape[0], device=self.device),
-                pooled=False
+                inputs, torch.zeros(inputs.shape[0], device=self.device), pooled=False
             )
             if isinstance(logits, list):  # TODO refactor this shit
                 logits = self.transform_representations(logits)
                 logits = self.classifier(logits)
-            logits = de_interleave(logits, 2*self.mu+1)
-            preds_x = logits[:self.batch_size]
-            preds_weak, preds_strong = logits[self.batch_size:].chunk(2)
+            logits = de_interleave(logits, 2 * self.mu + 1)
+            preds_x = logits[: self.batch_size]
+            preds_weak, preds_strong = logits[self.batch_size :].chunk(2)
             del logits
 
             loss_classification = nn.functional.cross_entropy(
-                preds_x, y, reduction="mean")
+                preds_x, y, reduction="mean"
+            )
             loss += loss_classification * self.classification_loss_weight
             accuracy = torch.sum(torch.argmax(preds_x, dim=1) == y) / len(y)
-            loss_dict.update(
-                {'train/loss_classification': loss_classification})
-            loss_dict.update({'train/loss': loss})
-            loss_dict.update({'train/accuracy': accuracy})
+            loss_dict.update({"train/loss_classification": loss_classification})
+            loss_dict.update({"train/loss": loss})
+            loss_dict.update({"train/accuracy": accuracy})
 
             # b, c = preds_weak.shape
             # reshape_weak = preds_weak.view(
@@ -845,33 +987,38 @@ class DiffMatchMulti(DiffMatchFixed):
             pseudo_label = torch.softmax(preds_weak.detach(), dim=-1)
             max_probs, targets_u = torch.max(pseudo_label, dim=-1)
             mask = max_probs.ge(self.min_confidence).float()
-            ssl_loss = (nn.functional.cross_entropy(
-                preds_strong, targets_u, reduction='none') * mask).mean()
+            ssl_loss = (
+                nn.functional.cross_entropy(preds_strong, targets_u, reduction="none")
+                * mask
+            ).mean()
             loss += ssl_loss * self.classification_loss_weight
-            accuracy = torch.sum(
-                (torch.argmax(preds_strong, dim=1) == targets_u) * mask
-            ) / mask.sum() if mask.sum() > 0 else 0
-            loss_dict.update(
-                    {'train/ssl_above_threshold': mask.mean().item()})
-            loss_dict.update({'train/ssl_max_confidence': mask.max().item()})
-            loss_dict.update({'train/loss_ssl_classification': ssl_loss})
-            loss_dict.update({'train/loss': loss})
-            loss_dict.update({'train/ssl_accuracy': accuracy})
+            accuracy = (
+                torch.sum((torch.argmax(preds_strong, dim=1) == targets_u) * mask)
+                / mask.sum()
+                if mask.sum() > 0
+                else 0
+            )
+            loss_dict.update({"train/ssl_above_threshold": mask.mean().item()})
+            loss_dict.update({"train/ssl_max_confidence": mask.max().item()})
+            loss_dict.update({"train/loss_ssl_classification": ssl_loss})
+            loss_dict.update({"train/loss": loss})
+            loss_dict.update({"train/ssl_accuracy": accuracy})
         else:
             self.classification_start -= 1
 
-        lr = self.optimizers().param_groups[0]['lr']
+        lr = self.optimizers().param_groups[0]["lr"]
+        self.log("lr_abs", lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        self.log_dict(
+            loss_dict, prog_bar=True, logger=True, on_step=True, on_epoch=True
+        )
         self.log(
-            'lr_abs', lr,
+            "global_step",
+            self.global_step,
             prog_bar=True,
             logger=True,
             on_step=True,
-            on_epoch=False
+            on_epoch=False,
         )
-        self.log_dict(loss_dict, prog_bar=True,
-                      logger=True, on_step=True, on_epoch=True)
-        self.log("global_step", self.global_step,
-                 prog_bar=True, logger=True, on_step=True, on_epoch=False)
         return loss
 
     def p_losses(self, x_start, t, noise=None):
@@ -880,7 +1027,8 @@ class DiffMatchMulti(DiffMatchFixed):
 
         # if self.training:
         out, emb = self.model.diffusion_model.just_representations(
-            x_noisy, t, return_emb=True)
+            x_noisy, t, return_emb=True
+        )
         # b, c = out.shape
         # reshaped_out = out.view(
         #     b // self.sample_multi, self.sample_multi, c)
@@ -899,10 +1047,7 @@ class DiffMatchMulti(DiffMatchFixed):
         full_emb = emb + class_emb
 
         model_out = self.model.diffusion_model.forward_output_blocks(
-            x_noisy,
-            None,
-            full_emb,
-            self.model.diffusion_model.representations
+            x_noisy, None, full_emb, self.model.diffusion_model.representations
         )
         self.model.diffusion_model.representations = []
         # else:
@@ -914,36 +1059,36 @@ class DiffMatchMulti(DiffMatchFixed):
         elif self.parameterization == "x0":
             target = x_start
         else:
-            raise NotImplementedError(f"Paramterization {self.parameterization} not yet supported")
+            raise NotImplementedError(
+                f"Paramterization {self.parameterization} not yet supported"
+            )
 
         loss = self.get_loss(model_out, target, mean=False).mean(dim=[1, 2, 3])
         # if self.training:
         #     loss *= logits
 
-        log_prefix = 'train' if self.training else 'val'
+        log_prefix = "train" if self.training else "val"
 
-        loss_dict.update({f'{log_prefix}/loss_simple': loss.mean()})
+        loss_dict.update({f"{log_prefix}/loss_simple": loss.mean()})
         loss_simple = loss.mean() * self.l_simple_weight
 
         loss_vlb = (self.lvlb_weights[t] * loss).mean()
-        loss_dict.update({f'{log_prefix}/loss_vlb': loss_vlb})
+        loss_dict.update({f"{log_prefix}/loss_vlb": loss_vlb})
 
         loss = loss_simple + self.original_elbo_weight * loss_vlb
 
-        loss_dict.update({f'{log_prefix}/loss': loss})
+        loss_dict.update({f"{log_prefix}/loss": loss})
 
         return loss, loss_dict
 
     def p_mean_variance(self, x, t, clip_denoised: bool):
         out, emb = self.model.diffusion_model.just_representations(
-            x, t, return_emb=True)
+            x, t, return_emb=True
+        )
         class_emb = self.class_emb(out)
         full_emb = emb + class_emb
         model_out = self.model.diffusion_model.forward_output_blocks(
-            x,
-            None,
-            full_emb,
-            self.model.diffusion_model.representations
+            x, None, full_emb, self.model.diffusion_model.representations
         )
         self.model.diffusion_model.representations = []
 
@@ -952,9 +1097,11 @@ class DiffMatchMulti(DiffMatchFixed):
         elif self.parameterization == "x0":
             x_recon = model_out
         if clip_denoised:
-            x_recon.clamp_(-1., 1.)
+            x_recon.clamp_(-1.0, 1.0)
 
-        model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
+        model_mean, posterior_variance, posterior_log_variance = self.q_posterior(
+            x_start=x_recon, x_t=x, t=t
+        )
         return model_mean, posterior_variance, posterior_log_variance
 
 
@@ -972,25 +1119,26 @@ class DiffMatchFixedPoolingDoubleOptims(DiffMatchFixedPooling):
 
         lr_classifier = self.learning_rate_classifier
         params_classifier = list(self.classifier.parameters())
-        opt_classifier = torch.optim.Adam(
-            params_classifier,
-            lr=lr_classifier,
-            betas=(0.9, 0.999)
-        )
+        # opt_classifier = torch.optim.Adam(
+        #     params_classifier, lr=lr_classifier, betas=(0.9, 0.999)
+        # )
         opt_classifier = torch.optim.AdamW(params=params_classifier, lr=lr_classifier)
 
-        def _lr_lambda(current_step):
-            num_warmup_steps = 0
-            num_training_steps = 2**20
-            num_cycles = 7./16.
+        # def _lr_lambda(current_step):
+        #     num_warmup_steps = 0
+        #     num_training_steps = 2**20
+        #     num_cycles = 7.0 / 16.0
 
-            if current_step < num_warmup_steps:
-                return float(current_step) / float(max(1, num_warmup_steps))
-            no_progress = float(current_step - num_warmup_steps) / \
-                float(max(1, num_training_steps - num_warmup_steps))
-            return max(0., math.cos(math.pi * num_cycles * no_progress))
+        #     if current_step < num_warmup_steps:
+        #         return float(current_step) / float(max(1, num_warmup_steps))
+        #     no_progress = float(current_step - num_warmup_steps) / float(
+        #         max(1, num_training_steps - num_warmup_steps)
+        #     )
+        #     return max(0.0, math.cos(math.pi * num_cycles * no_progress))
 
-        self.scheduler = torch.optim.lr_scheduler.LambdaLR(opt_classifier, _lr_lambda, -1)
+        # self.scheduler = torch.optim.lr_scheduler.LambdaLR(
+        #     opt_classifier, _lr_lambda, -1
+        # )
 
         return opt_diffusion, opt_classifier
 

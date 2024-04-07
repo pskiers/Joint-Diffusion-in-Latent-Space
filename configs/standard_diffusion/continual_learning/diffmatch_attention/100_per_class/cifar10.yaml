@@ -11,7 +11,6 @@ model:
     channels: 3
     monitor: val/loss_ema
     classification_loss_weight: 0.001
-    batch_size: 64
 
     attention_config:
       num_classes: 10

@@ -20,7 +20,6 @@ model:
     classifier_hidden: 1024
     num_classes: 10
     dropout: 0.1
-    batch_size: 32
     classification_start: 0
     sampling_method: "conditional_to_repr"
     sample_grad_scale: 0
