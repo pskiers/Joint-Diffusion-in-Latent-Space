@@ -25,6 +25,7 @@ class BaseDataset(data.Dataset, ABC):
         download: bool = True,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
+        **kwargs
     ) -> None:
         super().__init__()
         self.root = root
@@ -82,6 +83,6 @@ class BaseTensorDataset(BaseDataset):
         super().__init__(transform=transform, target_transform=target_transform)
         self.data = data
         self.targets = targets
-    
+
     def get_num_classes(self) -> int:
         return len(torch.unique(self.targets))

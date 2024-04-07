@@ -12,8 +12,9 @@ class MNISTDataset(BaseDataset):
         download: bool = True,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
+        **kwargs,
     ) -> None:
-        super().__init__(root, split, download, transform, target_transform)
+        super().__init__(root, split, download, transform, target_transform, **kwargs)
         if split == Split.TRAIN:
             train = True
         elif split == Split.TEST:

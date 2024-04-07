@@ -73,10 +73,11 @@ def get_datasets(config: Dict) -> Tuple:
             train_bs.extend(bs)
 
     val = config["validation"]
-    val_ds = get_dataset_cls(val["name"])(
-        root=val.get("root", "data"),
-        split=str_to_split(val.get("split", Split.TEST)),
-        download=val.get("download", True),
+    val_ds = get_dataset_cls(val.get("name"))(
+        root=val.pop("root", "data"),
+        split=str_to_split(val.pop("split", Split.TEST)),
+        download=val.pop("download", True),
+        **kwargs
     )
     val_transforms = get_transform(val["transforms"])
     val_ds.set_transforms(val_transforms)
@@ -130,10 +131,11 @@ def get_dataloaders(
             train_dataloaders.append(dataloader)
 
     val = config["validation"]
-    val_ds = get_dataset_cls(val["name"])(
-        root=val.get("root", "data"),
-        split=str_to_split(val.get("split", Split.TEST)),
-        download=val.get("download", True),
+    val_ds = get_dataset_cls(val.get("name"))(
+        root=val.pop("root", "data"),
+        split=str_to_split(val.pop("split", Split.TEST)),
+        download=val.pop("download", True),
+        **kwargs
     )
     val_transforms = get_transform(val["transforms"])
     val_ds.set_transforms(val_transforms)
@@ -151,12 +153,13 @@ def get_dataloaders(
 
 
 def _get_dataset(kwargs):
-    ds = get_dataset_cls(kwargs["name"])(
-        root=kwargs.get("root", "data"),
-        split=str_to_split(kwargs.get("split", Split.TRAIN)),
-        download=kwargs.get("download", True),
+    ds_transforms = get_transform(kwargs.pop("transforms"))
+    ds = get_dataset_cls(kwargs.get("name"))(
+        root=kwargs.pop("root", "data"),
+        split=str_to_split(kwargs.pop("split", Split.TRAIN)),
+        download=kwargs.pop("download", True),
+        **kwargs
     )
-    ds_transforms = get_transform(kwargs["transforms"])
     ds.set_transforms(ds_transforms)
     return ds
 
@@ -164,15 +167,17 @@ def _get_dataset(kwargs):
 def get_ssl_datasets(kwargs):
     sup_kwargs = kwargs["supervised"]
     unsup_kwargs = kwargs["unsupervised"]
-    dataset = get_dataset_cls(kwargs["name"])(
-        root=kwargs.get("root", "data"),
-        split=str_to_split(kwargs.get("split", Split.TRAIN)),
-        download=kwargs.get("download", True),
+    dataset = get_dataset_cls(kwargs.get("name"))(
+        root=kwargs.pop("root", "data"),
+        split=str_to_split(kwargs.pop("split", Split.TRAIN)),
+        download=kwargs.pop("download", True),
+        **kwargs
     )
     labeled_ds, unlabeled_ds = ssl_dataset_split(
         dataset=dataset,
         num_labeled=kwargs["num_labeled"],
         min_labeled=kwargs.get("min_labeled", None),
+        equal_labels=kwargs.get("equal_labels", True),
         seed=kwargs.get("seed", 42),
     )
     labeled_transforms = get_transform(sup_kwargs["transforms"])

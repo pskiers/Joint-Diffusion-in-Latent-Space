@@ -10,19 +10,24 @@ def ssl_dataset_split(
     dataset: BaseDataset,
     num_labeled: int,
     min_labeled: Optional[int] = None,
+    equal_labels: bool = True,
     seed: int = 42,
 ) -> Tuple[BaseDataset, BaseDataset]:
     np.random.seed(seed)
-    label_per_class = num_labeled // dataset.get_num_classes()
-    labeled_idx: List[int] = []
-
     labels = np.array(dataset.targets)
-    labeled_idx = []
-    for i in range(dataset.get_num_classes()):
-        idx = np.where(labels == i)[0]
-        idx = np.random.choice(idx, label_per_class, False)
-        labeled_idx.extend(idx)
-    labeled_idx_arr = np.array(labeled_idx)
+
+    if equal_labels is True:
+        label_per_class = num_labeled // dataset.get_num_classes()
+        labeled_idx: List[int] = []
+
+        labeled_idx = []
+        for i in range(dataset.get_num_classes()):
+            idx = np.where(labels == i)[0]
+            idx = np.random.choice(idx, label_per_class, False)
+            labeled_idx.extend(idx)
+        labeled_idx_arr = np.array(labeled_idx)
+    else:
+        labeled_idx_arr = np.random.choice(labels.shape[0], num_labeled, False)
     assert len(labeled_idx_arr) == num_labeled
 
     if min_labeled is not None and num_labeled < min_labeled:

@@ -5,6 +5,7 @@ from .fashionMNIST import fashionMNISTDataset
 from .mnist import MNISTDataset
 from .stl10 import STL10Dataset
 from .svhn import SVHNDataset
+from .isic2019 import ISIC2019Dataset
 
 
 def str_to_split(string: str) -> Split:
@@ -31,5 +32,7 @@ def get_dataset_cls(name: str):
         return STL10Dataset
     elif name == "svhn":
         return SVHNDataset
+    elif name == "isic2019":
+        return ISIC2019Dataset
     else:
         raise ValueError("Dataset not implemented")
