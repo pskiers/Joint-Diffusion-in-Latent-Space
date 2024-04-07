@@ -1119,10 +1119,10 @@ class DiffMatchMulti(DiffMatchFixed):
 
 class DiffMatchFixedPoolingDoubleOptims(DiffMatchFixedPooling):
     def __init__(self, *args, classifier_lr=0.01, accumulate_grad_batches=1, **kwargs):
+        self.learning_rate_classifier = classifier_lr
         super().__init__(*args, **kwargs)
         self.automatic_optimization = False
         self.accumulate_grad_batches = accumulate_grad_batches
-        self.learning_rate_classifier = classifier_lr
 
     def configure_optimizers(self):
         lr_diffusion = self.learning_rate

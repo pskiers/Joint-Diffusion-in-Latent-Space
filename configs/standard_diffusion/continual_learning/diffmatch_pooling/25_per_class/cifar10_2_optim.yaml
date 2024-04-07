@@ -27,7 +27,7 @@ model:
     classification_loss_weight_max: 0.001
     classification_loss_weight_increments: 0
     
-    accumulate_grad_batches: 2
+    accumulate_grad_batches: 1
 
     unet_config:
       target: models.AdjustedUNet
@@ -159,12 +159,15 @@ lightning:
 
     img_logger:
       batch_frequency: 10000
-      max_images: 64
+      max_images: 40
       clamp: True
       increase_log_steps: False
       log_images_kwargs: {
-          "N": 64,
+          "N": 40,
           "inpaint": False,
+          "sample_classes": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+          "use_ema": False,
+          "grad_scales": [40, 20, 10, 5, 0]
       }
       mean: [0.5, 0.5, 0.5]
       std: [0.5, 0.5, 0.5]
