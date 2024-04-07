@@ -6,6 +6,7 @@ from .latent_diffusion import *
 from .standard_diffusion import *
 from .wide_resnet_unet import *
 from .wide_resnet import *
+from ldm.models.diffusion.ddpm import DDPM
 
 
 def get_model_class(name: str):
@@ -57,5 +58,7 @@ def get_model_class(name: str):
         return LatentDiffMatchAttention
     elif name == "class_conditioned_ddpm":
         return ClassConditionedDDPM
+    elif name == "ddpm":
+        return DDPM
     else:
         raise NotImplementedError(f"Model {name} is not available")

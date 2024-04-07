@@ -1,6 +1,6 @@
 model:
   base_learning_rate: 0.0002
-  model_type: class_conditioned_ddpm
+  model_type: ddpm
   params:
     clip_denoised: True
     beta_schedule: sqrt_linear
@@ -9,7 +9,6 @@ model:
     log_every_t: 200
     timesteps: 1000
     first_stage_key: 0
-    cond_key: 1
     image_size: 32
     channels: 3
     monitor: val/loss_ema
@@ -17,7 +16,6 @@ model:
     unet_config:
       target: ldm.modules.diffusionmodules.openaimodel.UNetModel
       params:
-        num_classes: 10
         image_size: 32
         in_channels: 3
         out_channels: 3
@@ -92,13 +90,13 @@ lightning:
     #   std: [0.2471, 0.2435, 0.2616]
 
     img_logger:
-      batch_frequency: 10000
+      batch_frequency: 1
       max_images: 64
       clamp: True
       increase_log_steps: False
       log_images_kwargs: {
           "N": 64,
-          "y": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,]
+          # "y": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,]
       }
       # mean: [0.4914, 0.4822, 0.4465]
       # std: [0.2471, 0.2435, 0.2616]
