@@ -167,6 +167,7 @@ class DiffMatchFixed(DDPM):
         classification_loss_weight=1,
         classification_loss_weight_max=1,
         classification_loss_weight_increments=0,
+        use_fixmatch=True,
         sampling_method="unconditional",
         sampling_recurence_steps=1,
         sample_grad_scale=0,
@@ -185,6 +186,7 @@ class DiffMatchFixed(DDPM):
         self.classification_loss_weight_increments = (
             classification_loss_weight_increments
         )
+        self.use_fixmatch = use_fixmatch
         self.scheduler = None
         self.sampling_method = sampling_method
         self.sample_grad_scale = sample_grad_scale
@@ -330,19 +332,27 @@ class DiffMatchFixed(DDPM):
         x, y, img, weak_img, strong_img = self.get_train_input(batch)
         loss, loss_dict = self(img)
         if self.classification_start <= 0:
-            mu = img.shape[0] // x.shape[0]
-            batch_size = x.shape[0]
-            inputs = interleave(torch.cat((x, weak_img, strong_img)), 2 * mu + 1)
-            logits = self.model.diffusion_model.just_representations(
-                inputs, torch.zeros(inputs.shape[0], device=self.device), pooled=False
-            )
-            if isinstance(logits, list):  # TODO refactor this shit
-                logits = self.transform_representations(logits)
-                logits = self.classifier(logits)
-            logits = de_interleave(logits, 2 * mu + 1)
-            preds_x = logits[: batch_size]
-            preds_weak, preds_strong = logits[batch_size :].chunk(2)
-            del logits
+            if self.use_fixmatch is True:
+                mu = img.shape[0] // x.shape[0]
+                batch_size = x.shape[0]
+                inputs = interleave(torch.cat((x, weak_img, strong_img)), 2 * mu + 1)
+                logits = self.model.diffusion_model.just_representations(
+                    inputs, torch.zeros(inputs.shape[0], device=self.device), pooled=False
+                )
+                if isinstance(logits, list):  # TODO refactor this shit
+                    logits = self.transform_representations(logits)
+                    logits = self.classifier(logits)
+                logits = de_interleave(logits, 2 * mu + 1)
+                preds_x = logits[: batch_size]
+                preds_weak, preds_strong = logits[batch_size :].chunk(2)
+                del logits
+            else:
+                preds_x = self.model.diffusion_model.just_representations(
+                    x, torch.zeros(x.shape[0], device=self.device), pooled=False
+                )
+                if isinstance(preds_x, list):  # TODO refactor this shit
+                    preds_x = self.transform_representations(preds_x)
+                    preds_x = self.classifier(preds_x)
 
             loss_classification = nn.functional.cross_entropy(
                 preds_x, y, reduction="mean"
@@ -353,25 +363,26 @@ class DiffMatchFixed(DDPM):
             loss_dict.update({"train/loss": loss})
             loss_dict.update({"train/accuracy": accuracy})
 
-            pseudo_label = torch.softmax(preds_weak.detach(), dim=-1)
-            max_probs, targets_u = torch.max(pseudo_label, dim=-1)
-            mask = max_probs.ge(self.min_confidence).float()
-            ssl_loss = (
-                nn.functional.cross_entropy(preds_strong, targets_u, reduction="none")
-                * mask
-            ).mean()
-            loss += ssl_loss * self.classification_loss_weight
-            accuracy = (
-                torch.sum((torch.argmax(preds_strong, dim=1) == targets_u) * mask)
-                / mask.sum()
-                if mask.sum() > 0
-                else 0
-            )
-            loss_dict.update({"train/ssl_above_threshold": mask.mean().item()})
-            loss_dict.update({"train/ssl_max_confidence": mask.max().item()})
-            loss_dict.update({"train/loss_ssl_classification": ssl_loss})
-            loss_dict.update({"train/loss": loss})
-            loss_dict.update({"train/ssl_accuracy": accuracy})
+            if self.use_fixmatch is True:
+                pseudo_label = torch.softmax(preds_weak.detach(), dim=-1)
+                max_probs, targets_u = torch.max(pseudo_label, dim=-1)
+                mask = max_probs.ge(self.min_confidence).float()
+                ssl_loss = (
+                    nn.functional.cross_entropy(preds_strong, targets_u, reduction="none")
+                    * mask
+                ).mean()
+                loss += ssl_loss * self.classification_loss_weight
+                accuracy = (
+                    torch.sum((torch.argmax(preds_strong, dim=1) == targets_u) * mask)
+                    / mask.sum()
+                    if mask.sum() > 0
+                    else 0
+                )
+                loss_dict.update({"train/ssl_above_threshold": mask.mean().item()})
+                loss_dict.update({"train/ssl_max_confidence": mask.max().item()})
+                loss_dict.update({"train/loss_ssl_classification": ssl_loss})
+                loss_dict.update({"train/loss": loss})
+                loss_dict.update({"train/ssl_accuracy": accuracy})
         else:
             self.classification_start -= 1
 
@@ -1151,3 +1162,7 @@ class DiffMatchFixedPoolingDoubleOptims(DiffMatchFixedPooling):
             opt_classifier.step()
             opt_diffusion.zero_grad()
             opt_classifier.zero_grad()
+
+
+class DiffMatchPoolingMultilabel(DiffMatchFixedPooling):
+    pass
