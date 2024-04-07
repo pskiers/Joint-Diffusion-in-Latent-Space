@@ -60,5 +60,7 @@ def get_model_class(name: str):
         return ClassConditionedDDPM
     elif name == "ddpm":
         return DDPM
+    elif name == "diffmatch_pooling_multilabel":
+        return DiffMatchPoolingMultilabel
     else:
         raise NotImplementedError(f"Model {name} is not available")

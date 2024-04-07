@@ -1,6 +1,7 @@
 import math
 import torch
 import torch.nn as nn
+from torchmetrics import AUROC
 import numpy as np
 import wandb
 from tqdm import tqdm
@@ -1165,4 +1166,103 @@ class DiffMatchFixedPoolingDoubleOptims(DiffMatchFixedPooling):
 
 
 class DiffMatchPoolingMultilabel(DiffMatchFixedPooling):
-    pass
+    def __init__(self, num_classes, *args, class_weights=None, **kwargs):
+        super().__init__(*args, num_classes=num_classes, **kwargs)
+        self.auroc_train = AUROC(num_classes=num_classes)
+        self.auroc_val = AUROC(num_classes=num_classes)
+        self.auroc_val_ema = AUROC(num_classes=num_classes)
+        self.BCEweights = torch.Tensor(class_weights if class_weights is not None else [1. for _ in range(num_classes)])
+    
+    def get_train_input(self, batch):
+        x = batch[0][self.img_key]
+        y = batch[0][self.label_key]
+        img = batch[1][0]
+        return x, y, img
+
+    def training_step(self, batch, batch_idx):
+        x, y, img = self.get_train_input(batch)
+        loss, loss_dict = self(img)
+        if self.classification_start <= 0:
+            preds_x = self.model.diffusion_model.just_representations(
+                x, torch.zeros(x.shape[0], device=self.device), pooled=False
+            )
+            if isinstance(preds_x, list):  # TODO refactor this shit
+                preds_x = self.transform_representations(preds_x)
+                preds_x = self.classifier(preds_x)
+
+            loss_classification = nn.functional.binary_cross_entropy_with_logits(
+                preds_x, y.float(), pos_weight=self.BCEweights.to(self.device))
+            loss += loss_classification * self.classification_loss_weight
+        
+            accuracy = (y == (nn.functional.sigmoid(preds_x) >= 0.5)).sum() / y.numel()
+            self.auroc_train.update(preds_x, y.int())
+            self.log('train/auroc', self.auroc_train, on_step=False, on_epoch=True)
+            loss_dict.update({"train/loss_classification": loss_classification})
+            loss_dict.update({"train/loss": loss})
+            loss_dict.update({"train/accuracy": accuracy})
+
+        else:
+            self.classification_start -= 1
+
+        # lr = self.optimizers().param_groups[0]['lr']
+        # self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        self.log_dict(
+            loss_dict, prog_bar=True, logger=True, on_step=True, on_epoch=True
+        )
+        self.log(
+            "global_step",
+            self.global_step,
+            prog_bar=True,
+            logger=True,
+            on_step=True,
+            on_epoch=False,
+        )
+        return loss
+    
+    @torch.no_grad()
+    def validation_step(self, batch, batch_idx):
+        x, y = self.get_val_input(batch)
+        _, loss_dict_no_ema = self(x)
+        preds = self.model.diffusion_model.just_representations(
+            x, torch.zeros(x.shape[0], device=self.device), pooled=False
+        )
+        if isinstance(preds, list):  # TODO refactor this shit
+            preds = self.transform_representations(preds)
+            preds = self.classifier(preds)
+        loss = nn.functional.binary_cross_entropy_with_logits(
+            preds, y.float(), pos_weight=self.BCEweights.to(self.device))
+        accuracy = (y == (nn.functional.sigmoid(preds) >= 0.5)).sum() / y.numel()
+        loss_dict_no_ema.update({"val/loss": loss})
+        loss_dict_no_ema.update({"val/accuracy": accuracy})
+        self.val_labels = torch.concat([self.val_labels, y.detach().cpu()])
+        self.val_preds = torch.concat(
+            [self.val_preds, preds.argmax(dim=1).detach().cpu()]
+        )
+        self.auroc_val.update(preds, y.int())
+        self.log('val/auroc', self.auroc_val, on_step=False, on_epoch=True, sync_dist=True, add_dataloader_idx=False)
+        with self.ema_scope():
+            x, y = self.get_val_input(batch)
+            _, loss_dict_ema = self(x)
+            preds = self.model.diffusion_model.just_representations(
+                x, torch.ones(x.shape[0], device=self.device), pooled=False
+            )
+            if isinstance(preds, list):  # TODO refactor this shit
+                preds = self.transform_representations(preds)
+                preds = self.classifier(preds)
+            loss = nn.functional.binary_cross_entropy_with_logits(
+                preds, y.float(), pos_weight=self.BCEweights.to(self.device))
+            accuracy = (y == (nn.functional.sigmoid(preds) >= 0.5)).sum() / y.numel()
+            loss_dict_ema.update({"val/loss": loss})
+            loss_dict_ema.update({"val/accuracy": accuracy})
+            self.val_preds_ema = torch.concat(
+                [self.val_preds_ema, preds.argmax(dim=1).detach().cpu()]
+            )
+            loss_dict_ema = {key + "_ema": loss_dict_ema[key] for key in loss_dict_ema}
+            self.auroc_val_ema.update(preds, y.int())
+            self.log('val/auroc_ema', self.auroc_val_ema, on_step=False, on_epoch=True, sync_dist=True, add_dataloader_idx=False)
+        self.log_dict(
+            loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True
+        )
+        self.log_dict(
+            loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True
+        )
