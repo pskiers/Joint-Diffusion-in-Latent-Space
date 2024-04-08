@@ -665,7 +665,7 @@ class DiffMatchFixed(DDPM):
             self.sample_classes = torch.tensor(sample_classes).to(self.device)
         log = dict()
         if len(batch) == 2:
-            _, _, x, _, _ = self.get_train_input(batch)
+            x = self.get_train_input(batch)[2]
         else:
             x, _ = self.get_val_input(batch)
         N = min(x.shape[0], N)
@@ -1158,7 +1158,7 @@ class DiffMatchFixedPoolingDoubleOptims(DiffMatchFixedPooling):
         opt_diffusion, opt_classifier = self.optimizers()
         loss = super().training_step(batch, batch_idx) / self.accumulate_grad_batches
         self.manual_backward(loss)
-        if (batch_idx + 1) % self.accumulate_grad_batches:
+        if (batch_idx + 1) % self.accumulate_grad_batches == 0:
             opt_diffusion.step()
             opt_classifier.step()
             opt_diffusion.zero_grad()
