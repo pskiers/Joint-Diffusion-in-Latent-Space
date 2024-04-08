@@ -47,6 +47,8 @@ lightning:
     gpus: -1
     accelerator: "ddp"
     # accumulate_grad_batches: 2
+    resume_from_checkpoint: /data/jan_dubinski/Joint-Diffusion-in-Latent-Space/logs/c16_nih_crop_AutoencoderKL_2024-04-06T17-30-54/checkpoints/last.ckpt
+
 
   callbacks:
     img_logger:
