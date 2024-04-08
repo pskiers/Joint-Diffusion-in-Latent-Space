@@ -33,8 +33,8 @@ if __name__ == "__main__":
     trainer_opt = argparse.Namespace(**trainer_config)
     lightning_config.trainer = trainer_config
 
-    dl_config = config.pop("dataloaders")
-    dl_config = OmegaConf.to_container(dl_config, resolve=True)
+    dl_config_orig = config.pop("dataloaders")
+    dl_config = OmegaConf.to_container(dl_config_orig, resolve=True)
     train_dls, test_dl = get_dataloaders(dl_config)
 
     if checkpoint_path is not None:
@@ -95,6 +95,7 @@ if __name__ == "__main__":
             cfgdir=cfgdir,
             config=config,
             lightning_config=lightning_config,
+            dl_config=dl_config_orig,
         ),
         CUDACallback(),
     ]
