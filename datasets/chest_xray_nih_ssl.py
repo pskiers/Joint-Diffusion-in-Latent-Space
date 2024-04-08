@@ -72,8 +72,8 @@ class ChestXRay_nih_ssl(ChestXRay_nih):
         self.X_labeled_val = X[train_idxs].copy()
         self.y_labeled_val = y[train_idxs].copy()
 
-        self.X_unlabeled = X[~train_idxs].copy()
-        self.y_unlabeled = y[~train_idxs].copy()
+        self.X_unlabeled = X.copy() #X[~train_idxs].copy()
+        self.y_unlabeled = y.copy() #y[~train_idxs].copy()
         ####
 
         if self.labeled:
