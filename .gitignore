@@ -141,6 +141,7 @@ dmypy.json
 chest_xray/
 chest_xray_nih/
 chest_xray_nih_full/
+isic2019/
 
 #auxiliary files
 trash.ipynb

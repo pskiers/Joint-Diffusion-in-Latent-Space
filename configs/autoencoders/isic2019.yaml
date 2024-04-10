@@ -12,14 +12,14 @@ model:
         disc_start: 50001
         kl_weight: 0.000001
         disc_weight: 0.5
-        disc_in_channels: 1
+        disc_in_channels: 3
 
     ddconfig:
       double_z: True
       z_channels: 4
       resolution: 256
-      in_channels: 1
-      out_ch: 1
+      in_channels: 3
+      out_ch: 3
       ch: 128
       ch_mult: [1,2,4,4]  # num_down = len(ch_mult)-1
       num_res_blocks: 2
@@ -27,11 +27,9 @@ model:
       dropout: 0.0
 
 dataloaders:
-  name: chest_xray_nih
-  train_batches: [ 3 ]
-  val_batch: 3
-  min_augmentation_ratio: 8
-  auto_augment: False
+  name: isic2019_encoder
+  train_batches: [ 10 ]
+  val_batch: 10
   num_workers: 8
   num_labeled: null
   persistent_workers: True
@@ -47,17 +45,17 @@ lightning:
     gpus: -1
     accelerator: "ddp"
     # accumulate_grad_batches: 2
-    resume_from_checkpoint: /data/jan_dubinski/Joint-Diffusion-in-Latent-Space/logs/c16_nih_crop_AutoencoderKL_2024-04-06T17-30-54/checkpoints/last.ckpt
-
 
   callbacks:
     img_logger:
-      batch_frequency: 2
+      batch_frequency: 50
       max_images: 20
       clamp: True
       increase_log_steps: False
       log_images_kwargs: {
           "N": 10,
           "inpaint": False,
-          "sample_classes": [0, 1, 2, 3, 4,5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+          "sample_classes": [0, 1, 2, 3, 4,5, 6, 7],
+          "mean": [0.485, 0.456, 0.406],
+          "std": [0.229, 0.224, 0.225],
       }

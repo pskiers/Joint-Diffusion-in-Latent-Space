@@ -314,6 +314,7 @@ class ImageLogger(Callback):
             try:
                 self.log_steps.pop(0)
             except IndexError as e:
+                print('in callbacks l.318')
                 print(e)
                 pass
             return True

@@ -62,7 +62,7 @@ class ChestXRay_nih_ssl(ChestXRay_nih):
         # self.X_labeled_train, self.y_labeled_train, self.X_labeled_val, self.y_labeled_val = X_labeled, y_labeled, X_labeled, y_labeled
 
         #### splits from ACPL
-        split_file = open("datasets/chest_xray_ssl_train_list_2_3.txt", "r") 
+        split_file = open("/data/jan_dubinski/Joint-Diffusion-in-Latent-Space/datasets/chest_xray_ssl_train_list_2_3.txt", "r") 
         split_data = [os.path.join(self.data_path, "images", l) for l in split_file.read().splitlines()]
         split_file.close() 
         train_idxs = np.isin(X, split_data).squeeze()
@@ -72,8 +72,8 @@ class ChestXRay_nih_ssl(ChestXRay_nih):
         self.X_labeled_val = X[train_idxs].copy()
         self.y_labeled_val = y[train_idxs].copy()
 
-        self.X_unlabeled = X[~train_idxs].copy()
-        self.y_unlabeled = y[~train_idxs].copy()
+        self.X_unlabeled = X.copy() #X[~train_idxs].copy()
+        self.y_unlabeled = y.copy() #y[~train_idxs].copy()
         ####
 
         if self.labeled:
