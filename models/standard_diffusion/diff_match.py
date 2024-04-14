@@ -172,6 +172,7 @@ class DiffMatchFixed(DDPM):
         sampling_method="unconditional",
         sampling_recurence_steps=1,
         sample_grad_scale=0,
+        diffusion_batch_clip=None,
         *args,
         **kwargs,
     ):
@@ -192,6 +193,7 @@ class DiffMatchFixed(DDPM):
         self.sampling_method = sampling_method
         self.sample_grad_scale = sample_grad_scale
         self.sampling_recurence_steps = sampling_recurence_steps
+        self.diffusion_batch_clip = diffusion_batch_clip
         if self.use_ema:
             self.model_ema = FixMatchEma(self, decay=0.999)
             print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
@@ -331,6 +333,7 @@ class DiffMatchFixed(DDPM):
 
     def training_step(self, batch, batch_idx):
         x, y, img, weak_img, strong_img = self.get_train_input(batch)
+        img = img if self.diffusion_batch_clip is None else img[:self.diffusion_batch_clip]
         loss, loss_dict = self(img)
         if self.classification_start <= 0:
             if self.use_fixmatch is True:
