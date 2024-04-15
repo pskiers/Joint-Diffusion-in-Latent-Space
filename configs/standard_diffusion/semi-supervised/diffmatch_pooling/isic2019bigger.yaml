@@ -1,0 +1,121 @@
+model:
+  base_learning_rate: 0.0003
+  model_type: diffmatch_pooling_multilabel
+  params:
+    base_learning_rate: 0.0003
+    clip_denoised: True
+    beta_schedule: sqrt_linear
+    linear_start: 0.001
+    linear_end: 0.02
+    log_every_t: 200
+    timesteps: 1000
+    first_stage_key: 0
+    image_size: 64
+    channels: 3
+    monitor: val/loss_ema
+    classification_loss_weight: 0.001
+    classifier_in_features: 6496
+    classifier_hidden: 1024
+    num_classes: 8
+    dropout: 0.3
+    class_weights: [1, 1, 1, 1, 1, 1, 1, 1]
+
+    unet_config:
+      target: models.AdjustedUNet
+      params:
+        image_size: 64
+        in_channels: 3
+        out_channels: 3
+        model_channels: 224
+        attention_resolutions: [ 2, 4 ]
+        num_res_blocks: 3
+        channel_mult: [ 1, 2, 2, 2 ]
+        num_heads: 4
+        dropout: 0.1
+        use_scale_shift_norm: True
+        pool_size: 10000
+
+
+dataloaders:
+  validation:  
+    name: "isic2019"
+    root: "data/isic-2019"
+    split: "test"
+    resize: 64
+    batch_size: 256
+    num_workers: 16
+    sampler: "none"
+    shuffle: False
+    transforms:
+      - ToTensor:
+      - Normalize:
+          mean: [0.5, 0.5, 0.5]
+          std: [0.5, 0.5, 0.5]
+  train:
+    - ssl_split:
+        name: "isic2019"
+        root: "data/isic-2019"
+        split: "train"
+        resize: 64
+
+        num_labeled: 405
+        min_labeled: 32
+        equal_labels: False
+        seed: 42
+
+        supervised:
+          batch_size: 11
+          num_workers: 4
+          sampler: "random"
+          shuffle: False
+          transforms:
+            - RandomHorizontalFlip:
+            - RandomCrop:
+                size: 64
+                padding: 4
+                padding_mode: "reflect"
+            - ToTensor:
+            - Normalize:
+                mean: [0.5, 0.5, 0.5]
+                std: [0.5, 0.5, 0.5]
+
+        unsupervised:
+          batch_size: 77
+          num_workers: 16
+          sampler: "random"
+          shuffle: False
+          transforms:
+            - ToTensor:
+            - Normalize:
+                mean: [0.5, 0.5, 0.5]
+                std: [0.5, 0.5, 0.5] 
+
+
+lightning:
+  trainer:
+    benchmark: True
+    checkpoint_callback: True
+    max_steps: 1000000
+    accumulate_grad_batches: 3
+
+  callbacks:
+    # fid_logger:
+    #   batch_frequency: 100000
+    #   samples_amount: 10000
+    #   metrics_batch_size: 512
+    #   real_dl_batch_size: 448
+    #   latent: False
+    #   mean: [0.5, 0.5, 0.5]
+    #   std: [0.5, 0.5, 0.5]
+
+    img_logger:
+      batch_frequency: 10000
+      max_images: 10
+      clamp: True
+      increase_log_steps: False
+      log_images_kwargs: {
+          "N": 40,
+          "inpaint": False,
+      }
+      mean: [0.5, 0.5, 0.5]
+      std: [0.5, 0.5, 0.5]
