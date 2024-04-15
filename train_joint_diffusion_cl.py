@@ -4,7 +4,7 @@ import torch
 from torchvision import transforms
 import torch.utils.data as data
 import pytorch_lightning as pl
-from models import get_model_class
+from models import get_model_class, DDIMSamplerGradGuided
 from dataloading import get_datasets
 from os import path, environ
 from pathlib import Path
@@ -175,10 +175,27 @@ if __name__ == "__main__":
         def generate_samples(batch, labels):
             generator.sampling_method = cl_config["sampling_method"]
             generator.sample_grad_scale = cl_config["grad_scale"]
+            ddim = cl_config.get("ddim_steps", False)
             with torch.no_grad():
-                labels = torch.tensor(labels, device=generator.device)
-                generator.sample_classes = labels
-                samples = generator.sample(batch_size=batch)
+                if cl_config["sampling_method"] != "unconditional":
+                    labels = torch.tensor(labels, device=generator.device)
+                    generator.sample_classes = labels
+                if not ddim:
+                    samples = generator.sample(batch_size=batch)
+                else:
+                    ddim_sampler = DDIMSamplerGradGuided(generator)
+                    shape = (
+                        generator.channels,
+                        generator.image_size,
+                        generator.image_size,
+                    )
+                    samples, _ = ddim_sampler.sample(
+                        S=ddim,
+                        batch_size=batch,
+                        shape=shape,
+                        cond=None,
+                        verbose=False,
+                    )
 
                 unet = generator.model.diffusion_model
                 representations = unet.just_representations(
@@ -191,9 +208,12 @@ if __name__ == "__main__":
                     representations
                 )
                 pred = generator.classifier(pooled_representations).argmax(dim=-1)
-                ok_class = pred == labels
-                samples = samples[ok_class]
-                labels = labels[ok_class]
+                if cl_config["sampling_method"] != "unconditional":
+                    ok_class = pred == labels
+                    samples = samples[ok_class]
+                    labels = labels[ok_class]
+                else:
+                    labels = pred
 
                 samples = samples.cpu()
                 mean = cl_config["mean"]
@@ -237,7 +257,9 @@ if __name__ == "__main__":
                 samples_per_task=cl_config["samples_per_class"],
                 old_sample_generator=generate_old_samples,
                 new_sample_generator=(
-                    new_samples_generate if unlabeled_ds is not None else True
+                    new_samples_generate
+                    if unlabeled_ds is not None or new_generator is not None
+                    else True
                 ),  # dummy for class conditioned baseline stuff
                 current_task=task,
                 filename=nowname,

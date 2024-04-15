@@ -88,16 +88,17 @@ class GenerativeReplay:
                 else gen_sup_ds
             )
 
-            gen_unsup_ds = BaseTensorDataset(
-                data=generated_imgs,
-                targets=generated_labels,
-                transform=unsup_ds.transform,
-            )
-            joined_unsup_ds = (
-                ConcatDataset([unsup_ds, gen_unsup_ds])
-                if new_sample_generator is None
-                else gen_unsup_ds
-            )
+            if new_sample_generator is None:
+                gen_unsup_ds = BaseTensorDataset(
+                    data=generated_imgs,
+                    targets=generated_labels,
+                    transform=unsup_ds.transform,
+                )
+                joined_unsup_ds = (
+                    ConcatDataset([unsup_ds, gen_unsup_ds])
+                    if new_sample_generator is None
+                    else gen_unsup_ds
+                )
 
         labeled_bs = (
             self.train_bs if isinstance(self.train_bs, int) else self.train_bs[0]
