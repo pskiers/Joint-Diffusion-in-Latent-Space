@@ -834,33 +834,34 @@ class DiffMatchFixedPooling(DiffMatchFixed):
     def configure_optimizers(self):
         if self.optim is not None:
             return self.optim
-        no_decay = ["bias", "bn"]
-        grouped_parameters = [
-            {
-                "params": [
-                    p
-                    for n, p in self.classifier.named_parameters()
-                    if not any(nd in n for nd in no_decay)
-                ],
-                "weight_decay": 0.0,
-            },
-            {
-                "params": [
-                    p
-                    for n, p in self.classifier.named_parameters()
-                    if any(nd in n for nd in no_decay)
-                ],
-                "weight_decay": 0.0,
-            },
-        ]
-        grouped_parameters[1]["params"] = grouped_parameters[1]["params"] + list(
-            self.model.parameters()
-        )
-        optimizer = torch.optim.Adam(
-            grouped_parameters,
-            lr=self.learning_rate,
-            # betas=(0.9, 0.999)
-        )
+        # no_decay = ["bias", "bn"]
+        # grouped_parameters = [
+        #     {
+        #         "params": [
+        #             p
+        #             for n, p in self.classifier.named_parameters()
+        #             if not any(nd in n for nd in no_decay)
+        #         ],
+        #         "weight_decay": 0.0,
+        #     },
+        #     {
+        #         "params": [
+        #             p
+        #             for n, p in self.classifier.named_parameters()
+        #             if any(nd in n for nd in no_decay)
+        #         ],
+        #         "weight_decay": 0.0,
+        #     },
+        # ]
+        # grouped_parameters[1]["params"] = grouped_parameters[1]["params"] + list(
+        #     self.model.parameters()
+        # )
+        # optimizer = torch.optim.Adam(
+        #     grouped_parameters,
+        #     lr=self.learning_rate,
+        #     # betas=(0.9, 0.999)
+        # )
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
 
         # def _lr_lambda(current_step):
         #     num_warmup_steps = 0
