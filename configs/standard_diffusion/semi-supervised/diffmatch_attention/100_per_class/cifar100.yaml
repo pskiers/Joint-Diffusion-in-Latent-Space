@@ -2,6 +2,10 @@ model:
   base_learning_rate: 0.0003
   model_type: diffmatch_attention
   params:
+    clip_denoised: True
+    beta_schedule: sqrt_linear
+    linear_start: 0.001
+    linear_end: 0.02
     linear_start: 0.0015
     linear_end: 0.0195
     log_every_t: 200
@@ -11,7 +15,7 @@ model:
     channels: 3
     monitor: val/loss_ema
     classification_loss_weight: 0.001
-    batch_size: 64
+    batch_size: 32
 
     attention_config:
       num_classes: 100
@@ -31,19 +35,97 @@ model:
         in_channels: 3
         out_channels: 3
         model_channels: 128
-        attention_resolutions: [ 32, 16, 8 ]
+        attention_resolutions: [ 2, 4 ]
         num_res_blocks: 3
         channel_mult: [ 1, 2, 2, 2 ]
         num_heads: 4
+        dropout: 0.1
+        use_scale_shift_norm: True
         pool_size: 10000
 
 
 dataloaders:
-  name: cifar100_randaugment
-  train_batches: [ 64 ]
-  val_batch: 256
-  num_workers: 16
-  num_labeled: 10000
+  validation:  
+    name: "cifar100"
+    root: "data"
+    split: "test"
+    download: True
+    batch_size: 256
+    num_workers: 16
+    sampler: "none"
+    shuffle: False
+    transforms:
+      - ToTensor:
+      - Normalize:
+          mean: [0.5, 0.5, 0.5]
+          std: [0.5, 0.5, 0.5]
+  train:
+    - ssl_split:
+        name: "cifar100"
+        root: "data"
+        split: "train"
+        download: True
+
+        num_labeled: 10000
+        min_labeled: 32
+        seed: 42
+
+        supervised:
+          batch_size: 32
+          num_workers: 16
+          sampler: "random"
+          shuffle: False
+          transforms:
+            - ToPILImage:
+            - RandomHorizontalFlip:
+            - RandomCrop:
+                size: 32
+                padding: 4
+                padding_mode: "reflect"
+            - ToTensor:
+            - Normalize:
+                mean: [0.5, 0.5, 0.5]
+                std: [0.5, 0.5, 0.5]
+
+        unsupervised:
+          batch_size: 224
+          num_workers: 16
+          sampler: "random"
+          shuffle: False
+          transforms:
+            - ParallelTransforms:
+              -
+                - ToTensor:
+                - Normalize:
+                    mean: [0.5, 0.5, 0.5]
+                    std: [0.5, 0.5, 0.5] 
+
+              - 
+                - ToPILImage:
+                - RandomHorizontalFlip:
+                - RandomCrop:
+                    size: 32
+                    padding: 4
+                    padding_mode: "reflect"
+                - ToTensor:
+                - Normalize:
+                    mean: [0.5, 0.5, 0.5]
+                    std: [0.5, 0.5, 0.5] 
+              
+              - 
+                - ToPILImage:
+                - RandomHorizontalFlip:
+                - RandomCrop:
+                    size: 32
+                    padding: 4
+                    padding_mode: "reflect"
+                - RandAugment:
+                    n: 2
+                    m: 10
+                - ToTensor:
+                - Normalize:
+                    mean: [0.5, 0.5, 0.5]
+                    std: [0.5, 0.5, 0.5]
 
 
 lightning:
@@ -51,7 +133,7 @@ lightning:
     benchmark: True
     checkpoint_callback: True
     max_steps: 1000000
-    # accumulate_grad_batches: 2
+    accumulate_grad_batches: 2
 
   callbacks:
     fid_logger:
@@ -60,8 +142,8 @@ lightning:
       metrics_batch_size: 512
       real_dl_batch_size: 448
       latent: False
-      mean: [0.5071, 0.4867, 0.4408]
-      std: [0.2675, 0.2565, 0.2761]
+      mean: [0.5, 0.5, 0.5]
+      std: [0.5, 0.5, 0.5]
 
     img_logger:
       batch_frequency: 10000
@@ -69,8 +151,8 @@ lightning:
       clamp: True
       increase_log_steps: False
       log_images_kwargs: {
-          "N": 10,
+          "N": 40,
           "inpaint": False,
       }
-      mean: [0.5071, 0.4867, 0.4408]
-      std: [0.2675, 0.2565, 0.2761]
+      mean: [0.5, 0.5, 0.5]
+      std: [0.5, 0.5, 0.5]

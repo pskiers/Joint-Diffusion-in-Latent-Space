@@ -2,7 +2,7 @@ from omegaconf import OmegaConf
 import argparse
 import pytorch_lightning as pl
 from models import *
-from datasets import *
+from dataloading import *
 from os import path
 import datetime
 from callbacks import CUDACallback, SetupCallback

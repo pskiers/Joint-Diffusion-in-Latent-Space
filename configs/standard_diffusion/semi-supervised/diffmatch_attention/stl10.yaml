@@ -2,8 +2,10 @@ model:
   base_learning_rate: 0.0003
   model_type: diffmatch_attention
   params:
-    linear_start: 0.0015
-    linear_end: 0.0195
+    clip_denoised: True
+    beta_schedule: sqrt_linear
+    linear_start: 0.001
+    linear_end: 0.02
     log_every_t: 200
     timesteps: 1000
     first_stage_key: 0
@@ -31,19 +33,104 @@ model:
         in_channels: 3
         out_channels: 3
         model_channels: 128
-        attention_resolutions: [ 32, 16, 8 ]
+        attention_resolutions: [ 2, 4 ]
         num_res_blocks: 3
         channel_mult: [ 1, 2, 2, 2 ]
         num_heads: 4
+        dropout: 0.1
+        use_scale_shift_norm: True
         pool_size: 10000
 
 
 dataloaders:
-  name: stl10
-  train_batches: [ 32 ]
-  val_batch: 256
-  num_workers: 16
-  num_labeled: 1000
+  validation:  
+    name: "stl10"
+    root: "data"
+    split: "test"
+    download: True
+    batch_size: 256
+    num_workers: 16
+    sampler: "none"
+    shuffle: False
+    transforms:
+      - ToPILImage:
+      - Resize:
+          size: 32
+      - ToTensor:
+      - Normalize:
+          mean: [0.5, 0.5, 0.5]
+          std: [0.5, 0.5, 0.5]
+  train:
+    - dataset:
+        name: "stl10"
+        root: "data"
+        split: "train"
+        download: True
+        batch_size: 32
+        num_workers: 16
+        sampler: "random"
+        shuffle: False
+        transforms:
+          - ToPILImage:
+          - Resize:
+              size: 32
+          - RandomCrop:
+              size: 32
+              padding: 4
+              padding_mode: "reflect"
+          - ToTensor:
+          - Normalize:
+              mean: [0.5, 0.5, 0.5]
+              std: [0.5, 0.5, 0.5]
+
+    - dataset:
+        name: "stl10"
+        root: "data"
+        split: "unlabeled"
+        download: True
+        batch_size: 224
+        num_workers: 16
+        sampler: "random"
+        shuffle: False
+        transforms:
+          - ParallelTransforms:
+            -
+              - ToPILImage:
+              - Resize:
+                  size: 32
+              - ToTensor:
+              - Normalize:
+                  mean: [0.5, 0.5, 0.5]
+                  std: [0.5, 0.5, 0.5] 
+
+            - 
+              - ToPILImage:
+              - Resize:
+                  size: 32
+              - RandomCrop:
+                  size: 32
+                  padding: 4
+                  padding_mode: "reflect"
+              - ToTensor:
+              - Normalize:
+                  mean: [0.5, 0.5, 0.5]
+                  std: [0.5, 0.5, 0.5] 
+            
+            - 
+              - ToPILImage:
+              - Resize:
+                  size: 32
+              - RandomCrop:
+                  size: 32
+                  padding: 4
+                  padding_mode: "reflect"
+              - RandAugment:
+                  n: 2
+                  m: 10
+              - ToTensor:
+              - Normalize:
+                  mean: [0.5, 0.5, 0.5]
+                  std: [0.5, 0.5, 0.5]
 
 
 lightning:
@@ -69,7 +156,7 @@ lightning:
       clamp: True
       increase_log_steps: False
       log_images_kwargs: {
-          "N": 10,
+          "N": 40,
           "inpaint": False,
       }
       mean: [0.5, 0.5, 0.5]

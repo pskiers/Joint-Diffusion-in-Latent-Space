@@ -2,7 +2,7 @@ from ldm.models.autoencoder import AutoencoderKL
 from omegaconf import OmegaConf
 import argparse
 import pytorch_lightning as pl
-from datasets import get_dataloaders
+from dataloading import get_dataloaders
 from os import path, environ
 from pathlib import Path
 import datetime

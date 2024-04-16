@@ -4,7 +4,7 @@ import argparse
 import torch
 import pytorch_lightning as pl
 from models import get_model_class
-from datasets import get_dataloaders
+from dataloading import get_dataloaders
 from os import path, environ
 from pathlib import Path
 import datetime
@@ -22,7 +22,9 @@ if __name__ == "__main__":
     checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
 
     config = OmegaConf.load(config_path)
-    # config = OmegaConf.load("configs/standard_diffusion/semi-supervised/diffmatch_wide_resnet_unet/25_per_class/svhn.yaml")
+    # config = OmegaConf.load(
+    #     "configs/baselines/class_conditioned_ddpm/cifar10.yaml"
+    # )
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
@@ -31,14 +33,17 @@ if __name__ == "__main__":
     trainer_opt = argparse.Namespace(**trainer_config)
     lightning_config.trainer = trainer_config
 
-    dl_config = config.pop("dataloaders")
-    train_dls, test_dl = get_dataloaders(**dl_config)
+    dl_config_orig = config.pop("dataloaders")
+    dl_config = OmegaConf.to_container(dl_config_orig, resolve=True)
+    train_dls, test_dl = get_dataloaders(dl_config)
 
     if checkpoint_path is not None:
         config.model.params["ckpt_path"] = checkpoint_path
     # config.model.params["ckpt_path"] = f"logs/JointDiffusionAttention_2023-10-08T22-42-51/checkpoints/last.ckpt"
 
-    model = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
+    model = get_model_class(config.model.get("model_type"))(
+        **config.model.get("params", dict())
+    )
 
     # model.supervised_dataloader = train_dl_supervised
 
@@ -52,11 +57,17 @@ if __name__ == "__main__":
 
     trainer_kwargs = dict()
     tags = [
-        dl_config["name"],
-        "all labels" if dl_config["num_labeled"] is None else f"{dl_config['num_labeled']} per class",
-        config.model.get("model_type")
+        dl_config["validation"]["name"],
+        (
+            "all labels"
+            if next(iter(dl_config["train"][0])) == "dataset"
+            else f'{dl_config["train"][0]["ssl_split"]["num_labeled"]} per class'
+        ),
+        config.model.get("model_type"),
     ]
-    trainer_kwargs["logger"] = pl.loggers.WandbLogger(name=nowname, id=nowname, tags=tags)
+    trainer_kwargs["logger"] = pl.loggers.WandbLogger(
+        name=nowname, id=nowname, tags=tags
+    )
 
     # modelcheckpoint - use TrainResult/EvalResult(checkpoint_on=metric) to
     # specify which metric is used to determine best models
@@ -83,16 +94,19 @@ if __name__ == "__main__":
             ckptdir=ckptdir,
             cfgdir=cfgdir,
             config=config,
-            lightning_config=lightning_config
+            lightning_config=lightning_config,
+            dl_config=dl_config_orig,
         ),
-        CUDACallback()
+        CUDACallback(),
     ]
     if (img_logger_cfg := callback_cfg.get("img_logger", None)) is not None:
         trainer_kwargs["callbacks"].append(ImageLogger(**img_logger_cfg))
 
     if (fid_cfg := callback_cfg.get("fid_logger", None)) is not None:
         fid_cfg = dict(fid_cfg)
-        fid_cfg["real_dl"] = train_dls[1] if type(train_dls) in (tuple, list) else train_dls  # first dataloader should contain the original images
+        fid_cfg["real_dl"] = (
+            train_dls[1] if type(train_dls) in (tuple, list) else train_dls
+        )  # first dataloader should contain the original images
         fid_cfg["device"] = torch.device("cuda")
         trainer_kwargs["callbacks"].append(FIDScoreLogger(**fid_cfg))
 

@@ -5,7 +5,7 @@ import argparse
 import torch
 import pytorch_lightning as pl
 from models import ClassifierOnLatentDiffusion, AttentionOnLatentDiffusion, FixMatch
-from datasets import AdjustedMNIST, AdjustedSVHN, AdjustedCIFAR10
+from dataloading import AdjustedMNIST, AdjustedSVHN, AdjustedCIFAR10
 from os import listdir, path
 import datetime
 from callbacks import ImageLogger, CUDACallback, SetupCallback, FIDScoreLogger

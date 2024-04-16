@@ -2,8 +2,10 @@ model:
   base_learning_rate: 1.0e-04
   model_type: joint_diffusion_attention
   params:
-    linear_start: 0.0015
-    linear_end: 0.0195
+    clip_denoised: True
+    beta_schedule: sqrt_linear
+    linear_start: 0.001
+    linear_end: 0.02
     log_every_t: 200
     timesteps: 1000
     first_stage_key: 0
@@ -11,6 +13,7 @@ model:
     channels: 3
     monitor: val/loss_ema
     classification_loss_scale: 0.001
+    augmentations: False
 
     attention_config:
       num_classes: 10
@@ -30,19 +33,61 @@ model:
         in_channels: 3
         out_channels: 3
         model_channels: 128
-        attention_resolutions: [ 32, 16, 8 ]
+        attention_resolutions: [ 2, 4 ]
         num_res_blocks: 3
         channel_mult: [ 1, 2, 2, 2 ]
         num_heads: 4
+        dropout: 0.1
+        use_scale_shift_norm: True
         pool_size: 10000
 
 
 dataloaders:
-  name: cifar10
-  train_batches: [ 256 ]
-  val_batch: 512
-  num_workers: 16
-  num_labeled: null
+  validation:  
+    name: "cifar10"
+    root: "data"
+    split: "test"
+    download: True
+    batch_size: 256
+    num_workers: 16
+    sampler: "none"
+    shuffle: False
+    transforms:
+      - ToTensor:
+      - Normalize:
+          mean: [0.5, 0.5, 0.5]
+          std: [0.5, 0.5, 0.5]
+  train:
+    - dataset:
+        name: "cifar10"
+        root: "data"
+        split: "train"
+        download: True
+        batch_size: 256
+        num_workers: 16
+        sampler: "none"
+        shuffle: True
+        transforms:
+          - ParallelTransforms:
+            -
+              - ToTensor:
+              - Normalize:
+                  mean: [0.5, 0.5, 0.5]
+                  std: [0.5, 0.5, 0.5]
+            -
+              - ToPILImage:
+              - RandomHorizontalFlip:
+              - RandomCrop:
+                  size: 32
+                  padding: 4
+                  padding_mode: "reflect"
+              - RandAugment:
+                  n: 2
+                  m: 10
+              - ToTensor:
+              - Normalize:
+                  mean: [0.5, 0.5, 0.5]
+                  std: [0.5, 0.5, 0.5]
 
 
 lightning:
@@ -66,6 +111,6 @@ lightning:
       clamp: True
       increase_log_steps: False
       log_images_kwargs: {
-          "N": 10,
+          "N": 40,
           "inpaint": False,
       }

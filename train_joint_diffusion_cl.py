@@ -4,8 +4,8 @@ import torch
 from torchvision import transforms
 import torch.utils.data as data
 import pytorch_lightning as pl
-from models import get_model_class
-from datasets import get_cl_datasets
+from models import get_model_class, DDIMSamplerGradGuided
+from dataloading import get_datasets
 from os import path, environ
 from pathlib import Path
 import datetime
@@ -49,13 +49,13 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     config_path = str(args.path)
-    # config_path = "configs/standard_diffusion/continual_learning/joint_diffusion_pooling/cifar10.yaml"
+    # config_path = "configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml"
     checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
-    # checkpoint_path = None
+    # checkpoint_path = "pulled_checkpoints/cifar10-t1-s220.ckpt"
     old_generator_path = str(args.old) if args.old is not None else None
-    # old_generator_path = "pulled_checkpoints/fixed_cl_cifa10_task0_90.ckpt"
+    # old_generator_path = None
     new_generator_path = str(args.new) if args.new is not None else None
-    # new_generator_path = "pulled_checkpoints/fixed_cl_cifa10_task1_70.ckpt"
+    # new_generator_path = None
     current_task = args.task
     # current_task = 1
     tasks_learned = args.learned if args.learned is not None else []
@@ -71,28 +71,18 @@ if __name__ == "__main__":
     trainer_opt = argparse.Namespace(**trainer_config)
     lightning_config.trainer = trainer_config
 
-    dl_config = config.pop("dataloaders")
-    reply_buff = GenerativeReplay(
-        argparse.Namespace(
-            batch_size=dl_config["train_batches"][0],
-            sample_batch_size=500,
-            num_workers=dl_config["num_workers"],
-        )
-    )
-    tasks_datasets, test_ds, tasks = get_cl_datasets(
-        name=dl_config["name"],
-        num_labeled=dl_config["num_labeled"],
-        sup_batch=dl_config["train_batches"][0],
-        mean=dl_config.get("mean", None),
-        std=dl_config.get("std", None),
-    )
+    dl_config_orig = config.pop("dataloaders")
+    dl_config = OmegaConf.to_container(dl_config_orig, resolve=True)
+    tasks_datasets, tasks_bs, test_ds, test_bs, tasks = get_datasets(dl_config)
 
     test_dl = data.DataLoader(
         test_ds,
-        dl_config["val_batch"],
+        test_bs,
         shuffle=False,
-        num_workers=dl_config["num_workers"],
+        num_workers=16,
     )
+
+    reply_buff = GenerativeReplay(train_bs=tasks_bs, sample_bs=250, dl_num_workers=16)
 
     if checkpoint_path is not None:
         config.model.params["ckpt_path"] = checkpoint_path
@@ -123,14 +113,16 @@ if __name__ == "__main__":
     cfgdir = path.join(logdir, "configs")
 
     trainer_kwargs = dict()
+    try:
+        per_class = f'{dl_config["train"][0]["cl_split"]["datasets"][0]["ssl_split"]["num_labeled"]} per class'
+    except Exception:
+        per_class = "all labels"
     tags = [
-        dl_config["name"],
-        (
-            "all labels"
-            if dl_config["num_labeled"] is None
-            else f"{dl_config['num_labeled']} per class"
-        ),
+        dl_config["validation"]["name"],
+        per_class,
         config.model.get("model_type"),
+        f"task {current_task}",
+        f"learned tasks {tasks_learned}",
     ]
     trainer_kwargs["logger"] = pl.loggers.WandbLogger(
         name=nowname, id=nowname, tags=tags
@@ -163,6 +155,7 @@ if __name__ == "__main__":
             cfgdir=cfgdir,
             config=config,
             lightning_config=lightning_config,
+            dl_config=dl_config_orig,
         ),
         CUDACallback(),
         CheckpointEveryNSteps(10000, prefix="ckpt_"),
@@ -182,10 +175,27 @@ if __name__ == "__main__":
         def generate_samples(batch, labels):
             generator.sampling_method = cl_config["sampling_method"]
             generator.sample_grad_scale = cl_config["grad_scale"]
+            ddim = cl_config.get("ddim_steps", False)
             with torch.no_grad():
-                labels = torch.tensor(labels, device=generator.device)
-                generator.sample_classes = labels
-                samples = generator.sample(batch_size=batch)
+                if cl_config["sampling_method"] != "unconditional":
+                    labels = torch.tensor(labels, device=generator.device)
+                    generator.sample_classes = labels
+                if not ddim:
+                    samples = generator.sample(batch_size=batch)
+                else:
+                    ddim_sampler = DDIMSamplerGradGuided(generator)
+                    shape = (
+                        generator.channels,
+                        generator.image_size,
+                        generator.image_size,
+                    )
+                    samples, _ = ddim_sampler.sample(
+                        S=ddim,
+                        batch_size=batch,
+                        shape=shape,
+                        cond=None,
+                        verbose=False,
+                    )
 
                 unet = generator.model.diffusion_model
                 representations = unet.just_representations(
@@ -198,13 +208,16 @@ if __name__ == "__main__":
                     representations
                 )
                 pred = generator.classifier(pooled_representations).argmax(dim=-1)
-                ok_class = pred == labels
-                samples = samples[ok_class]
-                labels = labels[ok_class]
+                if cl_config["sampling_method"] != "unconditional":
+                    ok_class = pred == labels
+                    samples = samples[ok_class]
+                    labels = labels[ok_class]
+                else:
+                    labels = pred
 
                 samples = samples.cpu()
-                mean = dl_config["mean"]
-                std = dl_config["std"]
+                mean = cl_config["mean"]
+                std = cl_config["std"]
                 denormalize = transforms.Compose(
                     [
                         transforms.Normalize(
@@ -235,18 +248,18 @@ if __name__ == "__main__":
             if new_generator is not None:
                 new_generator.to(torch.device("cuda"))
             (labeled_ds, unlabeled_ds) = (
-                datasets if len(datasets) == 2 else (datasets, None)
+                datasets if len(datasets) == 2 else (datasets[0], None)
             )
             train_dls = reply_buff.get_data_for_task(
                 sup_ds=labeled_ds,
                 unsup_ds=unlabeled_ds,
                 prev_tasks=prev_tasks,
-                mean=dl_config["mean"],
-                std=dl_config["std"],
                 samples_per_task=cl_config["samples_per_class"],
                 old_sample_generator=generate_old_samples,
                 new_sample_generator=(
-                    new_samples_generate if unlabeled_ds is not None else True
+                    new_samples_generate
+                    if unlabeled_ds is not None or new_generator is not None
+                    else True
                 ),  # dummy for class conditioned baseline stuff
                 current_task=task,
                 filename=nowname,

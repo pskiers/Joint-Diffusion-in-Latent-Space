@@ -434,7 +434,7 @@ class CUDACallback(Callback):
 
 
 class SetupCallback(Callback):
-    def __init__(self, resume, now, logdir, ckptdir, cfgdir, config, lightning_config):
+    def __init__(self, resume, now, logdir, ckptdir, cfgdir, config, lightning_config, dl_config):
         super().__init__()
         self.resume = resume
         self.now = now
@@ -443,6 +443,7 @@ class SetupCallback(Callback):
         self.cfgdir = cfgdir
         self.config = config
         self.lightning_config = lightning_config
+        self.dl_config = dl_config
 
     def on_keyboard_interrupt(self, trainer, pl_module):
         if trainer.global_rank == 0:
@@ -474,10 +475,16 @@ class SetupCallback(Callback):
             )
 
             print("Lightning config")
-            print(OmegaConf.to_yaml(self.lightning_config))
+            print(OmegaConf.to_yaml(self.dl_config))
             OmegaConf.save(
-                OmegaConf.create({"lightning": self.lightning_config}),
+                OmegaConf.create({"lightning": self.dl_config}),
                 os.path.join(self.cfgdir, "{}-lightning.yaml".format(self.now)),
+            )
+            print("Dataloading config")
+            print(OmegaConf.to_yaml(self.dl_config))
+            OmegaConf.save(
+                OmegaConf.create({"dataloading": self.dl_config}),
+                os.path.join(self.cfgdir, "{}-dataloading.yaml".format(self.now)),
             )
 
         else:

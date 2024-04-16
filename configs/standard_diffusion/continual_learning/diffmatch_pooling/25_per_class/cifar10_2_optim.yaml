@@ -1,26 +1,33 @@
 model:
-  base_learning_rate: 3.0e-04
+  base_learning_rate: 2.0e-04
   model_type: diffmatch_pooling_2_optims
   params:
-    linear_start: 0.0015
-    linear_end: 0.0195
+    base_learning_rate: 2.0e-04
+    classifier_lr: 1.0e-03
+
+    clip_denoised: True
+    beta_schedule: sqrt_linear
+    linear_start: 0.001
+    linear_end: 0.02
     log_every_t: 200
     timesteps: 1000
     first_stage_key: 0
+    monitor: val/loss_ema
+
     image_size: 32
     channels: 3
-    monitor: val/loss_ema
-    classification_loss_weight: 0
-    classification_loss_weight_max: 0.001
-    classification_loss_weight_increments: 0
+    dropout: 0.3
+    
     classifier_in_features: 3712
     classifier_hidden: 1024
     num_classes: 10
-    dropout: 0.3
-    batch_size: 4
-    classification_start: 0
-    classifier_lr: 1.0e-03
-    accumulate_grad_batches: 2
+
+    classification_start: 1000000
+    classification_loss_weight: 0
+    classification_loss_weight_max: 0.001
+    classification_loss_weight_increments: 0
+    
+    accumulate_grad_batches: 1
 
     unet_config:
       target: models.AdjustedUNet
@@ -29,26 +36,108 @@ model:
         in_channels: 3
         out_channels: 3
         model_channels: 128
-        attention_resolutions: [ 32, 16, 8 ]
+        attention_resolutions: [ 2, 4 ]
         num_res_blocks: 3
         channel_mult: [ 1, 2, 2, 2 ]
         num_heads: 4
+        dropout: 0.1
+        use_scale_shift_norm: True
         pool_size: 10000
 
 cl:
   grad_scale: 15
   samples_per_class: 5000
-  sampling_method: "conditional_to_x"
+  sampling_method: "conditional_to_repr"
+  weight_reinit: "unused classes"
+  mean: [0.5, 0.5, 0.5]
+  std: [0.5, 0.5, 0.5]
 
 
 dataloaders:
-  name: cifar10_randaugment
-  train_batches: [ 4 ]
-  val_batch: 16
-  num_workers: 0
-  num_labeled: 250
-  # mean: [0.4914, 0.4822, 0.4465]
-  # std: [0.2471, 0.2435, 0.2616]
+  validation:  
+    name: "cifar10"
+    root: "data"
+    split: "test"
+    download: True
+    batch_size: 256
+    num_workers: 16
+    sampler: "none"
+    shuffle: False
+    transforms:
+      - ToTensor:
+      - Normalize:
+          mean: [0.5, 0.5, 0.5]
+          std: [0.5, 0.5, 0.5]
+  train:
+    - cl_split:
+        tasks: [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]]
+        datasets:
+          - ssl_split:
+              name: "cifar10"
+              root: "data"
+              split: "train"
+              download: True
+
+              num_labeled: 250
+              min_labeled: 32
+              seed: 42
+
+              supervised:
+                batch_size: 32
+                num_workers: 16
+                sampler: "random"
+                shuffle: False
+                transforms:
+                  - ToPILImage:
+                  - RandomHorizontalFlip:
+                  - RandomCrop:
+                      size: 32
+                      padding: 4
+                      padding_mode: "reflect"
+                  - ToTensor:
+                  - Normalize:
+                      mean: [0.5, 0.5, 0.5]
+                      std: [0.5, 0.5, 0.5]
+
+              unsupervised:
+                batch_size: 224
+                num_workers: 16
+                sampler: "random"
+                shuffle: False
+                transforms:
+                  - ParallelTransforms:
+                    -
+                      - ToTensor:
+                      - Normalize:
+                          mean: [0.5, 0.5, 0.5]
+                          std: [0.5, 0.5, 0.5] 
+
+                    - 
+                      - ToPILImage:
+                      - RandomHorizontalFlip:
+                      - RandomCrop:
+                          size: 32
+                          padding: 4
+                          padding_mode: "reflect"
+                      - ToTensor:
+                      - Normalize:
+                          mean: [0.5, 0.5, 0.5]
+                          std: [0.5, 0.5, 0.5] 
+                    
+                    - 
+                      - ToPILImage:
+                      - RandomHorizontalFlip:
+                      - RandomCrop:
+                          size: 32
+                          padding: 4
+                          padding_mode: "reflect"
+                      - RandAugment:
+                          n: 2
+                          m: 10
+                      - ToTensor:
+                      - Normalize:
+                          mean: [0.5, 0.5, 0.5]
+                          std: [0.5, 0.5, 0.5]
 
 
 lightning:
@@ -70,12 +159,15 @@ lightning:
 
     img_logger:
       batch_frequency: 10000
-      max_images: 10
+      max_images: 40
       clamp: True
       increase_log_steps: False
       log_images_kwargs: {
-          "N": 10,
+          "N": 40,
           "inpaint": False,
+          "sample_classes": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+          "use_ema": False,
+          "grad_scales": [40, 20, 10, 5, 0]
       }
-      mean: [0.4914, 0.4822, 0.4465]
-      std: [0.2471, 0.2435, 0.2616]
+      mean: [0.5, 0.5, 0.5]
+      std: [0.5, 0.5, 0.5]

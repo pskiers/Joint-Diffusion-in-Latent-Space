@@ -1,46 +1,25 @@
-from typing import List, Callable, Tuple, Optional
-from torch.utils.data import DataLoader, Subset, ConcatDataset, Dataset, RandomSampler
+from typing import List, Callable, Tuple, Optional, Union
+from torch.utils.data import DataLoader, ConcatDataset, RandomSampler, Dataset
 import torch
-from PIL import Image
-import numpy as np
-
-from cl_methods.base import CLMethod
+from dataloading import BaseDataset, BaseTensorDataset
 
 
-class DatasetDummy(Dataset):
-    def __init__(self, data, targets, transform=None):
-        super().__init__()
-        self.data = data
-        self.targets = targets
-        self.transform = transform
-        self.target_transform = None
+class GenerativeReplay:
+    def __init__(
+        self,
+        train_bs: Union[int, List[int]],
+        sample_bs: int = 200,
+        dl_num_workers: int = 16,
+    ):
+        self.train_bs = train_bs
+        self.sample_bs = sample_bs
+        self.dl_num_workers = dl_num_workers
 
-    def __getitem__(self, index):
-        img, target = self.data[index], self.targets[index]
-
-        if self.transform is not None:
-            img = Image.fromarray(
-                (img.permute((1, 2, 0)).numpy() * 255).astype(np.uint8)
-            )
-            img = self.transform(img)
-
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
-        return img, target
-
-    def __len__(self):
-        return len(self.data)
-
-
-class GenerativeReplay(CLMethod):
     def get_data_for_task(
         self,
-        sup_ds: Subset,
-        unsup_ds: Subset,
+        sup_ds: BaseDataset,
+        unsup_ds: BaseDataset,
         prev_tasks: List,
-        mean: List[float],
-        std: List[float],
         samples_per_task: int,
         old_sample_generator: Callable[[int, List], Tuple[torch.Tensor, torch.Tensor]],
         new_sample_generator: Optional[
@@ -51,6 +30,8 @@ class GenerativeReplay(CLMethod):
         saved_samples: Optional[str] = None,
         saved_labels: Optional[str] = None,
     ):
+        joined_sup_ds: Dataset
+        joined_unsup_ds: Dataset
         if len(prev_tasks) == 0:
             joined_sup_ds = sup_ds
             joined_unsup_ds = unsup_ds
@@ -58,12 +39,12 @@ class GenerativeReplay(CLMethod):
             print("Preparing dataset for rehearsal...")
             to_generate = {task: samples_per_task for task in prev_tasks}
             generated_imgs = torch.tensor([])
-            generated_labels = torch.tensor([]).type(torch.LongTensor)
+            generated_labels = torch.tensor([], dtype=torch.int64)
             if saved_samples is None or saved_labels is None:
                 for task in to_generate.keys():
                     print(f"Sampling for label {task}")
                     while to_generate[task] > 0:
-                        bs = min(self.args.sample_batch_size, to_generate[task])
+                        bs = min(self.sample_bs, to_generate[task])
                         imgs, labels = old_sample_generator(
                             bs, [task for _ in range(bs)]
                         )
@@ -72,11 +53,12 @@ class GenerativeReplay(CLMethod):
                         to_generate[task] -= len(labels)
                         print(f"{to_generate[task]} left for label {task}")
                 if new_sample_generator is not None:
+                    assert current_task is not None
                     to_generate = {task: samples_per_task for task in current_task}
                     for task in to_generate.keys():
                         print(f"Sampling for label {task}")
                         while to_generate[task] > 0:
-                            bs = min(self.args.sample_batch_size, to_generate[task])
+                            bs = min(self.sample_bs, to_generate[task])
                             imgs, labels = new_sample_generator(
                                 bs, [task for _ in range(bs)]
                             )
@@ -95,18 +77,10 @@ class GenerativeReplay(CLMethod):
             # generated_imgs = torch.load("./cifar100_images.pt") if filename == "cifar100_randaugment" else torch.load("./cifar10_images.pt")
             # generated_labels = torch.load("./cifar100_labels.pt").type(torch.LongTensor) if filename == "cifar100_randaugment" else torch.load("./cifar10_labels.pt").type(torch.LongTensor)
 
-            from datasets.fixmatch_cifar import TransformRandAugmentSupervised  # TODO
-
-            transform = TransformRandAugmentSupervised(mean=mean, std=std)  # TODO
-
-            gen_sup_ds = DatasetDummy(
-                generated_imgs,
-                generated_labels,
-                (
-                    sup_ds.dataset.transform
-                    if new_sample_generator is None
-                    else transform
-                ),  # TODO
+            gen_sup_ds = BaseTensorDataset(
+                data=generated_imgs,
+                targets=generated_labels,
+                transform=sup_ds.transform,
             )
             joined_sup_ds = (
                 ConcatDataset([sup_ds, gen_sup_ds])
@@ -114,31 +88,43 @@ class GenerativeReplay(CLMethod):
                 else gen_sup_ds
             )
 
-            gen_unsup_ds = DatasetDummy(
-                generated_imgs, generated_labels, unsup_ds.dataset.transform
-            )
-            joined_unsup_ds = (
-                ConcatDataset([unsup_ds, gen_unsup_ds])
-                if new_sample_generator is None
-                else gen_unsup_ds
-            )
+            if new_sample_generator is None:
+                gen_unsup_ds = BaseTensorDataset(
+                    data=generated_imgs,
+                    targets=generated_labels,
+                    transform=unsup_ds.transform,
+                )
+                joined_unsup_ds = (
+                    ConcatDataset([unsup_ds, gen_unsup_ds])
+                    if new_sample_generator is None
+                    else gen_unsup_ds
+                )
 
+        labeled_bs = (
+            self.train_bs if isinstance(self.train_bs, int) else self.train_bs[0]
+        )
         labeled_dl = DataLoader(
             dataset=joined_sup_ds,
-            sampler=RandomSampler(joined_sup_ds),
-            batch_size=self.args.batch_size,
+            sampler=RandomSampler(
+                joined_sup_ds, num_samples=max(len(joined_sup_ds), labeled_bs * 500)
+            ),
+            batch_size=labeled_bs,
             shuffle=False,
             drop_last=True,
-            num_workers=self.args.num_workers,
+            num_workers=self.dl_num_workers,
         )
         if new_sample_generator is None:
+            assert isinstance(self.train_bs, list)
             unlabeled_dl = DataLoader(
                 dataset=joined_unsup_ds,
-                sampler=RandomSampler(joined_unsup_ds),
-                batch_size=self.args.batch_size * 7,  # TODO
+                sampler=RandomSampler(
+                    joined_unsup_ds,
+                    num_samples=max(len(joined_unsup_ds), self.train_bs[1] * 500),
+                ),
+                batch_size=self.train_bs[1],
                 shuffle=False,
                 drop_last=True,
-                num_workers=self.args.num_workers,
+                num_workers=self.dl_num_workers,
             )
             return labeled_dl, unlabeled_dl
         return labeled_dl

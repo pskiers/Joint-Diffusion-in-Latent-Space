@@ -4,11 +4,12 @@ from pytorch_lightning.utilities.types import STEP_OUTPUT
 import torch
 import torch.nn as nn
 import wandb
+from tqdm import tqdm
 from einops import repeat
 import kornia as K
 import kornia.augmentation as aug
 from ldm.models.diffusion.ddpm import DDPM
-from ldm.modules.diffusionmodules.util import extract_into_tensor
+from ldm.modules.diffusionmodules.util import extract_into_tensor, noise_like
 from ldm.util import default
 from ldm.modules.ema import LitEma
 from contextlib import contextmanager
@@ -269,8 +270,9 @@ class JointDiffusionNoisyClassifier(DDPM):
 
 
 class JointDiffusion(JointDiffusionNoisyClassifier):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, sampling_recurence_steps=1, **kwargs):
         super().__init__(*args, **kwargs)
+        self.sampling_recurence_steps = sampling_recurence_steps
         self.x_start = None
 
     def get_input(self, batch, k):
@@ -417,6 +419,61 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
             else:
                 return {key: log[key] for key in return_keys}
         return log
+    
+    @torch.no_grad()
+    def p_sample_loop(
+        self, shape, return_intermediates=False, x_start=None, t_start=None
+    ):
+        device = self.betas.device
+        b = shape[0]
+        img = (
+            torch.randn(shape, device=device)
+            if x_start is None
+            else x_start.clone().to(device)
+        )
+        num_timesteps = self.num_timesteps if t_start is None else t_start
+        intermediates = [img]
+        for i in tqdm(
+            reversed(range(0, num_timesteps)), desc="Sampling t", total=num_timesteps
+        ):
+            t = torch.full((b,), i, device=device, dtype=torch.long)
+            for _ in range(self.sampling_recurence_steps - 1):
+                z_t_minus_1 = self.p_sample(
+                    img,
+                    t,
+                    clip_denoised=self.clip_denoised,
+                )
+                eps = noise_like(img.shape, img.device)
+                alph_t_minus_one = (
+                    extract_into_tensor(self.alphas_cumprod, t - 1, (1,))[0]
+                    if i != 0
+                    else torch.tensor(1, device=img.device, dtype=float)
+                )
+                alpha_coef = extract_into_tensor(self.alphas_cumprod, t, (1,))[0] / alph_t_minus_one
+                img = torch.sqrt(alpha_coef) * z_t_minus_1 + torch.sqrt(1 - alpha_coef) * eps
+            img = self.p_sample(
+                img,
+                t,
+                clip_denoised=self.clip_denoised,
+            )
+            if i % self.log_every_t == 0 or i == self.num_timesteps - 1:
+                intermediates.append(img)
+        if return_intermediates:
+            return img, intermediates
+        return img
+
+    @torch.no_grad()
+    def sample(
+        self, batch_size=16, return_intermediates=False, x_start=None, t_start=None
+    ):
+        image_size = self.image_size
+        channels = self.channels
+        return self.p_sample_loop(
+            (batch_size, channels, image_size, image_size),
+            return_intermediates=return_intermediates,
+            x_start=x_start,
+            t_start=t_start,
+        )
 
 
 class JointDiffusionAugmentations(JointDiffusion):
