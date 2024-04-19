@@ -176,26 +176,41 @@ if __name__ == "__main__":
             generator.sampling_method = cl_config["sampling_method"]
             generator.sample_grad_scale = cl_config["grad_scale"]
             ddim = cl_config.get("ddim_steps", False)
+            ema = cl_config.get("use_ema", True)
             with torch.no_grad():
-                if cl_config["sampling_method"] != "unconditional":
-                    labels = torch.tensor(labels, device=generator.device)
-                    generator.sample_classes = labels
+                labels = torch.tensor(labels, device=generator.device)
+                generator.sample_classes = labels
                 if not ddim:
-                    samples = generator.sample(batch_size=batch)
+                    if ema:
+                        with generator.ema_scope():
+                            samples = generator.sample(batch_size=batch)
+                    else:
+                        samples = generator.sample(batch_size=batch)
                 else:
-                    ddim_sampler = DDIMSamplerGradGuided(generator)
                     shape = (
                         generator.channels,
                         generator.image_size,
                         generator.image_size,
                     )
-                    samples, _ = ddim_sampler.sample(
-                        S=ddim,
-                        batch_size=batch,
-                        shape=shape,
-                        cond=None,
-                        verbose=False,
-                    )
+                    if ema:
+                        with generator.ema_scope():
+                            ddim_sampler = DDIMSamplerGradGuided(generator)
+                            samples, _ = ddim_sampler.sample(
+                                S=ddim,
+                                batch_size=batch,
+                                shape=shape,
+                                cond=None,
+                                verbose=False,
+                            )
+                    else:
+                        ddim_sampler = DDIMSamplerGradGuided(generator)
+                        samples, _ = ddim_sampler.sample(
+                            S=ddim,
+                            batch_size=batch,
+                            shape=shape,
+                            cond=None,
+                            verbose=False,
+                        )
 
                 unet = generator.model.diffusion_model
                 representations = unet.just_representations(
@@ -208,12 +223,9 @@ if __name__ == "__main__":
                     representations
                 )
                 pred = generator.classifier(pooled_representations).argmax(dim=-1)
-                if cl_config["sampling_method"] != "unconditional":
-                    ok_class = pred == labels
-                    samples = samples[ok_class]
-                    labels = labels[ok_class]
-                else:
-                    labels = pred
+                ok_class = pred == labels
+                samples = samples[ok_class]
+                labels = labels[ok_class]
 
                 samples = samples.cpu()
                 mean = cl_config["mean"]

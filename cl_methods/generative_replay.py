@@ -52,7 +52,7 @@ class GenerativeReplay:
                         generated_labels = torch.concat((generated_labels, labels))
                         to_generate[task] -= len(labels)
                         print(f"{to_generate[task]} left for label {task}")
-                if new_sample_generator is not None:
+                if new_sample_generator is not None and new_sample_generator is not True:
                     assert current_task is not None
                     to_generate = {task: samples_per_task for task in current_task}
                     for task in to_generate.keys():
@@ -84,7 +84,7 @@ class GenerativeReplay:
             )
             joined_sup_ds = (
                 ConcatDataset([sup_ds, gen_sup_ds])
-                if new_sample_generator is None
+                if not callable(new_sample_generator)
                 else gen_sup_ds
             )
 
