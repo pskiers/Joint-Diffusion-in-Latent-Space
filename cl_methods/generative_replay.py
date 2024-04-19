@@ -79,7 +79,7 @@ class GenerativeReplay:
 
             gen_sup_ds = BaseTensorDataset(
                 data=generated_imgs,
-                targets=generated_labels,
+                targets=generated_labels.numpy(),
                 transform=sup_ds.transform,
             )
             joined_sup_ds = (
@@ -91,7 +91,7 @@ class GenerativeReplay:
             if new_sample_generator is None:
                 gen_unsup_ds = BaseTensorDataset(
                     data=generated_imgs,
-                    targets=generated_labels,
+                    targets=generated_labels.numpy(),
                     transform=unsup_ds.transform,
                 )
                 joined_unsup_ds = (
