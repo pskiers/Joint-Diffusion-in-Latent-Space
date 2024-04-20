@@ -55,7 +55,7 @@ if __name__ == "__main__":
     # current_task = 1
     tasks_learned = args.learned if args.learned is not None else []
     # tasks_learned = [0]
-    tags = args.tags
+    tags = args.tags if args.tags is not None else []
 
     config = OmegaConf.load(config_path)
     # config = OmegaConf.load("configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml")
