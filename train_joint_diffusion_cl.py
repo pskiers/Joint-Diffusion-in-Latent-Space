@@ -16,7 +16,7 @@ from callbacks import (
     FIDScoreLogger,
     CheckpointEveryNSteps,
 )
-from cl_methods.generative_replay import GenerativeReplay
+from cl_methods.generative_replay import get_replay
 
 
 if __name__ == "__main__":
@@ -78,7 +78,9 @@ if __name__ == "__main__":
         num_workers=16,
     )
 
-    reply_buff = GenerativeReplay(train_bs=tasks_bs, sample_bs=250, dl_num_workers=16)
+    cl_config = config.pop("cl")
+
+    reply_buff = get_replay(cl_config.get("reply_type"))(train_bs=tasks_bs, sample_bs=140, dl_num_workers=16)
 
     if checkpoint_path is not None:
         config.model.params["ckpt_path"] = checkpoint_path
@@ -159,8 +161,6 @@ if __name__ == "__main__":
         fid_cfg["device"] = torch.device("cuda")
         trainer_kwargs["callbacks"].append(FIDScoreLogger(**fid_cfg))
 
-    cl_config = config.pop("cl")
-
     def get_generator(generator):
         def generate_samples(batch, labels):
             generator.sampling_method = cl_config["sampling_method"]
@@ -168,8 +168,9 @@ if __name__ == "__main__":
             ddim = cl_config.get("ddim_steps", False)
             ema = cl_config.get("use_ema", True)
             with torch.no_grad():
-                labels = torch.tensor(labels, device=generator.device)
-                generator.sample_classes = labels
+                if labels is not None: 
+                    labels = torch.tensor(labels, device=generator.device)
+                    generator.sample_classes = labels
                 if not ddim:
                     if ema:
                         with generator.ema_scope():
@@ -205,15 +206,17 @@ if __name__ == "__main__":
                 unet = generator.model.diffusion_model
                 representations = unet.just_representations(
                     samples,
-                    torch.zeros_like(generator.sample_classes),
+                    torch.zeros(samples.shape[0], device=samples.device),
                     context=None,
                     pooled=False,
                 )
                 pooled_representations = generator.transform_representations(representations)
                 pred = generator.classifier(pooled_representations).argmax(dim=-1)
-                ok_class = pred == labels
-                samples = samples[ok_class]
-                labels = labels[ok_class]
+                if labels is not None:
+                    samples = samples[pred == labels]
+                    labels = labels[pred == labels]
+                else:
+                    labels = pred
 
                 samples = samples.cpu()
                 mean = cl_config["mean"]

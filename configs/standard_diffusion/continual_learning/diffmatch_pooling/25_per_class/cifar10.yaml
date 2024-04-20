@@ -41,9 +41,10 @@ model:
         pool_size: 10000
 
 cl:
-  grad_scale: 15
+  reply_type: "one_ssl_task"
+  grad_scale: 0
   samples_per_class: 5000
-  sampling_method: "conditional_to_repr"
+  sampling_method: "unconditional"
   weight_reinit: "unused classes"
   mean: [0.5, 0.5, 0.5]
   std: [0.5, 0.5, 0.5]
@@ -78,7 +79,7 @@ dataloaders:
               seed: 42
 
               supervised:
-                batch_size: 32
+                batch_size: 16
                 num_workers: 8
                 sampler: "random"
                 shuffle: False
@@ -95,7 +96,7 @@ dataloaders:
                       std: [0.5, 0.5, 0.5]
 
               unsupervised:
-                batch_size: 224
+                batch_size: 112
                 num_workers: 24
                 sampler: "random"
                 shuffle: False

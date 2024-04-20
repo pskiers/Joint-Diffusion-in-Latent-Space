@@ -19,7 +19,7 @@ model:
     dropout: 0.1
     classification_start: 0
     augmentations: False
-    sampling_method: "conditional_to_x"    
+    sampling_method: "conditional_to_repr"    
     sample_grad_scale: 0
     # sampling_recurence_steps: 4
 
@@ -39,7 +39,7 @@ model:
         pool_size: 10000
 
 cl:
-  reply_type: "unconditional_replay_only"
+  reply_type: "one_supervised_task"
   grad_scale: 0
   # ddim_steps: 250
   samples_per_class: 5000

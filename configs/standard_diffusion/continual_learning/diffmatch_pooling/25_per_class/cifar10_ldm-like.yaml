@@ -40,6 +40,7 @@ model:
         pool_size: 10000
 
 cl:
+  reply_type: "one_ssl_task"
   grad_scale: 15
   samples_per_class: 5000
   sampling_method: "conditional_to_repr"
