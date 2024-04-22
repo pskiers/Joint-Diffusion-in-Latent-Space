@@ -373,6 +373,7 @@ class SetupCallback(Callback):
             trainer.save_checkpoint(ckpt_path)
 
     def on_pretrain_routine_start(self, trainer, pl_module):
+        print("############### trainer.global_rank ", trainer.global_rank, "logdir ", self.logdir)
         if trainer.global_rank == 0:
             print('RANK 0 SHOULD CREATE LOGDIR')
             # Create logdirs and save configs

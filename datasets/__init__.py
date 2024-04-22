@@ -14,6 +14,7 @@ from .arch.chest_xray import ChestXRay
 from .chest_xray_nih_patches import ChestXRay_nih_patches
 from .chest_xray_nih_densenet_patches import ChestXRay_nih_densenet_patches
 from .chest_xray_nih_bbox import ChestXRay_nih_bbox
+from .chest_xray_acpl import ChestACPLDataloader, ChestACPLDataset
 from .arch.chest_xray_nih_64 import ChestXRay_nih_64
 from .isic2019 import ISIC2019
 from .mnist import AdjustedMNIST
@@ -24,7 +25,8 @@ from .gtsrb import GTSRB
 from .utils import equal_labels_random_split, cl_class_split
 from .fixmatch_cifar import DATASET_GETTERS
 from pytorch_multilabel_balanced_sampler.samplers import RandomClassSampler, ClassCycleSampler, LeastSampledClassSampler
-
+from .acpl_plmodule import ACPLDataModule
+import warnings
 
 @dataclass
 class RandAugmentArgs:
@@ -52,7 +54,7 @@ def get_dataloaders(name: str,
         return train_test_val_dl(
             train_ds, val_ds, test_ds, train_batches, val_batch, num_workers, 
             pin_memory=pin_memory, persistent_workers=persistent_workers)
-    if name=='chest_xray_nih_encoder':
+    elif name=='chest_xray_nih_encoder':
         train_ds = ChestXRay_nih(mode='train', training_platform = training_platform, val_split_ratio=0)
         val_ds = ChestXRay_nih(mode='test', training_platform = training_platform)
         test_ds = ChestXRay_nih(mode='test', training_platform = training_platform)
@@ -124,7 +126,49 @@ def get_dataloaders(name: str,
                 persistent_workers = persistent_workers
             )
             return dl
-    if name=='isic2019_encoder':
+    elif name=='chest_xray_acpl':
+        label_ratio=2
+        runtime=1
+        warnings.warn('&&&&&&&&&&&&&&&&&& ACPL DATASETS - REMEMBER WE HAVE LABEL RATIO AND RUNTIME HARDCODED AND MOCKED IN DIFFERENT PLACES!!!!!!!!!')
+        loader = ChestACPLDataloader(
+            batch_size=16,
+            num_workers=num_workers,
+            training_platform='local_sano',
+        )
+        (test_loader, test_dataset, test_sampler) = loader.run(
+            "test",
+            ratio=label_ratio,
+            runtime=runtime,
+        )
+        
+        (label_loader1, label_dataset, label_sampler,) = loader.run(
+            "labeled",
+            ratio=label_ratio,
+            runtime=runtime,
+        )
+        
+        (anchor_loader, anchor_dataset, anchor_sampler,) = loader.run(
+            "anchor",
+            ratio=label_ratio,
+            runtime=runtime,
+        )
+
+        if label_ratio != 100:
+            (unlabel_loader, unlabel_dataset, unlabel_sampler,) = loader.run(
+                "unlabeled",
+                ratio=label_ratio,
+                runtime=runtime,
+            )
+            return (label_loader1, label_dataset, label_sampler),  \
+                    (test_loader, test_dataset, test_sampler), \
+                    (anchor_loader, anchor_dataset, anchor_sampler), \
+                    (unlabel_loader, unlabel_dataset, unlabel_sampler), \
+                    loader
+            
+        raise NotImplementedError("fully labeled data not supported in this loader")
+        return (label_loader1, label_dataset, label_sampler),  (test_loader, test_dataset, test_sampler), (anchor_loader, anchor_dataset, anchor_sampler)
+
+    elif name=='isic2019_encoder':
         train_ds = ISIC2019(mode='train', training_platform = training_platform, extend_with_test=True, val_split_ratio=0)
         val_ds = ISIC2019(mode='test', training_platform = training_platform)
         test_ds = ISIC2019(mode='test', training_platform = training_platform)
