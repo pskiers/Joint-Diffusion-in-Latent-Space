@@ -289,8 +289,24 @@ class MultilabelClassifierACPL(pl.LightningModule):
 
     
     def on_train_epoch_end(self) -> None:
-        # we have psudolabel-enhanced trainings in between epoch ends. That;s why we have strange if-conditions
-        if (self.current_epoch+1)%10==0 and (self.current_epoch+1)>10:    
+        # we have psudolabel-enhanced trainings in between epoch ends.
+        # That;s why we have strange if-conditions and order
+
+        # here we deal with after-loop operations first. First we have to close epoch 29.
+        if self.current_epoch==29 \
+            or self.current_epoch==39 \
+                or self.current_epoch==49 \
+                    or self.current_epoch==59 \
+                        or self.current_epoch==69:
+            if dist.get_rank()==0:
+                self.acpl_actions_after_training_loop()
+
+        # here we prepare operations for next loop. At the end of 29th epoch we prepare for 30th epoch.
+        if self.current_epoch==19 \
+            or self.current_epoch==29 \
+                or self.current_epoch==39 \
+                    or self.current_epoch==49 \
+                        or self.current_epoch==59:    
             print('current epoch, curr dataloader len', self.current_epoch, len(self.trainer.datamodule.train_dataloader()))
             
             if dist.get_rank()==0:
@@ -303,9 +319,7 @@ class MultilabelClassifierACPL(pl.LightningModule):
             new_labeled_loader = objects[0]
             print("#%&$&%&%&%&%&%&%%&%&%&%&%", self.trainer.global_rank, len(new_labeled_loader))
             self.trainer.datamodule.update_train_loader(new_labeled_loader)
-        elif (self.current_epoch)%10==0 and self.acpl_loop>0: 
-            if dist.get_rank()==0:
-                self.acpl_actions_after_training_loop()
+       
         return 
     
     def mock_acpl_args(self):
