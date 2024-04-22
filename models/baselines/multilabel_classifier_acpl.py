@@ -46,7 +46,7 @@ def instantiate_from_config(config):
     return get_obj_from_str(config["target"])(**config.get("params", dict()))
 
 def lr_lambda(epoch: int):
-        if epoch > 15:
+        if epoch > 14: #0.7 of 20epochs
             return 0.1
         else:
             return 1.0

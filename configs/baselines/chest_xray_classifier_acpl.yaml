@@ -59,6 +59,6 @@ lightning:
     benchmark: True
     checkpoint_callback: True
     max_epochs: 70
-    gpus: [1]
+    gpus: [2]
     accelerator: ddp
     # accumulate_grad_batches: 2

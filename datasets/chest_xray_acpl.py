@@ -179,8 +179,8 @@ class ChestACPLDataloader:
         loader = DataLoader(
             dataset=all_dataset,
             batch_size=batch_size,
-            shuffle=False,
-            sampler=sampler,
+            shuffle=True,
+            #sampler=sampler,
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True if mode == "labeled" else False,
