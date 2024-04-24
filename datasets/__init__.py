@@ -167,6 +167,59 @@ def get_dataloaders(name: str,
             
         raise NotImplementedError("fully labeled data not supported in this loader")
         return (label_loader1, label_dataset, label_sampler),  (test_loader, test_dataset, test_sampler), (anchor_loader, anchor_dataset, anchor_sampler)
+    elif name=='chest_xray_ssl_acpl':
+        diffusion_ds= ChestXRay_nih_ssl(mode='train', 
+                                training_platform = training_platform, 
+                                labeled = False)
+        ## for diffusion part we take all data = labeled + unlabeled
+        diffusion_loader = DataLoader(
+        diffusion_ds,
+        sampler=RandomSampler(diffusion_ds),
+        batch_size=train_batches[0],
+        num_workers=num_workers,
+        drop_last=True)
+
+        ## for acpl - labeled data plus anchor/unlabeled loaders
+        label_ratio=2
+        runtime=1
+        warnings.warn('&&&&&&&&&&&&&&&&&& ACPL DATASETS - REMEMBER WE HAVE LABEL RATIO AND RUNTIME HARDCODED AND MOCKED IN DIFFERENT PLACES!!!!!!!!!')
+        loader = ChestACPLDataloader(
+            batch_size=train_batches[0],
+            num_workers=num_workers,
+            training_platform=training_platform,
+        )
+        (test_loader, test_dataset, test_sampler) = loader.run(
+            "test",
+            ratio=label_ratio,
+            runtime=runtime,
+        )
+        
+        (label_loader1, label_dataset, label_sampler,) = loader.run(
+            "labeled",
+            ratio=label_ratio,
+            runtime=runtime,
+        )
+        
+        (anchor_loader, anchor_dataset, anchor_sampler,) = loader.run(
+            "anchor",
+            ratio=label_ratio,
+            runtime=runtime,
+        )
+
+        if label_ratio != 100:
+            (unlabel_loader, unlabel_dataset, unlabel_sampler,) = loader.run(
+                "unlabeled",
+                ratio=label_ratio,
+                runtime=runtime,
+            )
+            return diffusion_loader, \
+                (label_loader1, label_dataset, label_sampler),  \
+                (test_loader, test_dataset, test_sampler), \
+                (anchor_loader, anchor_dataset, anchor_sampler), \
+                (unlabel_loader, unlabel_dataset, unlabel_sampler), \
+                loader
+            
+        raise NotImplementedError("fully labeled data not supported in this loader")
 
     elif name=='isic2019_encoder':
         train_ds = ISIC2019(mode='train', training_platform = training_platform, extend_with_test=True, val_split_ratio=0)

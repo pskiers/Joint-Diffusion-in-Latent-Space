@@ -114,7 +114,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         loss = nn.functional.binary_cross_entropy_with_logits(
             y_pred[:,:self.used_n_classes], y.float()[:,:self.used_n_classes], pos_weight=self.BCEweights.to(self.device))
         
-        accuracy = accuracy_score(y[:,:self.used_n_classes].cpu(), nn.functional.sigmoid(y_pred)[:,:self.used_n_classes].cpu()>=0.5)
+        accuracy = 0 #accuracy_score(y[:,:self.used_n_classes].cpu(), nn.functional.sigmoid(y_pred)[:,:self.used_n_classes].cpu()>=0.5)
         return loss, accuracy, y_pred
 
 

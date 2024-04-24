@@ -62,13 +62,13 @@ class ChestXRay_nih_ssl(ChestXRay_nih):
         # self.X_labeled_train, self.y_labeled_train, self.X_labeled_val, self.y_labeled_val = X_labeled, y_labeled, X_labeled, y_labeled
 
         #### splits from ACPL
-        split_file = open("/data/jan_dubinski/Joint-Diffusion-in-Latent-Space/datasets/chest_xray_ssl_train_list_2_3.txt", "r") 
+        split_file = open("/home/jk/Joint-Diffusion-in-Latent-Space/datasets/chest_xray_ssl_train_list_2_1.txt", "r") 
         split_data = [os.path.join(self.data_path, "images", l) for l in split_file.read().splitlines()]
         split_file.close() 
         train_idxs = np.isin(X, split_data).squeeze()
         self.X_labeled_train = X[train_idxs].copy()
         self.y_labeled_train = y[train_idxs].copy()
-        print("We have val only to avoid errors")
+        print("[WARNING] Chest_xray_nih_sssl.py dataset - TO avoid errors we have val loader mocked with train data 2%!!!!")
         self.X_labeled_val = X[train_idxs].copy()
         self.y_labeled_val = y[train_idxs].copy()
 
@@ -81,12 +81,12 @@ class ChestXRay_nih_ssl(ChestXRay_nih):
                 self.final_image_df = self.X_labeled_train.copy()
                 self.final_label = self.y_labeled_train.copy()
             elif self.mode=="val":
-                self.final_image_df = self.X_labeled_val.copy()
-                self.final_label = self.y_labeled_val.copy()
+                self.final_image_df = self.X_labeled_val.copy()[:400]
+                self.final_label = self.y_labeled_val.copy()[:400]
 
         else:
-            self.final_image_df = self.X_unlabeled.copy()
-            self.final_label = self.y_unlabeled.copy()
+            self.final_image_df = self.X_unlabeled.copy()[:400]
+            self.final_label = self.y_unlabeled.copy()[:400]
 
         
         #del self.X_unlabeled, self.y_unlabeled, X_labeled, y_labeled, self.X_labeled_train, self.y_labeled_train, self.X_labeled_val, self.y_labeled_val, X, y

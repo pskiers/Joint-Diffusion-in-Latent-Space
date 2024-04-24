@@ -23,6 +23,7 @@ from easydict import EasyDict as edict
 from tqdm import tqdm
 import time
 from types import SimpleNamespace
+from models.densenet import densenet121
 
 def disabled_train(self, mode=True):
     """Overwrite model.train with this function to make sure train/eval mode
@@ -128,10 +129,14 @@ class MultilabelClassifierACPL(pl.LightningModule):
                 nn.Linear(self.in_features, self.num_classes),
                 )
         elif self.classifier_test_mode == "densenet":
-            # ref impl https://github.com/zoogzog/chexnet/blob/master/DensenetModels.py
-            self.densenet = densenet121(weights = DenseNet121_Weights.DEFAULT)
-            self.num_classes = self.num_classes
-            self.densenet.classifier = nn.Sequential(nn.Linear(self.in_features, self.num_classes))
+            # # ref impl https://github.com/zoogzog/chexnet/blob/master/DensenetModels.py
+            # self.densenet = densenet121(weights = DenseNet121_Weights.DEFAULT)
+            # self.num_classes = self.num_classes
+            # self.densenet.classifier = nn.Sequential(nn.Linear(self.in_features, self.num_classes))
+            self.densenet = densenet121(pretrained=True)
+            in_features = 1024
+            self.densenet.classifier = nn.Linear(in_features, self.num_classes)
+            self.densenet = nn.SyncBatchNorm.convert_sync_batchnorm(self.densenet)
 
         else:
             print('TEST NOT IMPLEMENTED')
@@ -184,12 +189,12 @@ class MultilabelClassifierACPL(pl.LightningModule):
         elif self.classifier_test_mode == "resnet":
             out = self.resnet(imgs)
         elif self.classifier_test_mode == "densenet":
-            #out = self.densenet(imgs)
-            repr = self.densenet.features(imgs)
-            repr = F.relu(repr, inplace=True)
-            repr = F.adaptive_avg_pool2d(repr, (1, 1))
-            repr = torch.flatten(repr, 1)
-            out = self.densenet.classifier(repr)
+            out, repr = self.densenet(imgs)
+            # repr = self.densenet.features(imgs)
+            # repr = F.relu(repr, inplace=True)
+            # repr = F.adaptive_avg_pool2d(repr, (1, 1))
+            # repr = torch.flatten(repr, 1)
+            # out = self.densenet.classifier(repr)
         return out
     
     def forward_with_repr(self, imgs: torch.Tensor):
@@ -200,13 +205,14 @@ class MultilabelClassifierACPL(pl.LightningModule):
         elif self.classifier_test_mode == "resnet":
             raise NotImplementedError
         elif self.classifier_test_mode == "densenet":
-            repr = self.densenet.features(imgs)
-            repr = F.relu(repr, inplace=True)
-            repr = F.adaptive_avg_pool2d(repr, (1, 1))
-            repr = torch.flatten(repr, 1)
-            out = self.densenet.classifier(repr)
+             out, repr = self.densenet(imgs)
+            # repr = self.densenet.features(imgs)
+            # repr = F.relu(repr, inplace=True)
+            # repr = F.adaptive_avg_pool2d(repr, (1, 1))
+            # repr = torch.flatten(repr, 1)
+            # out = self.densenet.classifier(repr)
 
-        return out, F.normalize(repr, dim=-1, p=2)
+        return out, repr #F.normalize(repr, dim=-1, p=2)
 
     
     def configure_optimizers(self):

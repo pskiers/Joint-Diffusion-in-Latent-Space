@@ -5,3 +5,4 @@ from .ssl_joint_diffusion import SSLJointLatentDiffusion, SSLJointLatentDiffusio
 from .diff_match import LatentDiffMatch, LatentDiffMatchV2, LatentDiffMatchV3, LatentDiffMatchWithSampling, LatentDiffMatchPooling, LatentDiffMatchAttention
 from .diff_match_multilabel import LatentDiffMatchPoolingMultilabel, LatentDiffMatchAttentionMultiLabel
 from .simple_ssl_multilabel import LatentSSLPoolingMultilabel
+from .ssl_multilabel_acpl import LatentSSLPoolingMultilabelACPL

@@ -46,13 +46,13 @@ class ChestACPLDataset(Dataset):
             transformList.append(transforms.RandomResizedCrop(256))
             transformList.append(transforms.RandomHorizontalFlip())
             transformList.append(transforms.ToTensor())
-            transformList.append(transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]))      
+            transformList.append(transforms.Normalize(0.5, 0.5)) #[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]))  #adjusted to 14 classes    
             self.transform=transforms.Compose(transformList)
         else:
             transformList = []
             transformList.append(transforms.Resize(256))
             transformList.append(transforms.ToTensor())
-            transformList.append(transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]))  
+            transformList.append(transforms.Normalize(0.5, 0.5)) #[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]))  #adjusted to 14 classes
             self.transform=transforms.Compose(transformList)
 
         gr_path = os.path.join(root_dir, "Data_Entry_2017.csv")
@@ -67,7 +67,7 @@ class ChestACPLDataset(Dataset):
         )
         with open(img_list) as f:
             names = f.read().splitlines()
-        self.labeled_imgs = np.asarray([x for x in names])
+        self.labeled_imgs = np.asarray([x for x in names])[:400]
 
         all_img_list = os.path.join(root_dir, "train_val_list.txt")
         with open(all_img_list) as f:
@@ -75,19 +75,19 @@ class ChestACPLDataset(Dataset):
 
         labeled_gr = np.asarray([gr[i] for i in self.labeled_imgs])
 
-        self.labeled_gr = np.zeros((labeled_gr.shape[0], 15), dtype=np.int32)
+        self.labeled_gr = np.zeros((labeled_gr.shape[0], 14), dtype=np.int32) #adjjusted to 14 classes
         for idx, i in enumerate(labeled_gr):
             target = i.split("|")
             binary_result = mlb.fit_transform([[Labels[i] for i in target]]).squeeze()
-            self.labeled_gr[idx] = binary_result
+            self.labeled_gr[idx] = binary_result[:-1] #adjusted to 14 classes
         self.all_imgs = np.asarray([x for x in all_names])
-        self.unlabeled_imgs = np.setdiff1d(self.all_imgs, self.labeled_imgs)
+        self.unlabeled_imgs = np.setdiff1d(self.all_imgs, self.labeled_imgs)[:400]
         unlabeled_gr = np.asarray([gr[i] for i in self.unlabeled_imgs])
-        self.unlabeled_gr = np.zeros((unlabeled_gr.shape[0], 15), dtype=np.int32)
+        self.unlabeled_gr = np.zeros((unlabeled_gr.shape[0], 14), dtype=np.int32) #adjusted to 14 classes
         for idx, i in enumerate(unlabeled_gr):
             target = i.split("|")
             binary_result = mlb.fit_transform([[Labels[i] for i in target]]).squeeze()
-            self.unlabeled_gr[idx] = binary_result
+            self.unlabeled_gr[idx] = binary_result[:-1] #adjusted to 14 classes
 
     def x_add_pl(self, pl, idxs):
         self.labeled_imgs = np.concatenate(
@@ -130,8 +130,8 @@ class ChestACPLDataset(Dataset):
             input_path = float(self.labeled_imgs[item].split(".")[0].replace("_", "."))
             target = self.labeled_gr[item]
             
-        img = Image.fromarray(io.imread(img_path)).convert("RGB")
-        img_w = self.transform(img)
+        img = Image.fromarray(io.imread(img_path)).convert("L") #"RGB") #adjusted to 14 classes
+        img_w = self.transform(img).squeeze() #adjusted to 14 classes
         return (img_w, target, item, input_path)
 
     def __len__(self):
@@ -173,14 +173,14 @@ class ChestACPLDataloader:
         )
         sampler = (
             RandomSampler(all_dataset)
-            if mode == "labeled"
-            else SequentialSampler(all_dataset)
+            # if mode == "labeled"
+            # else SequentialSampler(all_dataset)
         )
         loader = DataLoader(
             dataset=all_dataset,
             batch_size=batch_size,
-            shuffle=True,
-            #sampler=sampler,
+            shuffle=False,
+            sampler=sampler,
             num_workers=self.num_workers,
             pin_memory=True,
             drop_last=True if mode == "labeled" else False,

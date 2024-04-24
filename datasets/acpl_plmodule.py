@@ -4,6 +4,9 @@ from pytorch_lightning.trainer.supporters import CombinedLoader
 
 class ACPLDataModule(LightningDataModule):
     def __init__(self, train_loader, val_loader, unlabeled_loader=None, anchor_loader=None):
+        """
+        train_loader = list[labeled, unlabeled] for joint diiffusion or labeled for ACPL_densenet
+        """
         super().__init__()
         self.train_loader = train_loader
         self.val_loader = val_loader
@@ -17,7 +20,10 @@ class ACPLDataModule(LightningDataModule):
         return self.val_loader# CombinedLoader([self.val_loader, self.anchor_loader, self.unlabeled_loader], "sequential")
 
     def update_train_loader(self, new_loader):
-        self.train_loader = new_loader
+        if type(self.train_loader)==list:
+            self.train_loader = [new_loader, self.train_loader[1]]
+        else:
+            self.train_loader = new_loader
     
     # def predict_dataloader(self):
     #     return self.anchor_loader

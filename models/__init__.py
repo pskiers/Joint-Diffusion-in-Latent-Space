@@ -6,6 +6,7 @@ from .latent_diffusion import *
 from .standard_diffusion import *
 from .wide_resnet_unet import *
 from .wide_resnet import *
+from .densenet import densenet121
 
 def get_model_class(name: str):
     if name == "attention_on_latent_diffusion":
@@ -68,5 +69,7 @@ def get_model_class(name: str):
         return LatentSSLPoolingMultilabel
     elif name=="multilabel_classifier_acpl":
         return MultilabelClassifierACPL
+    elif name=="latent_ssl_pooling_multilabel_acpl":
+        return LatentSSLPoolingMultilabelACPL
     else:
         raise NotImplementedError(f"Model {name} is not available")
