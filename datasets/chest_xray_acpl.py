@@ -68,8 +68,6 @@ class ChestACPLDataset(Dataset):
         with open(img_list) as f:
             names = f.read().splitlines()
         self.labeled_imgs = np.asarray([x for x in names])
-        if mode!="test":
-            self.labeled_imgs = self.labeled_imgs
 
         all_img_list = os.path.join(root_dir, "train_val_list.txt")
         with open(all_img_list) as f:
