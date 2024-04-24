@@ -77,8 +77,11 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
         self.auroc_val_ema = AUROC(num_classes=self.used_n_classes)
         self.auroc_test_per_class = AUROC(num_classes=self.used_n_classes, average=None)
         self.auroc_test = AUROC(num_classes=self.used_n_classes)
+        self.auroc_test_no_ema = AUROC(num_classes=self.used_n_classes)
+
         
         self.BCEweights = torch.Tensor(weights)[:self.used_n_classes]
+        self.min_step_for_KNN = 0
     
     def configure_optimizers(self):
         lr = self.learning_rate

@@ -81,12 +81,12 @@ class ChestXRay_nih_ssl(ChestXRay_nih):
                 self.final_image_df = self.X_labeled_train.copy()
                 self.final_label = self.y_labeled_train.copy()
             elif self.mode=="val":
-                self.final_image_df = self.X_labeled_val.copy()[:400]
-                self.final_label = self.y_labeled_val.copy()[:400]
+                self.final_image_df = self.X_labeled_val.copy()
+                self.final_label = self.y_labeled_val.copy()
 
         else:
-            self.final_image_df = self.X_unlabeled.copy()[:400]
-            self.final_label = self.y_unlabeled.copy()[:400]
+            self.final_image_df = self.X_unlabeled.copy()
+            self.final_label = self.y_unlabeled.copy()
 
         
         #del self.X_unlabeled, self.y_unlabeled, X_labeled, y_labeled, self.X_labeled_train, self.y_labeled_train, self.X_labeled_val, self.y_labeled_val, X, y

@@ -68,6 +68,7 @@ class LatentSSLPoolingMultilabelACPL(JointLatentDiffusionMultilabel):
             **kwargs
         )
         self.acpl_loop=0
+        self.min_step_for_acpl = -1
 
     def get_sampl(self):
         print("sampling_method, gradient_guided_samplings", self.sampling_method, self.gradient_guided_sampling)
@@ -195,16 +196,14 @@ class LatentSSLPoolingMultilabelACPL(JointLatentDiffusionMultilabel):
         # That;s why we have strange if-conditions and order
 
         # here we deal with after-loop operations first. First we have to close epoch 29.
-        if self.current_epoch==1\
-            or self.current_epoch==2:
-            if dist.get_rank()==0:
-                self.acpl_actions_after_training_loop()
+        if self.global_step>=self.min_step_for_acpl:
+            # we do it after first (second, third, ... but NOT befeore) ACPL loop finishes
+            if self.min_step_for_acpl!=0:
+                if dist.get_rank()==0:
+                    self.acpl_actions_after_training_loop()
 
-        # here we prepare operations for next loop. At the end of 29th epoch we prepare for 30th epoch.
-        if self.current_epoch==0 \
-            or self.current_epoch==1:    
+            #prepare data for the coming ACPL loop
             print('current epoch, curr dataloader len', self.current_epoch, len(self.trainer.datamodule.train_dataloader()))
-            
             if dist.get_rank()==0:
                 self.acpl_actions_before_training_loop()
                 objects = [self.trainer.labeled_loader]
@@ -215,7 +214,7 @@ class LatentSSLPoolingMultilabelACPL(JointLatentDiffusionMultilabel):
             new_labeled_loader = objects[0]
             print("#%&$&%&%&%&%&%&%%&%&%&%&%", self.trainer.global_rank, len(new_labeled_loader))
             self.trainer.datamodule.update_train_loader(new_labeled_loader)
-       
+        self.min_step_for_acpl = self.global_step+10000
         return 
     
     def mock_acpl_args(self):
@@ -225,7 +224,7 @@ class LatentSSLPoolingMultilabelACPL(JointLatentDiffusionMultilabel):
                  "topk": 200, 
                  "gpu": self.device.index,
                  "label_ratio":2, 
-                 "runtime": 1}
+                 "runtime": 3}
         self.mock_args = SimpleNamespace(**args)
 
     def acpl_actions_before_training_loop(self):
@@ -427,3 +426,42 @@ class LatentSSLPoolingMultilabelACPL(JointLatentDiffusionMultilabel):
        
         concat = tensor
         return concat[:num_total_examples]
+    
+    @torch.no_grad()
+    def validation_step(self, batch, batch_idx):
+        # TODO reduce repeating code
+        self.log("global_step", self.global_step,
+                    prog_bar=True, logger=True, on_step=True, on_epoch=False, add_dataloader_idx=False)
+        
+        x, y = self.get_valid_classification_input(batch, self.first_stage_key)
+        t = torch.zeros((x.shape[0],), device=self.device).long()
+        x_diff, c = self.get_input(batch, self.first_stage_key)
+        
+        
+        loss, loss_dict_no_ema = self(x_diff, c)
+        loss_cls, accuracy, y_pred = self.do_classification(x, t, y)   
+
+        loss_dict_no_ema.update({'test/loss_classification': loss_cls})
+        loss_dict_no_ema.update({'test/loss_full': loss + self.classification_loss_weight*loss_cls})
+        loss_dict_no_ema.update({'test/loss_diff': loss})
+        loss_dict_no_ema.update({'test/accuracy': accuracy})
+        self.log_dict(loss_dict_no_ema, prog_bar=True, logger=True, on_step=False, on_epoch=True, add_dataloader_idx=False)
+        
+        self.auroc_test_no_ema.update(y_pred[:,:self.used_n_classes], y[:,:self.used_n_classes])
+        self.log('test/auroc', self.auroc_test_no_ema, on_step=False, on_epoch=True, sync_dist=True, add_dataloader_idx=False)
+            
+        with self.ema_scope():
+            loss, loss_dict_ema = self(x_diff, c)
+            loss_cls, accuracy, y_pred = self.do_classification(x, t, y)
+
+            loss_dict_ema.update({'test/loss_classification': loss_cls})
+            loss_dict_ema.update({'test/loss_full': loss + self.classification_loss_weight*loss_cls})
+            loss_dict_ema.update({'test/accuracy': accuracy})
+            loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
+            self.log_dict(loss_dict_ema, prog_bar=True, logger=True, on_step=False, on_epoch=True, add_dataloader_idx=False)
+            
+            self.auroc_test.update(y_pred[:,:self.used_n_classes], y[:,:self.used_n_classes])
+            self.log('test/auroc_ema', self.auroc_test, on_step=False, on_epoch=True, sync_dist=True, add_dataloader_idx=False)
+            
+            self.auroc_test_per_class.update(y_pred[:,:self.used_n_classes], y[:,:self.used_n_classes])
+            # non aggregated auroc computed in on_validation_end()

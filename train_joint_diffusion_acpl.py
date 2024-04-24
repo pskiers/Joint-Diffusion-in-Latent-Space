@@ -111,7 +111,7 @@ if __name__ == "__main__":
     
     print("[WARNING] train_joint_diff_acpl.py - IN ACPL datamodule TO avoid errors we have val loader mocked with train data 2%!!!!")
     acpl_data_datamodule = ACPLDataModule(train_loader=[labeled_items[0], diffusion_loader], #get only dataloader
-                                          val_loader=[test_items[0],test_items[0]] #get only dataloader
+                                          val_loader=test_items[0] #get only dataloader
                                         #   anchor_loader=anchor_items[0],
                                         #   unlabeled_loader=unlabeled_items[0]
                                         )

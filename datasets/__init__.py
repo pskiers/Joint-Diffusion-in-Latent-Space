@@ -128,7 +128,7 @@ def get_dataloaders(name: str,
             return dl
     elif name=='chest_xray_acpl':
         label_ratio=2
-        runtime=1
+        runtime=3
         warnings.warn('&&&&&&&&&&&&&&&&&& ACPL DATASETS - REMEMBER WE HAVE LABEL RATIO AND RUNTIME HARDCODED AND MOCKED IN DIFFERENT PLACES!!!!!!!!!')
         loader = ChestACPLDataloader(
             batch_size=16,
@@ -181,8 +181,8 @@ def get_dataloaders(name: str,
 
         ## for acpl - labeled data plus anchor/unlabeled loaders
         label_ratio=2
-        runtime=1
-        warnings.warn('&&&&&&&&&&&&&&&&&& ACPL DATASETS - REMEMBER WE HAVE LABEL RATIO AND RUNTIME HARDCODED AND MOCKED IN DIFFERENT PLACES!!!!!!!!!')
+        runtime=3
+        warnings.warn('&&&&&&&&&&&&&&&&&& ACPL DATASETS - REMEMBER WE HAVE LABEL RATIO AND RUNTIME HARDCODED AND MOCKED IN DIFFERENT PLACES self.mock_acpl_args()!!!!!!!!!')
         loader = ChestACPLDataloader(
             batch_size=train_batches[0],
             num_workers=num_workers,

@@ -20,18 +20,18 @@ Labels = {
     "No Finding": 14,
     "Atelectasis": 0,
     "Cardiomegaly": 1,
-    "Effusion": 2,
-    "Infiltration": 3,
-    "Mass": 4,
-    "Nodule": 5,
-    "Pneumonia": 6,
-    "Pneumothorax": 7,
-    "Consolidation": 8,
-    "Edema": 9,
-    "Emphysema": 10,
-    "Fibrosis": 11,
-    "Pleural_Thickening": 12,
-    "Hernia": 13,
+    "Consolidation": 2,
+    "Edema": 3,
+    "Effusion": 4,
+    "Emphysema": 5,
+    "Fibrosis": 6,
+    "Hernia": 7,
+    "Infiltration": 8,
+    "Mass": 9,
+    "Nodule": 10,
+    "Pleural_Thickening": 11,
+    "Pneumonia": 12,
+    "Pneumothorax": 13,
 }
 mlb = MultiLabelBinarizer(classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14])
 
@@ -67,7 +67,9 @@ class ChestACPLDataset(Dataset):
         )
         with open(img_list) as f:
             names = f.read().splitlines()
-        self.labeled_imgs = np.asarray([x for x in names])[:400]
+        self.labeled_imgs = np.asarray([x for x in names])
+        if mode!="test":
+            self.labeled_imgs = self.labeled_imgs
 
         all_img_list = os.path.join(root_dir, "train_val_list.txt")
         with open(all_img_list) as f:
@@ -81,7 +83,7 @@ class ChestACPLDataset(Dataset):
             binary_result = mlb.fit_transform([[Labels[i] for i in target]]).squeeze()
             self.labeled_gr[idx] = binary_result[:-1] #adjusted to 14 classes
         self.all_imgs = np.asarray([x for x in all_names])
-        self.unlabeled_imgs = np.setdiff1d(self.all_imgs, self.labeled_imgs)[:400]
+        self.unlabeled_imgs = np.setdiff1d(self.all_imgs, self.labeled_imgs)
         unlabeled_gr = np.asarray([gr[i] for i in self.unlabeled_imgs])
         self.unlabeled_gr = np.zeros((unlabeled_gr.shape[0], 14), dtype=np.int32) #adjusted to 14 classes
         for idx, i in enumerate(unlabeled_gr):
@@ -153,7 +155,12 @@ class ChestACPLDataloader:
         self.num_workers = num_workers
         self.img_resize = img_resize
 
-        self.root_dir = "/home/jk/Joint-Diffusion-in-Latent-Space/chest_xray_nih" if training_platform=="local_sano" else None
+        if training_platform=="local_sano":
+            self.root_dir = "/home/jk/Joint-Diffusion-in-Latent-Space/chest_xray_nih"  
+        elif training_platform=="de":
+            self.root_dir = "/data/jan_dubinski/Joint-Diffusion-in-Latent-Space/sano_machines/data"
+        else:
+            raise NotImplemented("no training platform for ACPL")
 
     def run(self, mode, dataset=None, ratio=2, runtime=1):
 
