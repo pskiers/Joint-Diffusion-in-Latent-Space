@@ -18,7 +18,7 @@ from types import SimpleNamespace
 import torch.distributed as dist
 from models.pl_utils import PLUL
 from torch.nn import functional as F
-
+import time
 
 class LatentSSLPoolingMultilabelACPL(JointLatentDiffusionMultilabel):
     def __init__(self,
@@ -208,6 +208,16 @@ class LatentSSLPoolingMultilabelACPL(JointLatentDiffusionMultilabel):
                 self.acpl_actions_before_training_loop()
                 objects = [self.trainer.labeled_loader]
             else:
+                print("RANK other than 0 starts mocking work")
+                start_time = time.time()
+                t=0
+                while t<900:
+                    now_time = time.time()
+                    t = now_time - start_time
+                    t = torch.tensor(t).to(self.device)
+                del t
+                print("RANK other than 0 successfully mocked working")
+
                 objects = [None]
             dist.barrier()
             dist.broadcast_object_list(objects, src=0)
