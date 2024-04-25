@@ -202,8 +202,10 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
     def on_validation_epoch_end(self):
         metric = self.auroc_test_per_class.compute()
         self.auroc_test_per_class.reset()
+        cl_list = ["Atelectasis","Cardiomegaly","Consolidation","Edema","Effusion","Emphysema","Fibrosis", "Hernia","Infiltration", "Mass", "Nodule","Pleural_Thickening","Pneumonia","Pneumothorax","No Finding"]
         for i in range(14):
             self.log(f'test/auroc_ema_class{i}', metric[i], on_step=False, on_epoch=True, add_dataloader_idx=False)
+            self.log(f'test/auroc_ema_class{i}_{cl_list[i]}', metric[i], on_step=False, on_epoch=True, add_dataloader_idx=False)
         
     @torch.no_grad()
     def test_step(self, batch, batch_idx):
