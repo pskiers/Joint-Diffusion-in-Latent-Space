@@ -184,7 +184,8 @@ class LatentSSLPoolingMultilabelACPL(JointLatentDiffusionMultilabel):
         t = torch.zeros((inputs.shape[0],), device=self.device).long()
         representations = unet.just_representations(inputs, t, pooled=False)
         representations = self.transform_representations(representations)
-        y_pred = self.classifier(representations)
+        representations = self.classifier[:-1](representations)
+        y_pred = self.classifier[-1](representations)
         return y_pred, F.normalize(representations, dim=-1, p=2)
     
     @torch.no_grad()
