@@ -224,7 +224,7 @@ class LatentSSLPoolingMultilabelACPL(JointLatentDiffusionMultilabel):
             new_labeled_loader = objects[0]
             print("#%&$&%&%&%&%&%&%%&%&%&%&%", self.trainer.global_rank, len(new_labeled_loader))
             self.trainer.datamodule.update_train_loader(new_labeled_loader)
-        self.min_step_for_acpl = self.global_step+10000
+            self.min_step_for_acpl = self.global_step+10000
         return 
     
     def mock_acpl_args(self):
