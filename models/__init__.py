@@ -62,5 +62,9 @@ def get_model_class(name: str):
         return DDPM
     elif name == "diffmatch_pooling_multilabel":
         return DiffMatchPoolingMultilabel
+    elif name == "joint_latent_diffusion_multilabel":
+        return JointLatentDiffusionMultilabel
+    elif name == "latent_diffmatch_multilabel":
+        return LatentDiffMatchPoolingMultilabel
     else:
         raise NotImplementedError(f"Model {name} is not available")

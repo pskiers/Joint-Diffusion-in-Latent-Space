@@ -275,7 +275,8 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
                    plot_diffusion_rows=True,
                    sample_classes=None,
                    **kwargs):
-        self.sample_classes = torch.tensor(sample_classes).to(self.device)
+        if sample_classes is not None:
+            self.sample_classes = torch.tensor(sample_classes).to(self.device)
         return super().log_images(
             batch,
             N,
