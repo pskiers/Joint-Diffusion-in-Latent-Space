@@ -1,0 +1,100 @@
+model:
+  base_learning_rate: 0.0003
+  model_type: fixmatch
+  params:
+    min_confidence: 0.95
+    mu: 7
+    batch_size: 16
+    img_key: 0
+    label_key: 1
+    unsup_img_key: 0
+    monitor: "val/loss_ema"
+
+dataloaders:
+  validation:  
+    name: "isic2019"
+    root: "data/isic-2019"
+    split: "test"
+    resize: 64
+    batch_size: 256
+    num_workers: 16
+    sampler: "none"
+    shuffle: False
+    transforms:
+      - ToTensor:
+      - Normalize:
+          mean: [0.5, 0.5, 0.5]
+          std: [0.5, 0.5, 0.5]
+  train:
+    - ssl_split:
+        name: "isic2019"
+        root: "data/isic-2019"
+        split: "train"
+        resize: 64
+
+        num_labeled: 405
+        min_labeled: 32
+        equal_labels: False
+        seed: 42
+
+        supervised:
+          batch_size: 16
+          num_workers: 4
+          sampler: "random"
+          shuffle: False
+          transforms:
+            - RandomHorizontalFlip:
+            - RandomCrop:
+                size: 64
+                padding: 8
+                padding_mode: "reflect"
+            - ToTensor:
+            - Normalize:
+                mean: [0.5, 0.5, 0.5]
+                std: [0.5, 0.5, 0.5]
+
+        unsupervised:
+          batch_size: 112
+          num_workers: 12
+          sampler: "random"
+          shuffle: False
+          transforms:
+            - ParallelTransforms:
+              -
+                - ToTensor:
+                - Normalize:
+                    mean: [0.5, 0.5, 0.5]
+                    std: [0.5, 0.5, 0.5] 
+
+              - 
+                - RandomHorizontalFlip:
+                - RandomCrop:
+                    size: 64
+                    padding: 8
+                    padding_mode: "reflect"
+                - ToTensor:
+                - Normalize:
+                    mean: [0.5, 0.5, 0.5]
+                    std: [0.5, 0.5, 0.5] 
+              
+              - 
+                - RandomHorizontalFlip:
+                - RandomCrop:
+                    size: 64
+                    padding: 8
+                    padding_mode: "reflect"
+                - RandAugment:
+                    n: 2
+                    m: 10
+                - ToTensor:
+                - Normalize:
+                    mean: [0.5, 0.5, 0.5]
+                    std: [0.5, 0.5, 0.5]
+
+
+lightning:
+  trainer:
+    benchmark: True
+    checkpoint_callback: True
+    max_steps: 1000000
+    accumulate_grad_batches: 4
