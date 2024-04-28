@@ -118,7 +118,7 @@ class MultilabelClassifierACPL(pl.LightningModule):
                 nn.Linear(self.in_features//8, self.num_classes)
                 )
         elif self.classifier_test_mode == "resnet":
-            raise "Not a baseline, not tested, pls dont use it"
+            #raise "Not a baseline, not tested, pls dont use it"
             self.resnet = resnet50()
             self.resnet.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
             #for smaller imgs #self.resnet.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=2, bias=False)
@@ -203,7 +203,12 @@ class MultilabelClassifierACPL(pl.LightningModule):
         elif self.classifier_test_mode == "encoder_linear":
             raise NotImplementedError
         elif self.classifier_test_mode == "resnet":
-            raise NotImplementedError
+            repr = self.resnet.features(imgs)
+            repr = F.relu(repr, inplace=True)
+            repr = F.adaptive_avg_pool2d(repr, (1, 1))
+            repr = torch.flatten(repr, 1)
+            out = self.resnet.fc(repr)
+            repr = F.normalize(repr, dim=-1, p=2)
         elif self.classifier_test_mode == "densenet":
              out, repr = self.densenet(imgs)
             # repr = self.densenet.features(imgs)

@@ -2,10 +2,10 @@
 
 model:
   #logdir: /net/tscratch/people/plgjoaxkal/Joint-Diffusion-in-Latent-Space/
-  logdir: /home/jk/Joint-Diffusion-in-Latent-Space/
+  logdir: /data/jan_dubinski/Joint-Diffusion-in-Latent-Space/
   model_type: multilabel_classifier_acpl
   params:
-    classifier_test_mode: "densenet"
+    classifier_test_mode: "resnet" #"densenet"
     image_size: 256 # 32 for latent #not taken from config, hardcoded somewhere
     channels: 4
     monitor: test/auroc
@@ -51,7 +51,7 @@ dataloaders:
   num_labeled: null
   pin_memory: True
   persistent_workers: True
-  training_platform: local_sano #not taken from config, hardcoded somewhere
+  training_platform: de #not taken from config, hardcoded somewhere
 
 
 lightning:
