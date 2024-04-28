@@ -105,7 +105,6 @@ if __name__ == "__main__":
         # trainer_kwargs["callbacks"].append(FIDScoreLogger(**fid_cfg))
 
     trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs, 
-                                            #multiple_trainloader_mode = "min_size",
                                             reload_dataloaders_every_n_epochs = 1)
     trainer.logdir = logdir
     

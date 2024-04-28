@@ -71,5 +71,9 @@ def get_model_class(name: str):
         return MultilabelClassifierACPL
     elif name=="latent_ssl_pooling_multilabel_acpl":
         return LatentSSLPoolingMultilabelACPL
+    elif name=="latent_ssl_pooling_multilabel_temp":
+        return LatentSSLPoolingMultilabelTemp
+    elif name=="latent_ssl_pooling_multilabel_acpl_temp":
+        return LatentSSLPoolingMultilabelACPLTemp
     else:
         raise NotImplementedError(f"Model {name} is not available")

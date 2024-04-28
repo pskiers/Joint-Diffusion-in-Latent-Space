@@ -20,7 +20,7 @@ from models.pl_utils import PLUL
 from torch.nn import functional as F
 import time
 
-class LatentSSLPoolingMultilabelACPL(JointLatentDiffusionMultilabel):
+class LatentSSLPoolingMultilabelACPLTemp(JointLatentDiffusionMultilabel):
     def __init__(self,
                  first_stage_config,
                  cond_stage_config,
@@ -68,7 +68,7 @@ class LatentSSLPoolingMultilabelACPL(JointLatentDiffusionMultilabel):
             **kwargs
         )
         self.acpl_loop=0
-        self.min_step_for_acpl = -1
+        self.min_step_for_acpl = 1800 #-1 for resume, one epoch without acpl will be done
 
     def get_sampl(self):
         print("sampling_method, gradient_guided_samplings", self.sampling_method, self.gradient_guided_sampling)
@@ -131,24 +131,15 @@ class LatentSSLPoolingMultilabelACPL(JointLatentDiffusionMultilabel):
         )
 
     def training_step(self, batch, batch_idx):
-        # old version:
-        # if self.global_step%4!=0:
-        #     cat_x = torch.cat((batch[0][0], batch[1][0]))
-        #     cat_y = torch.cat((batch[0][1], batch[1][1]))
-        #     loss, loss_dict = self.shared_step((cat_x,cat_y))
-        # else:
-        #     loss, loss_dict = self.shared_step(batch[1])
-
-        #non-overfitting version:
-        loss, loss_dict = self.shared_step(batch[1])
-        self.log_dict(loss_dict, prog_bar=True,
-                      logger=True, on_step=True, on_epoch=True)
+        # loss, loss_dict = self.shared_step(batch[1])
+        # self.log_dict(loss_dict, prog_bar=True,
+        #               logger=True, on_step=True, on_epoch=True)
         self.log("global_step", self.global_step,
                  prog_bar=True, logger=True, on_step=True, on_epoch=False)
         if self.use_scheduler:
             lr = self.optimizers().param_groups[0]['lr']
             self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
-        
+        loss=0
         loss = self.train_classification_step(batch[0], loss)
         return loss
 
@@ -156,8 +147,8 @@ class LatentSSLPoolingMultilabelACPL(JointLatentDiffusionMultilabel):
         if self.classification_start > self.global_step:
             return loss
         
-        if self.global_step%4!=0:
-            return loss
+        # if self.global_step%4!=0:
+        #     return loss
         
         loss_dict = {}
 
@@ -214,7 +205,7 @@ class LatentSSLPoolingMultilabelACPL(JointLatentDiffusionMultilabel):
                 print("RANK other than 0 starts mocking work")
                 start_time = time.time()
                 t=0
-                while t<900:
+                while t<900: #just to avoid ncll timeout
                     now_time = time.time()
                     t = now_time - start_time
                     t = torch.tensor(t).to(self.device)
@@ -227,7 +218,7 @@ class LatentSSLPoolingMultilabelACPL(JointLatentDiffusionMultilabel):
             new_labeled_loader = objects[0]
             print("#%&$&%&%&%&%&%&%%&%&%&%&%", self.trainer.global_rank, len(new_labeled_loader))
             self.trainer.datamodule.update_train_loader(new_labeled_loader)
-            self.min_step_for_acpl = self.global_step+10000
+            self.min_step_for_acpl = self.global_step+900
         return 
     
     def mock_acpl_args(self):
