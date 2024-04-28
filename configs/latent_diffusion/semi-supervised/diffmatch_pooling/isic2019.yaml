@@ -1,0 +1,163 @@
+model:
+  base_learning_rate: 1.0e-04
+  weight_decay: 0.0000
+  model_type: latent_diffmatch_multilabel
+  params:
+    linear_start: 0.0015
+    linear_end: 0.0195
+    num_timesteps_cond: 1
+    log_every_t: 200
+    timesteps: 1000
+    first_stage_key: 0
+    image_size: 32
+    channels: 4
+    monitor: val/auroc_ema
+    weights: [1, 1, 1, 1, 1, 1, 1, 1]
+
+    classifier_lr: 1.0e-04
+    classification_key: 1
+    classification_loss_weight: 0.0005
+    augmentations: False
+    classifier_in_features: 4224
+    classifier_hidden: 1024 #we dont use it, now computed in code
+    num_classes: 8
+    dropout: 0.0
+
+    unet_config:
+      target: models.AdjustedUNet
+      params:
+        image_size: 32
+        in_channels: 4
+        out_channels: 4
+        model_channels: 192
+        attention_resolutions: [ 4,2,1 ]
+        num_res_blocks: 2
+        channel_mult: [ 1, 2, 4]
+        #num_head_channels: 32
+        pool_size: 10000
+        num_head_channels: 32
+
+    first_stage_config:
+      target: ldm.models.autoencoder.AutoencoderKL
+      params:
+        embed_dim: 4
+        monitor: "val/rec_loss"
+        ckpt_path: "pulled_checkpoints/encoder.ckpt"
+        ddconfig:
+          double_z: true
+          z_channels: 4
+          resolution: 256
+          in_channels: 3
+          out_ch: 3
+          ch: 128
+          ch_mult:
+          - 1
+          - 2
+          - 4
+          - 4
+          num_res_blocks: 2
+          attn_resolutions: []
+          dropout: 0.0
+        lossconfig:
+          target: torch.nn.Identity
+      base_learning_rate: 4.5e-06
+    cond_stage_config: __is_unconditional__
+
+dataloaders:
+  validation:  
+    name: "isic2019"
+    root: "data/isic-2019"
+    split: "test"
+    resize: 256
+    batch_size: 64
+    num_workers: 16
+    sampler: "none"
+    shuffle: False
+    transforms:
+      - ToTensor:
+      - Normalize:
+          mean: [0.5, 0.5, 0.5]
+          std: [0.5, 0.5, 0.5]
+      - Permute:
+          dims: [1, 2, 0]
+  train:
+    - ssl_split:
+        name: "isic2019"
+        root: "data/isic-2019"
+        split: "train"
+        resize: 256
+
+        num_labeled: 405
+        min_labeled: 32
+        equal_labels: False
+        seed: 42
+
+        supervised:
+          batch_size: 11
+          num_workers: 4
+          sampler: "random"
+          shuffle: False
+          transforms:
+            - RandomHorizontalFlip:
+            - RandomCrop:
+                size: 256
+                padding: 4
+                padding_mode: "reflect"
+            - RandAugment:
+                n: 2
+                m: 10
+            - ToTensor:
+            - Normalize:
+                mean: [0.5, 0.5, 0.5]
+                std: [0.5, 0.5, 0.5]
+            - Permute:
+                dims: [1, 2, 0]
+
+        unsupervised:
+          batch_size: 77
+          num_workers: 16
+          sampler: "random"
+          shuffle: False
+          transforms:
+            - RandomHorizontalFlip:
+            - RandomResizedCrop:
+                size: 256
+                scale: [0.64, 1.0]
+                antialias: True
+            - ToTensor:
+            - Normalize:
+                mean: [0.5, 0.5, 0.5]
+                std: [0.5, 0.5, 0.5]
+            - Permute:
+                dims: [1, 2, 0]
+
+
+lightning:
+  trainer:
+    benchmark: True
+    checkpoint_callback: True
+    max_steps: 1000000
+    accumulate_grad_batches: 3
+
+  callbacks:
+    # fid_logger:
+    #   batch_frequency: 100000
+    #   samples_amount: 10000
+    #   metrics_batch_size: 512
+    #   real_dl_batch_size: 448
+    #   latent: False
+    #   mean: [0.5, 0.5, 0.5]
+    #   std: [0.5, 0.5, 0.5]
+
+    img_logger:
+      batch_frequency: 10000
+      max_images: 64
+      clamp: True
+      increase_log_steps: False
+      log_images_kwargs: {
+          "N": 64,
+          "inpaint": False,
+          "plot_progressive_rows": False
+      }
+      mean: [0.5, 0.5, 0.5]
+      std: [0.5, 0.5, 0.5]

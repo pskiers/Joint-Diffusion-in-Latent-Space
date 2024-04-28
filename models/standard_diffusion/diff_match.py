@@ -800,6 +800,7 @@ class DiffMatchFixedPooling(DiffMatchFixed):
         classifier_hidden,
         num_classes,
         dropout=0,
+        load_optim_state=True,
         *args,
         **kwargs,
     ):
@@ -813,6 +814,7 @@ class DiffMatchFixedPooling(DiffMatchFixed):
         if self.use_ema:
             self.model_ema = FixMatchEma(self, decay=0.999)
             print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
+        self.load_optim_state = load_optim_state
         self.optim = None
         self.optim = self.configure_optimizers()
         if kwargs.get("ckpt_path", None) is not None:
@@ -821,7 +823,8 @@ class DiffMatchFixedPooling(DiffMatchFixed):
             self.init_from_ckpt(
                 kwargs["ckpt_path"], ignore_keys=ignore_keys, only_model=only_model
             )
-            self.init_optim_from_ckpt(kwargs["ckpt_path"])
+            if load_optim_state:
+                self.init_optim_from_ckpt(kwargs["ckpt_path"])
 
     def transform_representations(self, representations):
         representations = self.model.diffusion_model.pool_representations(

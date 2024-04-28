@@ -56,13 +56,13 @@ if __name__ == "__main__":
     cfgdir = path.join(logdir, "configs")
 
     trainer_kwargs = dict()
+    try:
+        per_class = f'{dl_config["train"][0]["ssl_split"]["num_labeled"]} per class'
+    except Exception:
+        per_class = "all labels"
     tags = [
         dl_config["validation"]["name"],
-        (
-            "all labels"
-            if next(iter(dl_config["train"][0])) == "dataset"
-            else f'{dl_config["train"][0]["ssl_split"]["num_labeled"]} per class'
-        ),
+        per_class,
         config.model.get("model_type"),
     ]
     trainer_kwargs["logger"] = pl.loggers.WandbLogger(

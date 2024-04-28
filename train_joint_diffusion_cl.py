@@ -16,16 +16,14 @@ from callbacks import (
     FIDScoreLogger,
     CheckpointEveryNSteps,
 )
-from cl_methods.generative_replay import GenerativeReplay
+from cl_methods.generative_replay import get_replay
 
 
 if __name__ == "__main__":
     environ["WANDB__SERVICE_WAIT"] = "300"
 
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--path", "-p", type=Path, required=True, help="path to config file"
-    )
+    parser.add_argument("--path", "-p", type=Path, required=True, help="path to config file")
     parser.add_argument(
         "--checkpoint",
         "-c",
@@ -34,12 +32,8 @@ if __name__ == "__main__":
         help="path to model checkpoint file",
     )
     parser.add_argument("--task", "-t", type=int, required=True, help="task id")
-    parser.add_argument(
-        "--learned", "-l", type=int, required=False, help="Learned tasks", nargs="+"
-    )
-    parser.add_argument(
-        "--new", "-n", type=Path, required=False, help="Ckpt to new task data generator"
-    )
+    parser.add_argument("--learned", "-l", type=int, required=False, help="Learned tasks", nargs="+")
+    parser.add_argument("--new", "-n", type=Path, required=False, help="Ckpt to new task data generator")
     parser.add_argument(
         "--old",
         "-o",
@@ -47,6 +41,7 @@ if __name__ == "__main__":
         required=False,
         help="Ckpt to old tasks data generator",
     )
+    parser.add_argument("--tags", type=str, required=False, help="Additional tags", nargs="+")
     args = parser.parse_args()
     config_path = str(args.path)
     # config_path = "configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml"
@@ -60,6 +55,7 @@ if __name__ == "__main__":
     # current_task = 1
     tasks_learned = args.learned if args.learned is not None else []
     # tasks_learned = [0]
+    tags = args.tags if args.tags is not None else []
 
     config = OmegaConf.load(config_path)
     # config = OmegaConf.load("configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml")
@@ -82,27 +78,23 @@ if __name__ == "__main__":
         num_workers=16,
     )
 
-    reply_buff = GenerativeReplay(train_bs=tasks_bs, sample_bs=250, dl_num_workers=16)
+    cl_config = config.pop("cl")
+
+    reply_buff = get_replay(cl_config.get("reply_type"))(train_bs=tasks_bs, sample_bs=140, dl_num_workers=16)
 
     if checkpoint_path is not None:
         config.model.params["ckpt_path"] = checkpoint_path
     # config.model.params["ckpt_path"] = "logs/DiffMatchFixedPooling_2024-03-11T00-36-09/checkpoints/last.ckpt"
 
-    model = get_model_class(config.model.get("model_type"))(
-        **config.model.get("params", dict())
-    )
+    model = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
     new_generator = None
     if new_generator_path is not None:
         config.model.params["ckpt_path"] = new_generator_path
-        new_generator = get_model_class(config.model.get("model_type"))(
-            **config.model.get("params", dict())
-        )
+        new_generator = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
     old_generator = model
     if old_generator_path is not None:
         config.model.params["ckpt_path"] = old_generator_path
-        old_generator = get_model_class(config.model.get("model_type"))(
-            **config.model.get("params", dict())
-        )
+        old_generator = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
 
     model.learning_rate = config.model.base_learning_rate
 
@@ -117,16 +109,16 @@ if __name__ == "__main__":
         per_class = f'{dl_config["train"][0]["cl_split"]["datasets"][0]["ssl_split"]["num_labeled"]} per class'
     except Exception:
         per_class = "all labels"
-    tags = [
-        dl_config["validation"]["name"],
-        per_class,
-        config.model.get("model_type"),
-        f"task {current_task}",
-        f"learned tasks {tasks_learned}",
-    ]
-    trainer_kwargs["logger"] = pl.loggers.WandbLogger(
-        name=nowname, id=nowname, tags=tags
+    tags.extend(
+        [
+            dl_config["validation"]["name"],
+            per_class,
+            config.model.get("model_type"),
+            f"task {current_task}",
+            f"learned tasks {tasks_learned}",
+        ]
     )
+    trainer_kwargs["logger"] = pl.loggers.WandbLogger(name=nowname, id=nowname, tags=tags)
 
     # modelcheckpoint - use TrainResult/EvalResult(checkpoint_on=metric) to
     # specify which metric is used to determine best models
@@ -169,49 +161,60 @@ if __name__ == "__main__":
         fid_cfg["device"] = torch.device("cuda")
         trainer_kwargs["callbacks"].append(FIDScoreLogger(**fid_cfg))
 
-    cl_config = config.pop("cl")
-
     def get_generator(generator):
         def generate_samples(batch, labels):
             generator.sampling_method = cl_config["sampling_method"]
             generator.sample_grad_scale = cl_config["grad_scale"]
             ddim = cl_config.get("ddim_steps", False)
+            ema = cl_config.get("use_ema", True)
             with torch.no_grad():
-                if cl_config["sampling_method"] != "unconditional":
+                if labels is not None: 
                     labels = torch.tensor(labels, device=generator.device)
                     generator.sample_classes = labels
                 if not ddim:
-                    samples = generator.sample(batch_size=batch)
+                    if ema:
+                        with generator.ema_scope():
+                            samples = generator.sample(batch_size=batch)
+                    else:
+                        samples = generator.sample(batch_size=batch)
                 else:
-                    ddim_sampler = DDIMSamplerGradGuided(generator)
                     shape = (
                         generator.channels,
                         generator.image_size,
                         generator.image_size,
                     )
-                    samples, _ = ddim_sampler.sample(
-                        S=ddim,
-                        batch_size=batch,
-                        shape=shape,
-                        cond=None,
-                        verbose=False,
-                    )
+                    if ema:
+                        with generator.ema_scope():
+                            ddim_sampler = DDIMSamplerGradGuided(generator)
+                            samples, _ = ddim_sampler.sample(
+                                S=ddim,
+                                batch_size=batch,
+                                shape=shape,
+                                cond=None,
+                                verbose=False,
+                            )
+                    else:
+                        ddim_sampler = DDIMSamplerGradGuided(generator)
+                        samples, _ = ddim_sampler.sample(
+                            S=ddim,
+                            batch_size=batch,
+                            shape=shape,
+                            cond=None,
+                            verbose=False,
+                        )
 
                 unet = generator.model.diffusion_model
                 representations = unet.just_representations(
                     samples,
-                    torch.zeros_like(generator.sample_classes),
+                    torch.zeros(samples.shape[0], device=samples.device),
                     context=None,
                     pooled=False,
                 )
-                pooled_representations = generator.transform_representations(
-                    representations
-                )
+                pooled_representations = generator.transform_representations(representations)
                 pred = generator.classifier(pooled_representations).argmax(dim=-1)
-                if cl_config["sampling_method"] != "unconditional":
-                    ok_class = pred == labels
-                    samples = samples[ok_class]
-                    labels = labels[ok_class]
+                if labels is not None:
+                    samples = samples[pred == labels]
+                    labels = labels[pred == labels]
                 else:
                     labels = pred
 
@@ -220,12 +223,8 @@ if __name__ == "__main__":
                 std = cl_config["std"]
                 denormalize = transforms.Compose(
                     [
-                        transforms.Normalize(
-                            mean=[0.0, 0.0, 0.0], std=[1 / s for s in std]
-                        ),
-                        transforms.Normalize(
-                            mean=[-m for m in mean], std=[1.0, 1.0, 1.0]
-                        ),
+                        transforms.Normalize(mean=[0.0, 0.0, 0.0], std=[1 / s for s in std]),
+                        transforms.Normalize(mean=[-m for m in mean], std=[1.0, 1.0, 1.0]),
                     ]
                 )
                 samples = denormalize(samples)
@@ -247,9 +246,7 @@ if __name__ == "__main__":
             old_generator.to(torch.device("cuda"))
             if new_generator is not None:
                 new_generator.to(torch.device("cuda"))
-            (labeled_ds, unlabeled_ds) = (
-                datasets if len(datasets) == 2 else (datasets[0], None)
-            )
+            (labeled_ds, unlabeled_ds) = datasets if len(datasets) == 2 else (datasets[0], None)
             train_dls = reply_buff.get_data_for_task(
                 sup_ds=labeled_ds,
                 unsup_ds=unlabeled_ds,
@@ -257,9 +254,7 @@ if __name__ == "__main__":
                 samples_per_task=cl_config["samples_per_class"],
                 old_sample_generator=generate_old_samples,
                 new_sample_generator=(
-                    new_samples_generate
-                    if unlabeled_ds is not None or new_generator is not None
-                    else True
+                    new_samples_generate if unlabeled_ds is not None or new_generator is not None else True
                 ),  # dummy for class conditioned baseline stuff
                 current_task=task,
                 filename=nowname,
@@ -278,9 +273,7 @@ if __name__ == "__main__":
             if weight_reinit == "none":
                 pass
             elif weight_reinit == "unused classes":
-                torch.nn.init.xavier_uniform_(
-                    model.classifier[-1].weight[len(prev_tasks) :]
-                )
+                torch.nn.init.xavier_uniform_(model.classifier[-1].weight[len(prev_tasks) :])
             elif weight_reinit == "classifier":
                 for layer in model.classifier:
                     if hasattr(layer, "weight"):
