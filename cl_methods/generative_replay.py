@@ -277,8 +277,9 @@ class UnconditionalOnlyGenerativeReplay(Replay):
             while any([val > 0 for val in to_generate.values()]):
                 imgs, labels = old_sample_generator(self.sample_bs, None)
                 for task, sampl_left in to_generate.items():
-                    task_imgs = imgs[labels == task][:sampl_left]
-                    task_labels = labels[labels == task][:sampl_left]
+                    mask = labels == task if len(labels.shape) == 1 else labels.argmax(dim=-1) == task
+                    task_imgs = imgs[mask][:sampl_left]
+                    task_labels = labels[mask][:sampl_left]
                     generated_imgs = torch.concat((generated_imgs, task_imgs))
                     generated_labels = torch.concat((generated_labels, task_labels))
                     to_generate[task] -= len(task_labels)
@@ -290,8 +291,9 @@ class UnconditionalOnlyGenerativeReplay(Replay):
             while any([val > 0 for val in to_generate.values()]):
                 imgs, labels = new_sample_generator(self.sample_bs, None)
                 for task, sampl_left in to_generate.items():
-                    task_imgs = imgs[labels == task][:sampl_left]
-                    task_labels = labels[labels == task][:sampl_left]
+                    mask = labels == task if len(labels.shape) == 1 else labels.argmax(dim=-1) == task
+                    task_imgs = imgs[mask][:sampl_left]
+                    task_labels = labels[mask][:sampl_left]
                     generated_imgs = torch.concat((generated_imgs, task_imgs))
                     generated_labels = torch.concat((generated_labels, task_labels))
                     to_generate[task] -= len(task_labels)

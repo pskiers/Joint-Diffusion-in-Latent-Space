@@ -80,7 +80,7 @@ if __name__ == "__main__":
 
     cl_config = config.pop("cl")
 
-    reply_buff = get_replay(cl_config.get("reply_type"))(train_bs=tasks_bs, sample_bs=140, dl_num_workers=16)
+    reply_buff = get_replay(cl_config.get("reply_type"))(train_bs=tasks_bs, sample_bs=250, dl_num_workers=16)
 
     if checkpoint_path is not None:
         config.model.params["ckpt_path"] = checkpoint_path
@@ -165,10 +165,11 @@ if __name__ == "__main__":
         def generate_samples(batch, labels):
             generator.sampling_method = cl_config["sampling_method"]
             generator.sample_grad_scale = cl_config["grad_scale"]
+            soft_labels = cl_config.get("use_soft_labels", False)
             ddim = cl_config.get("ddim_steps", False)
             ema = cl_config.get("use_ema", True)
             with torch.no_grad():
-                if labels is not None: 
+                if labels is not None:
                     labels = torch.tensor(labels, device=generator.device)
                     generator.sample_classes = labels
                 if not ddim:
@@ -211,12 +212,13 @@ if __name__ == "__main__":
                     pooled=False,
                 )
                 pooled_representations = generator.transform_representations(representations)
-                pred = generator.classifier(pooled_representations).argmax(dim=-1)
+                pred = generator.classifier(pooled_representations)
+                pred_labels = pred.argmax(dim=-1)
                 if labels is not None:
-                    samples = samples[pred == labels]
-                    labels = labels[pred == labels]
+                    samples = samples[pred_labels == labels]
+                    labels = labels[pred_labels == labels] if not soft_labels else pred[pred_labels == labels]
                 else:
-                    labels = pred
+                    labels = pred_labels if not soft_labels else pred
 
                 samples = samples.cpu()
                 mean = cl_config["mean"]
@@ -273,7 +275,7 @@ if __name__ == "__main__":
             if weight_reinit == "none":
                 pass
             elif weight_reinit == "unused classes":
-                torch.nn.init.xavier_uniform_(model.classifier[-1].weight[len(prev_tasks) :])
+                torch.nn.init.xavier_uniform_(model.classifier[-1].weight[len(prev_tasks):])
             elif weight_reinit == "classifier":
                 for layer in model.classifier:
                     if hasattr(layer, "weight"):

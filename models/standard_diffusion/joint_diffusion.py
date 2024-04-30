@@ -152,13 +152,14 @@ class JointDiffusionNoisyClassifier(DDPM):
 
         if (self.batch_classes is not None) and (self.classification_start <= 0):
             prefix = 'train' if self.training else 'val'
-
+            self.batch_classes = self.batch_classes if len(self.batch_classes.shape) == 1 else nn.functional.softmax(self.batch_classes, dim=-1)
             loss_classification = nn.functional.cross_entropy(
                 self.batch_class_predictions, self.batch_classes)
             loss += loss_classification * self.classification_loss_scale
             loss_dict.update(
                 {f'{prefix}/loss_classification': loss_classification})
             loss_dict.update({f'{prefix}/loss': loss})
+            self.batch_classes = self.batch_classes if len(self.batch_classes.shape) == 1 else self.batch_classes.argmax(dim=-1)
             accuracy = torch.sum(torch.argmax(
                 self.batch_class_predictions, dim=1) == self.batch_classes) / len(self.batch_classes)
             loss_dict.update({f'{prefix}/accuracy': accuracy})
@@ -207,7 +208,7 @@ class JointDiffusionNoisyClassifier(DDPM):
             return self.grad_guided_p_mean_variance(x, t, clip_denoised)
         else:
             raise NotImplementedError("Sampling method not implemented")
-    
+
     def unconditional_p_mean_variance(self, x, t, clip_denoised: bool):
         unet: AdjustedUNet = self.model.diffusion_model
         model_out = unet.just_reconstruction(x, t)
@@ -331,7 +332,7 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
             model_out = (pred_noise + s_t * grad).detach()
 
         return model_out
-    
+
     @torch.no_grad()
     def guided_repr_apply_model(self, x, t):
         if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
@@ -364,7 +365,7 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
 
         model_out = unet.forward_output_blocks(x, None, emb, representations)
         return model_out
-    
+
     @torch.no_grad()
     def log_images(self, batch, N=8, n_row=2, sample=True, return_keys=None, sample_classes=None, use_ema=True, grad_scales=None, **kwargs):
         if self.sampling_method != "unconditional":
@@ -419,7 +420,7 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
             else:
                 return {key: log[key] for key in return_keys}
         return log
-    
+
     @torch.no_grad()
     def p_sample_loop(
         self, shape, return_intermediates=False, x_start=None, t_start=None
@@ -574,3 +575,47 @@ class JointDiffusionAttentionDoubleOptims(JointDiffusionAttention):
         self.manual_backward(loss)
         opt_diffusion.step()
         opt_classifier.step()
+
+
+# class JointDiffusion(JointDiffusionAugmentations):
+#     def __init__(self, old_model, new_model, old_classes, new_classes, *args, kd_loss_weight=1.0, **kwargs):
+#         super().__init__(*args, **kwargs)
+#         self.old_model = old_model
+#         self.old_classes = torch.tensor(old_classes, device=self.device)
+#         self.new_model = new_model
+#         self.new_classes = torch.tensor(new_classes, device=self.device)
+#         self.kd_loss_weight = kd_loss_weight
+#         self.x_recon = None
+
+#     def apply_model(self, x_noisy, t, return_ids=False):
+#         if hasattr(self, "split_input_params"):
+#             raise NotImplementedError("This feature is not available for this model")
+
+#         x_recon = self.model.diffusion_model.just_reconstruction(x_noisy, t)
+#         if self.x_start is not None:
+#             representations = self.model.diffusion_model.just_representations(
+#                 self.x_start,
+#                 torch.zeros(self.x_start.shape[0], device=self.device),
+#                 pooled=False
+#             )
+#             if isinstance(representations, list):  # TODO refactor this shit
+#                 representations = self.transform_representations(representations)
+#                 self.batch_class_predictions = self.classifier(representations)
+#             else:
+#                 self.batch_class_predictions = representations
+
+#         if isinstance(x_recon, tuple) and not return_ids:
+#             self.x_recon = x_recon[0]
+#             return x_recon[0]
+#         else:
+#             self.x_recon = x_recon
+#             return x_recon
+
+#     def p_losses(self, x_start, t, noise=None):
+#         loss, loss_dict = super().p_losses(x_start, t, noise)
+#         old_classes_mask = torch.any(self.batch_classes.unsqueeze(-1) == self.old_classes, dim=-1)
+#         new_classes_mask = torch.any(self.batch_classes.unsqueeze(-1) == self.new_classes, dim=-1)
+
+#         # diffusion knowledge distillation
+
+#         # classifier knowledge distillation
