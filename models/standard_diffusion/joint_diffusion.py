@@ -150,7 +150,7 @@ class JointDiffusionNoisyClassifier(DDPM):
         loss += (self.original_elbo_weight * loss_vlb)
         loss_dict.update({f'{prefix}/loss': loss})
 
-        if (self.batch_classes is not None) and (self.classification_start <= 0):
+        if (self.batch_classes is not None) and ((self.classification_start <= 0) or not self.training):
             prefix = 'train' if self.training else 'val'
             self.batch_classes = self.batch_classes if len(self.batch_classes.shape) == 1 else nn.functional.softmax(self.batch_classes, dim=-1)
             loss_classification = nn.functional.cross_entropy(
