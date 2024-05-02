@@ -12,7 +12,8 @@ model:
     image_size: 32
     channels: 3
     monitor: val/accuracy_ema
-    classification_loss_scale: 0.001
+    classification_loss_scale: 0.0001
+    kl_classification_weight: 0.001
     classifier_in_features: 3712
     classifier_hidden: 1024
     num_classes: 10
@@ -24,6 +25,7 @@ model:
     old_classes: [0, 1, 2, 3]
     new_classes: [4, 5]
     kd_loss_weight: 1.0
+    l_simple_weight: 0.1
     # sampling_recurence_steps: 4
 
     unet_config:

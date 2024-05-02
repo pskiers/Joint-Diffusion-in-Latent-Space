@@ -578,13 +578,24 @@ class JointDiffusionAttentionDoubleOptims(JointDiffusionAttention):
 
 
 class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
-    def __init__(self, old_model, new_model, old_classes, new_classes, *args, kd_loss_weight=1.0, **kwargs):
+    def __init__(
+        self,
+        old_model,
+        new_model,
+        old_classes,
+        new_classes,
+        *args,
+        kd_loss_weight=1.0,
+        kl_classification_weight=0.001,
+        **kwargs
+    ):
         super().__init__(*args, **kwargs)
         self.old_model = old_model
         self.old_classes = torch.tensor(old_classes, device=self.device)
         self.new_model = new_model
         self.new_classes = torch.tensor(new_classes, device=self.device)
         self.kd_loss_weight = kd_loss_weight
+        self.kl_classification_weight = kl_classification_weight
         self.x_recon = None
         self.x_noisy = None
 
@@ -678,7 +689,7 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
                 new_preds = nn.functional.softmax(new_preds, dim=1).detach()
             loss_new = nn.functional.cross_entropy(self.batch_class_predictions[new_classes_mask], new_preds)
 
-        loss += self.kd_loss_weight * (loss_new + loss_old)
+        loss += self.kl_classification_weight * self.kd_loss_weight * (loss_new + loss_old)
         loss_dict.update({f'{prefix}/loss_classifier_kl': loss_old + loss_new})
         loss_dict.update({f'{prefix}/loss': loss})
         return loss, loss_dict
