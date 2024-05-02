@@ -1,7 +1,8 @@
 model:
-  base_learning_rate: 0.0003
+  base_learning_rate: 0.0002
   model_type: diffmatch_pooling
   params:
+    base_learning_rate: 0.0002
     clip_denoised: True
     beta_schedule: sqrt_linear
     linear_start: 0.001
@@ -12,13 +13,16 @@ model:
     image_size: 32
     channels: 3
     monitor: val/loss_ema
-    classification_loss_weight: 0.001
+    classification_loss_weight: 0.0005
+    classification_loss_weight_max: 0.0005
+    classification_loss_weight_increments: 0
     classifier_in_features: 3712
     classifier_hidden: 1024
     num_classes: 100
-    dropout: 0.3
-    batch_size: 32
-
+    dropout: 0.1
+    classification_start: 0
+    sampling_method: "conditional_to_repr"
+    sample_grad_scale: 0
 
     unet_config:
       target: models.AdjustedUNet
@@ -37,7 +41,7 @@ model:
 
 
 dataloaders:
-  validation:  
+  validation:
     name: "cifar100"
     root: "data"
     split: "test"
@@ -64,7 +68,7 @@ dataloaders:
 
         supervised:
           batch_size: 32
-          num_workers: 16
+          num_workers: 8
           sampler: "random"
           shuffle: False
           transforms:
@@ -81,18 +85,23 @@ dataloaders:
 
         unsupervised:
           batch_size: 224
-          num_workers: 16
+          num_workers: 24
           sampler: "random"
           shuffle: False
           transforms:
             - ParallelTransforms:
               -
+                - ToPILImage:
+                - RandomHorizontalFlip:
+                - RandomResizedCrop:
+                    size: 32
+                    scale: [0.64, 1.0]
+                    antialias: True
                 - ToTensor:
                 - Normalize:
                     mean: [0.5, 0.5, 0.5]
-                    std: [0.5, 0.5, 0.5] 
-
-              - 
+                    std: [0.5, 0.5, 0.5]
+              -
                 - ToPILImage:
                 - RandomHorizontalFlip:
                 - RandomCrop:
@@ -102,9 +111,9 @@ dataloaders:
                 - ToTensor:
                 - Normalize:
                     mean: [0.5, 0.5, 0.5]
-                    std: [0.5, 0.5, 0.5] 
-              
-              - 
+                    std: [0.5, 0.5, 0.5]
+
+              -
                 - ToPILImage:
                 - RandomHorizontalFlip:
                 - RandomCrop:
@@ -139,12 +148,15 @@ lightning:
 
     img_logger:
       batch_frequency: 10000
-      max_images: 10
+      max_images: 64
       clamp: True
       increase_log_steps: False
       log_images_kwargs: {
-          "N": 40,
+          "N": 64,
           "inpaint": False,
+          "sample_classes": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+          "use_ema": False,
+          "grad_scales": [ 0]
       }
       mean: [0.5, 0.5, 0.5]
       std: [0.5, 0.5, 0.5]
