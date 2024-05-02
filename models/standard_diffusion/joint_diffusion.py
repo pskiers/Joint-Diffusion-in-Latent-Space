@@ -577,45 +577,108 @@ class JointDiffusionAttentionDoubleOptims(JointDiffusionAttention):
         opt_classifier.step()
 
 
-# class JointDiffusion(JointDiffusionAugmentations):
-#     def __init__(self, old_model, new_model, old_classes, new_classes, *args, kd_loss_weight=1.0, **kwargs):
-#         super().__init__(*args, **kwargs)
-#         self.old_model = old_model
-#         self.old_classes = torch.tensor(old_classes, device=self.device)
-#         self.new_model = new_model
-#         self.new_classes = torch.tensor(new_classes, device=self.device)
-#         self.kd_loss_weight = kd_loss_weight
-#         self.x_recon = None
+class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
+    def __init__(self, old_model, new_model, old_classes, new_classes, *args, kd_loss_weight=1.0, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.old_model = old_model
+        self.old_classes = torch.tensor(old_classes, device=self.device)
+        self.new_model = new_model
+        self.new_classes = torch.tensor(new_classes, device=self.device)
+        self.kd_loss_weight = kd_loss_weight
+        self.x_recon = None
+        self.x_noisy = None
 
-#     def apply_model(self, x_noisy, t, return_ids=False):
-#         if hasattr(self, "split_input_params"):
-#             raise NotImplementedError("This feature is not available for this model")
+    def named_parameters(self, recurse: bool = True):
+        named_parameters = super().named_parameters(recurse=recurse)
+        named_parameters = [(name, param) for name, param in named_parameters if "new_model" not in name and "old_model" not in name]
+        return named_parameters
 
-#         x_recon = self.model.diffusion_model.just_reconstruction(x_noisy, t)
-#         if self.x_start is not None:
-#             representations = self.model.diffusion_model.just_representations(
-#                 self.x_start,
-#                 torch.zeros(self.x_start.shape[0], device=self.device),
-#                 pooled=False
-#             )
-#             if isinstance(representations, list):  # TODO refactor this shit
-#                 representations = self.transform_representations(representations)
-#                 self.batch_class_predictions = self.classifier(representations)
-#             else:
-#                 self.batch_class_predictions = representations
+    def parameters(self, recurse: bool = True):
+        parameters = super().parameters(recurse=recurse)
+        parameters = [param for param in parameters if param is not self.new_model and param is not self.old_model]
+        return parameters
 
-#         if isinstance(x_recon, tuple) and not return_ids:
-#             self.x_recon = x_recon[0]
-#             return x_recon[0]
-#         else:
-#             self.x_recon = x_recon
-#             return x_recon
+    def apply_model(self, x_noisy, t, return_ids=False):
+        if hasattr(self, "split_input_params"):
+            raise NotImplementedError("This feature is not available for this model")
 
-#     def p_losses(self, x_start, t, noise=None):
-#         loss, loss_dict = super().p_losses(x_start, t, noise)
-#         old_classes_mask = torch.any(self.batch_classes.unsqueeze(-1) == self.old_classes, dim=-1)
-#         new_classes_mask = torch.any(self.batch_classes.unsqueeze(-1) == self.new_classes, dim=-1)
+        self.x_noisy = x_noisy
+        x_recon = self.model.diffusion_model.just_reconstruction(x_noisy, t)
+        if self.x_start is not None:
+            representations = self.model.diffusion_model.just_representations(
+                self.x_start,
+                torch.zeros(self.x_start.shape[0], device=self.device),
+                pooled=False
+            )
+            if isinstance(representations, list):  # TODO refactor this shit
+                representations = self.transform_representations(representations)
+                self.batch_class_predictions = self.classifier(representations)
+            else:
+                self.batch_class_predictions = representations
 
-#         # diffusion knowledge distillation
+        if isinstance(x_recon, tuple) and not return_ids:
+            self.x_recon = x_recon[0]
+            return x_recon[0]
+        else:
+            self.x_recon = x_recon
+            return x_recon
 
-#         # classifier knowledge distillation
+    def p_losses(self, x_start, t, noise=None):
+        prefix = 'train' if self.training else 'val'
+        loss, loss_dict = super().p_losses(x_start, t, noise)
+        old_unet = self.old_model.model.diffusion_model
+        new_unet = self.new_model.model.diffusion_model
+        old_classes_mask = torch.any(self.batch_classes.unsqueeze(-1) == self.old_classes.to(self.device), dim=-1)
+        new_classes_mask = torch.any(self.batch_classes.unsqueeze(-1) == self.new_classes.to(self.device), dim=-1)
+
+        # diffusion knowledge distillation
+        loss_old = 0
+        if old_classes_mask.sum() != 0:
+            with torch.no_grad():
+                old_outputs = old_unet.just_reconstruction(self.x_noisy[old_classes_mask], t[old_classes_mask])
+            loss_old = self.get_loss(self.x_recon[old_classes_mask], old_outputs, mean=True)
+        loss_new = 0
+        if new_classes_mask.sum() != 0:
+            with torch.no_grad():
+                new_outputs = new_unet.just_reconstruction(self.x_noisy[new_classes_mask], t[new_classes_mask])
+            loss_new = self.get_loss(self.x_recon[new_classes_mask], new_outputs, mean=True)
+        loss += self.kd_loss_weight * (loss_new + loss_old)
+        loss_dict.update({f'{prefix}/loss_diffusion_kl': loss_old + loss_new})
+
+        # classifier knowledge distillation
+        loss_old = 0
+        if old_classes_mask.sum() != 0:
+            with torch.no_grad():
+                old_repr = old_unet.just_representations(
+                    self.x_start[old_classes_mask],
+                    torch.zeros(self.x_start[old_classes_mask].shape[0], device=self.device),
+                    pooled=False
+                )
+                if isinstance(old_repr, list):  # TODO refactor this shit
+                    old_repr = self.old_model.transform_representations(old_repr)
+                    old_preds = self.old_model.classifier(old_repr)
+                else:
+                    old_preds = old_repr
+                old_preds = nn.functional.softmax(old_preds, dim=1).detach()
+            loss_old = nn.functional.cross_entropy(self.batch_class_predictions[old_classes_mask], old_preds)
+
+        loss_new = 0
+        if new_classes_mask.sum() != 0:
+            with torch.no_grad():
+                new_repr = new_unet.just_representations(
+                    self.x_start[new_classes_mask],
+                    torch.zeros(self.x_start[new_classes_mask].shape[0], device=self.device),
+                    pooled=False
+                )
+                if isinstance(new_repr, list):  # TODO refactor this shit
+                    new_repr = self.new_model.transform_representations(new_repr)
+                    new_preds = self.new_model.classifier(new_repr)
+                else:
+                    new_preds = new_repr
+                new_preds = nn.functional.softmax(new_preds, dim=1).detach()
+            loss_new = nn.functional.cross_entropy(self.batch_class_predictions[new_classes_mask], new_preds)
+
+        loss += self.kd_loss_weight * (loss_new + loss_old)
+        loss_dict.update({f'{prefix}/loss_classifier_kl': loss_old + loss_new})
+        loss_dict.update({f'{prefix}/loss': loss})
+        return loss, loss_dict

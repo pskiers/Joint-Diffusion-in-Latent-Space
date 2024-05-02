@@ -4,6 +4,7 @@ from .joint_diffusion import (
     JointDiffusionAttention,
     JointDiffusionAugmentations,
     JointDiffusionAttentionDoubleOptims,
+    JointDiffusionKnowledgeDistillation,
 )
 from .ssl_joint_diffusion import SSLJointDiffusion, SSLJointDiffusionAttention
 from .diff_match import (

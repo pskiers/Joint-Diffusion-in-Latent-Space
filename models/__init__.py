@@ -66,5 +66,7 @@ def get_model_class(name: str):
         return JointLatentDiffusionMultilabel
     elif name == "latent_diffmatch_multilabel":
         return LatentDiffMatchPoolingMultilabel
+    elif name == "joint_diffusion_knowledge_distillation":
+        return JointDiffusionKnowledgeDistillation
     else:
         raise NotImplementedError(f"Model {name} is not available")

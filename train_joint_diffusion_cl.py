@@ -86,15 +86,27 @@ if __name__ == "__main__":
         config.model.params["ckpt_path"] = checkpoint_path
     # config.model.params["ckpt_path"] = "logs/DiffMatchFixedPooling_2024-03-11T00-36-09/checkpoints/last.ckpt"
 
-    model = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
+    model_type = config.model.get("model_type")
+    params = config.model.get("params", dict())
     new_generator = None
     if new_generator_path is not None:
+        if model_type == "joint_diffusion_knowledge_distillation":
+            params["new_model"] = None
+            params["old_model"] = None
         config.model.params["ckpt_path"] = new_generator_path
-        new_generator = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
-    old_generator = model
+        new_generator = get_model_class(model_type)(**params)
+    old_generator = None
     if old_generator_path is not None:
+        if model_type == "joint_diffusion_knowledge_distillation":
+            params["new_model"] = None
+            params["old_model"] = None
         config.model.params["ckpt_path"] = old_generator_path
-        old_generator = get_model_class(config.model.get("model_type"))(**config.model.get("params", dict()))
+        old_generator = get_model_class(model_type)(**params)
+    if model_type == "joint_diffusion_knowledge_distillation":
+        params = OmegaConf.to_container(params, resolve=True)
+        params["new_model"] = new_generator
+        params["old_model"] = old_generator
+    model = get_model_class(model_type)(**params)
 
     model.learning_rate = config.model.base_learning_rate
 
