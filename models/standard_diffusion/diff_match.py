@@ -201,7 +201,7 @@ class DiffMatchFixed(DDPM):
         self.val_labels = torch.tensor([])
         self.val_preds = torch.tensor([])
         self.val_preds_ema = torch.tensor([])
-    
+
     def init_optim_from_ckpt(self, path):
         sd = torch.load(path, map_location="cpu")
         self.optim.load_state_dict(sd["optimizer_states"][0])
@@ -733,6 +733,7 @@ class DiffMatchFixedAttention(DiffMatchFixed):
     def __init__(self, attention_config, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.classifier = RepresentationTransformer(**attention_config)
+        self.optim = None
         self.optim = self.configure_optimizers()
         if kwargs.get("ckpt_path", None) is not None:
             ignore_keys = kwargs.get("ignore_keys", [])
@@ -750,33 +751,34 @@ class DiffMatchFixedAttention(DiffMatchFixed):
     def configure_optimizers(self):
         if self.optim is not None:
             return self.optim
-        no_decay = ["bias", "bn"]
-        grouped_parameters = [
-            {
-                "params": [
-                    p
-                    for n, p in self.classifier.named_parameters()
-                    if not any(nd in n for nd in no_decay)
-                ],
-                "weight_decay": 0.0,
-            },
-            {
-                "params": [
-                    p
-                    for n, p in self.classifier.named_parameters()
-                    if any(nd in n for nd in no_decay)
-                ],
-                "weight_decay": 0.0,
-            },
-        ]
-        grouped_parameters[1]["params"] = grouped_parameters[1]["params"] + list(
-            self.model.parameters()
-        )
-        optimizer = torch.optim.Adam(
-            grouped_parameters,
-            lr=self.learning_rate,
-            # betas=(0.9, 0.999)
-        )
+        # no_decay = ["bias", "bn"]
+        # grouped_parameters = [
+        #     {
+        #         "params": [
+        #             p
+        #             for n, p in self.classifier.named_parameters()
+        #             if not any(nd in n for nd in no_decay)
+        #         ],
+        #         "weight_decay": 0.0,
+        #     },
+        #     {
+        #         "params": [
+        #             p
+        #             for n, p in self.classifier.named_parameters()
+        #             if any(nd in n for nd in no_decay)
+        #         ],
+        #         "weight_decay": 0.0,
+        #     },
+        # ]
+        # grouped_parameters[1]["params"] = grouped_parameters[1]["params"] + list(
+        #     self.model.parameters()
+        # )
+        # optimizer = torch.optim.Adam(
+        #     grouped_parameters,
+        #     lr=self.learning_rate,
+        #     # betas=(0.9, 0.999)
+        # )
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
 
         # def _lr_lambda(current_step):
         #     num_warmup_steps = 0
@@ -1179,7 +1181,7 @@ class DiffMatchPoolingMultilabel(DiffMatchFixedPooling):
         self.auroc_val = AUROC(num_classes=num_classes)
         self.auroc_val_ema = AUROC(num_classes=num_classes)
         self.BCEweights = torch.Tensor(class_weights if class_weights is not None else [1. for _ in range(num_classes)])
-    
+
     def get_train_input(self, batch):
         x = batch[0][self.img_key]
         y = batch[0][self.label_key]
@@ -1200,7 +1202,7 @@ class DiffMatchPoolingMultilabel(DiffMatchFixedPooling):
             loss_classification = nn.functional.binary_cross_entropy_with_logits(
                 preds_x, y.float(), pos_weight=self.BCEweights.to(self.device))
             loss += loss_classification * self.classification_loss_weight
-        
+
             accuracy = (y == (nn.functional.sigmoid(preds_x) >= 0.5)).sum() / y.numel()
             self.auroc_train.update(preds_x, y.int())
             self.log('train/auroc', self.auroc_train, on_step=False, on_epoch=True)
@@ -1225,7 +1227,7 @@ class DiffMatchPoolingMultilabel(DiffMatchFixedPooling):
             on_epoch=False,
         )
         return loss
-    
+
     @torch.no_grad()
     def validation_step(self, batch, batch_idx):
         x, y = self.get_val_input(batch)
