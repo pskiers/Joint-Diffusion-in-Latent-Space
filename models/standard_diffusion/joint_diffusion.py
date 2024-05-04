@@ -637,26 +637,26 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
     def p_losses(self, x_start, t, noise=None):
         prefix = 'train' if self.training else 'val'
         loss, loss_dict = super().p_losses(x_start, t, noise)
+        old_unet = self.old_model.model.diffusion_model
+        new_unet = self.new_model.model.diffusion_model
+        old_classes_mask = torch.any(self.batch_classes.unsqueeze(-1) == self.old_classes.to(self.device), dim=-1)
+        new_classes_mask = torch.any(self.batch_classes.unsqueeze(-1) == self.new_classes.to(self.device), dim=-1)
+
+        # diffusion knowledge distillation
+        loss_old = 0
+        if old_classes_mask.sum() != 0:
+            with torch.no_grad():
+                old_outputs = old_unet.just_reconstruction(self.x_noisy[old_classes_mask], t[old_classes_mask])
+            loss_old = self.get_loss(self.x_recon[old_classes_mask], old_outputs, mean=True)
+        loss_new = 0
+        if new_classes_mask.sum() != 0:
+            with torch.no_grad():
+                new_outputs = new_unet.just_reconstruction(self.x_noisy[new_classes_mask], t[new_classes_mask])
+            loss_new = self.get_loss(self.x_recon[new_classes_mask], new_outputs, mean=True)
+        loss += self.kd_loss_weight * (loss_new + loss_old)
+        loss_dict.update({f'{prefix}/loss_diffusion_kl': loss_old + loss_new})
+
         if self.classification_start <= 0:
-            old_unet = self.old_model.model.diffusion_model
-            new_unet = self.new_model.model.diffusion_model
-            old_classes_mask = torch.any(self.batch_classes.unsqueeze(-1) == self.old_classes.to(self.device), dim=-1)
-            new_classes_mask = torch.any(self.batch_classes.unsqueeze(-1) == self.new_classes.to(self.device), dim=-1)
-
-            # diffusion knowledge distillation
-            loss_old = 0
-            if old_classes_mask.sum() != 0:
-                with torch.no_grad():
-                    old_outputs = old_unet.just_reconstruction(self.x_noisy[old_classes_mask], t[old_classes_mask])
-                loss_old = self.get_loss(self.x_recon[old_classes_mask], old_outputs, mean=True)
-            loss_new = 0
-            if new_classes_mask.sum() != 0:
-                with torch.no_grad():
-                    new_outputs = new_unet.just_reconstruction(self.x_noisy[new_classes_mask], t[new_classes_mask])
-                loss_new = self.get_loss(self.x_recon[new_classes_mask], new_outputs, mean=True)
-            loss += self.kd_loss_weight * (loss_new + loss_old)
-            loss_dict.update({f'{prefix}/loss_diffusion_kl': loss_old + loss_new})
-
             # classifier knowledge distillation
             loss_old = 0
             if old_classes_mask.sum() != 0:
