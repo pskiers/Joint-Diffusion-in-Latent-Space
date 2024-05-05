@@ -20,6 +20,8 @@ class LatentDiffMatchPoolingMultilabel(JointLatentDiffusionMultilabel):
         classification_start=0,
         dropout=0,
         classification_loss_weight=1.0,
+        classify_every_n=1,
+        classify_every_n_times=1,
         classification_key=1,
         augmentations=True,
         num_timesteps_cond=None,
@@ -60,6 +62,10 @@ class LatentDiffMatchPoolingMultilabel(JointLatentDiffusionMultilabel):
         self.mu = mu
         self.batch_size = batch_size
         self.classification_start = classification_start
+        self.classify_every_n = classify_every_n
+        self.classify_every_n_times = classify_every_n_times
+        self.classification_counter = 0
+        self.classification_times_counter = 0
 
     def get_sampl(self):
         print(
@@ -120,6 +126,12 @@ class LatentDiffMatchPoolingMultilabel(JointLatentDiffusionMultilabel):
         if self.classification_start > 0:
             self.classification_start -= 1
             return loss
+        if self.classification_counter % self.classify_every_n != 0 and self.classify_every_n != 1:
+            self.classification_counter += 1
+            return loss
+        self.classification_times_counter += 1
+        if self.classification_times_counter % self.classify_every_n_times == 0:
+            self.classification_counter += 1
 
         loss_dict = {}
         # x, y, weak_img, strong_img = self.get_train_classification_input(
