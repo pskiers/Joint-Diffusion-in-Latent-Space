@@ -42,6 +42,7 @@ if __name__ == "__main__":
         help="Ckpt to old tasks data generator",
     )
     parser.add_argument("--tags", type=str, required=False, help="Additional tags", nargs="+")
+    parser.add_argument("--dir", "-d", type=str, required=False, help="Name for experiments log dir",)
     args = parser.parse_args()
     config_path = str(args.path)
     # config_path = "configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml"
@@ -56,6 +57,7 @@ if __name__ == "__main__":
     tasks_learned = args.learned if args.learned is not None else []
     # tasks_learned = [0]
     tags = args.tags if args.tags is not None else []
+    custom_dir = args.dir
 
     config = OmegaConf.load(config_path)
     # config = OmegaConf.load("configs/standard_diffusion/continual_learning/diffmatch_pooling/25_per_class/cifar10.yaml")
@@ -111,7 +113,7 @@ if __name__ == "__main__":
     model.learning_rate = config.model.base_learning_rate
 
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
-    nowname = model.__class__.__name__ + "_" + now
+    nowname = model.__class__.__name__ + "_" + now if custom_dir is None else custom_dir
     logdir = path.join("logs", nowname)
     ckptdir = path.join(logdir, "checkpoints")
     cfgdir = path.join(logdir, "configs")
@@ -257,7 +259,8 @@ if __name__ == "__main__":
     prev_tasks = []
     for i, (datasets, task) in enumerate(zip(tasks_datasets, tasks)):
         if i == current_task:
-            old_generator.to(torch.device("cuda"))
+            if old_generator is not None:
+                old_generator.to(torch.device("cuda"))
             if new_generator is not None:
                 new_generator.to(torch.device("cuda"))
             (labeled_ds, unlabeled_ds) = datasets if len(datasets) == 2 else (datasets[0], None)
