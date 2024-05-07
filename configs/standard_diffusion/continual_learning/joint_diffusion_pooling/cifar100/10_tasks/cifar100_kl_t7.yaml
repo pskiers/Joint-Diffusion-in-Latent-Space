@@ -1,0 +1,149 @@
+model:
+  base_learning_rate: 0.0002
+  model_type: joint_diffusion_knowledge_distillation
+  params:
+    clip_denoised: True
+    beta_schedule: sqrt_linear
+    linear_start: 0.001
+    linear_end: 0.02
+    log_every_t: 200
+    timesteps: 1000
+    first_stage_key: 0
+    image_size: 32
+    channels: 3
+    monitor: val/accuracy_ema
+    classification_loss_scale: 0.00001
+    kl_classification_weight: 0.001
+    classifier_in_features: 3712
+    classifier_hidden: 1024
+    num_classes: 100
+    dropout: 0.1
+    classification_start: 10000
+    augmentations: False
+    sampling_method: "conditional_to_x"
+    sample_grad_scale: 0
+    old_classes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59]
+    new_classes: [60, 61, 62, 63, 64, 65, 66, 67, 68, 69]
+    kd_loss_weight: 1.0
+    l_simple_weight: 0.01
+    # sampling_recurence_steps: 4
+
+    unet_config:
+      target: models.AdjustedUNet
+      params:
+        image_size: 32
+        in_channels: 3
+        out_channels: 3
+        model_channels: 128
+        attention_resolutions: [ 2, 4 ]
+        num_res_blocks: 3
+        channel_mult: [ 1, 2, 2, 2 ]
+        num_heads: 4
+        dropout: 0.1
+        use_scale_shift_norm: True
+        pool_size: 10000
+
+cl:
+  reply_type: "unconditional_replay_only"
+  grad_scale: 0
+  # ddim_steps: 250
+  use_soft_labels: False
+  samples_per_class: 5000
+  sampling_method: "unconditional"
+  weight_reinit: "unused classes"
+  mean: [0.5, 0.5, 0.5]
+  std: [0.5, 0.5, 0.5]
+  # saved_samples: data/cl/JointDiffusionKnowledgeDistillation_2024-05-05T04-35-04_imgs.pt
+  # saved_labels: data/cl/JointDiffusionKnowledgeDistillation_2024-05-05T04-35-04_labels.pt
+
+
+dataloaders:
+  validation:
+      name: "cifar100"
+      root: "data"
+      split: "test"
+      download: True
+      batch_size: 256
+      num_workers: 16
+      sampler: "none"
+      shuffle: False
+      transforms:
+        - ToTensor:
+        - Normalize:
+            mean: [0.5, 0.5, 0.5]
+            std: [0.5, 0.5, 0.5]
+  train:
+    - cl_split:
+        tasks: [[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], [10, 11, 12, 13, 14, 15, 16, 17, 18, 19], [20, 21, 22, 23, 24, 25, 26, 27, 28, 29], [30, 31, 32, 33, 34, 35, 36, 37, 38, 39], [40, 41, 42, 43, 44, 45, 46, 47, 48, 49], [50, 51, 52, 53, 54, 55, 56, 57, 58, 59], [60, 61, 62, 63, 64, 65, 66, 67, 68, 69], [70, 71, 72, 73, 74, 75, 76, 77, 78, 79], [80, 81, 82, 83, 84, 85, 86, 87, 88, 89], [90, 91, 92, 93, 94, 95, 96, 97, 98, 99]]         
+        datasets:
+          - dataset:
+              name: "cifar100"
+              root: "data"
+              split: "train"
+              download: True
+              batch_size: 256
+              num_workers: 16
+              sampler: "none"
+              shuffle: True
+              transforms:
+                - ParallelTransforms:
+                  -
+                    - ToPILImage:
+                    - RandomHorizontalFlip:
+                    - RandomResizedCrop:
+                        size: 32
+                        scale: [0.85, 1.0]
+                        antialias: True
+                    - ToTensor:
+                    - Normalize:
+                        mean: [0.5, 0.5, 0.5]
+                        std: [0.5, 0.5, 0.5]
+                  -
+                    - ToPILImage:
+                    - RandomHorizontalFlip:
+                    - RandomCrop:
+                        size: 32
+                        padding: 4
+                        padding_mode: "reflect"
+                    - RandAugment:
+                        n: 2
+                        m: 10
+                    - ToTensor:
+                    - Normalize:
+                        mean: [0.5, 0.5, 0.5]
+                        std: [0.5, 0.5, 0.5]
+
+
+lightning:
+  trainer:
+    benchmark: True
+    checkpoint_callback: True
+    max_steps: 1000000
+    # accumulate_grad_batches: 2
+
+  callbacks:
+    # fid_logger:
+    #   batch_frequency: 100000
+    #   samples_amount: 10000
+    #   metrics_batch_size: 512
+    #   real_dl_batch_size: 448
+    #   latent: False
+    #   mean: [0.4914, 0.4822, 0.4465]
+    #   std: [0.2471, 0.2435, 0.2616]
+
+    img_logger:
+      batch_frequency: 10000
+      max_images: 64
+      clamp: True
+      increase_log_steps: False
+      log_images_kwargs: {
+          "N": 64,
+          "inpaint": False,
+          "sample_classes": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+          "use_ema": False,
+          "grad_scales": [0]
+      }
+      # mean: [0.4914, 0.4822, 0.4465]
+      # std: [0.2471, 0.2435, 0.2616]
+      mean: [0.5, 0.5, 0.5]
+      std: [0.5, 0.5, 0.5]
