@@ -12,7 +12,7 @@ model:
     image_size: 32
     channels: 3
     monitor: val/accuracy_ema
-    classification_loss_scale: 0.0001
+    classification_loss_scale: 0.00001
     kl_classification_weight: 0.001
     classifier_in_features: 3712
     classifier_hidden: 1024
@@ -25,7 +25,7 @@ model:
     old_classes: [0, 1, 2, 3]
     new_classes: [4, 5]
     kd_loss_weight: 1.0
-    l_simple_weight: 0.1
+    l_simple_weight: 0.01
     # sampling_recurence_steps: 4
 
     unet_config:
@@ -53,8 +53,8 @@ cl:
   weight_reinit: "unused classes"
   mean: [0.5, 0.5, 0.5]
   std: [0.5, 0.5, 0.5]
-  # saved_samples: data/cl/JointDiffusionAugmentations_2024-04-30T03-01-50_imgs.pt
-  # saved_labels: data/cl/JointDiffusionAugmentations_2024-04-30T03-01-50_labels.pt
+  saved_samples: data/cl/JointDiffusionAugmentations_2024-04-30T23-56-31_imgs.pt
+  saved_labels: data/cl/JointDiffusionAugmentations_2024-04-30T23-56-31_labels.pt
 
 
 dataloaders:

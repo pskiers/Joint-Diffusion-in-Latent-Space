@@ -1,6 +1,6 @@
 model:
   base_learning_rate: 0.0002
-  model_type: joint_diffusion_augmentations
+  model_type: joint_diffusion_knowledge_distillation
   params:
     clip_denoised: True
     beta_schedule: sqrt_linear
@@ -12,15 +12,20 @@ model:
     image_size: 32
     channels: 3
     monitor: val/accuracy_ema
-    classification_loss_scale: 0.001
+    classification_loss_scale: 0.00001
+    kl_classification_weight: 0.001
     classifier_in_features: 3712
     classifier_hidden: 1024
     num_classes: 10
     dropout: 0.1
-    classification_start: 0
+    classification_start: 10000
     augmentations: False
-    sampling_method: "conditional_to_repr"
+    sampling_method: "conditional_to_x"
     sample_grad_scale: 0
+    old_classes: [0, 1, 2, 3, 4, 5]
+    new_classes: [6, 7]
+    kd_loss_weight: 1.0
+    l_simple_weight: 0.01
     # sampling_recurence_steps: 4
 
     unet_config:
@@ -39,16 +44,17 @@ model:
         pool_size: 10000
 
 cl:
-  reply_type: "one_supervised_task"
+  reply_type: "unconditional_replay_only"
   grad_scale: 0
   # ddim_steps: 250
+  use_soft_labels: False
   samples_per_class: 5000
   sampling_method: "unconditional"
   weight_reinit: "unused classes"
   mean: [0.5, 0.5, 0.5]
   std: [0.5, 0.5, 0.5]
-  # saved_samples: pulled_checkpoints/samples.pt
-  # saved_labels: pulled_checkpoints/labels.pt
+  # saved_samples: data/cl/JointDiffusionAugmentations_2024-05-02T05-14-14_imgs.pt
+  # saved_labels: data/cl/JointDiffusionAugmentations_2024-05-02T05-14-14_labels.pt
 
 
 dataloaders:
@@ -86,7 +92,7 @@ dataloaders:
                     - RandomHorizontalFlip:
                     - RandomResizedCrop:
                         size: 32
-                        scale: [0.85, 1.0]
+                        scale: [0.64, 1.0]
                         antialias: True
                     - ToTensor:
                     - Normalize:
