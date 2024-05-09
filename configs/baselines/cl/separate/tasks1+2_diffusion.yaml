@@ -1,0 +1,120 @@
+model:
+  base_learning_rate: 0.0002
+  model_type: ddpm
+  params:
+    clip_denoised: True
+    beta_schedule: sqrt_linear
+    linear_start: 0.001
+    linear_end: 0.02
+    log_every_t: 200
+    timesteps: 1000
+    first_stage_key: 0
+    image_size: 32
+    channels: 3
+    monitor: val/loss_ema
+
+    unet_config:
+      target: ldm.modules.diffusionmodules.openaimodel.UNetModel
+      params:
+        image_size: 32
+        in_channels: 3
+        out_channels: 3
+        model_channels: 128
+        attention_resolutions: [ 2, 4 ]
+        num_res_blocks: 3
+        channel_mult: [ 1, 2, 2, 2 ]
+        num_heads: 4
+        dropout: 0.1
+        use_scale_shift_norm: True
+
+cl:
+  reply_type: "unconditional_replay_and_new_dataset"
+  grad_scale: 0
+  # ddim_steps: 250
+  samples_per_class: 5000
+  sampling_method: "unconditional"
+  weight_reinit: "none"
+  mean: [0.5, 0.5, 0.5]
+  std: [0.5, 0.5, 0.5]
+  # saved_samples: pulled_checkpoints/samples.pt
+  # saved_labels: pulled_checkpoints/labels.pt
+
+
+dataloaders:
+  validation:
+      name: "cifar10"
+      root: "data"
+      split: "test"
+      download: True
+      batch_size: 256
+      num_workers: 16
+      sampler: "none"
+      shuffle: False
+      transforms:
+        - ToTensor:
+        - Normalize:
+            mean: [0.5, 0.5, 0.5]
+            std: [0.5, 0.5, 0.5]
+        - Permute:
+            dims: [1, 2, 0]
+  train:
+    - cl_split:
+        tasks: [[0, 1], [2, 3], [4, 5], [6, 7], [8, 9]]
+        datasets:
+          - dataset:
+              name: "cifar10"
+              root: "data"
+              split: "train"
+              download: True
+              batch_size: 256
+              num_workers: 16
+              sampler: "none"
+              shuffle: True
+              transforms:
+                - ToPILImage:
+                - RandomHorizontalFlip:
+                - RandomResizedCrop:
+                    size: 32
+                    scale: [0.85, 1.0]
+                    antialias: True
+                - ToTensor:
+                - Normalize:
+                    mean: [0.5, 0.5, 0.5]
+                    std: [0.5, 0.5, 0.5]
+                - Permute:
+                    dims: [1, 2, 0]
+
+
+lightning:
+  trainer:
+    benchmark: True
+    checkpoint_callback: True
+    max_steps: 60000
+    # accumulate_grad_batches: 2
+
+  callbacks:
+    # fid_logger:
+    #   batch_frequency: 100000
+    #   samples_amount: 10000
+    #   metrics_batch_size: 512
+    #   real_dl_batch_size: 448
+    #   latent: False
+    #   mean: [0.4914, 0.4822, 0.4465]
+    #   std: [0.2471, 0.2435, 0.2616]
+
+    img_logger:
+      batch_frequency: 10000
+      max_images: 64
+      clamp: True
+      increase_log_steps: False
+      log_images_kwargs: {
+          "N": 64,
+          "inpaint": False,
+          "sample_classes": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
+          "use_ema": False,
+          "grad_scales": [0]
+      }
+      # mean: [0.4914, 0.4822, 0.4465]
+      # std: [0.2471, 0.2435, 0.2616]
+      mean: [0.5, 0.5, 0.5]
+      std: [0.5, 0.5, 0.5]

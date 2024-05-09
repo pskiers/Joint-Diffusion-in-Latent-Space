@@ -7,33 +7,40 @@ import kornia as K
 from ldm.models.autoencoder import AutoencoderKL
 
 
-class WideResNet(pl.LightningModule):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+class ResNet(pl.LightningModule):
+    def __init__(
+        self, num_classes, *args: Any, head_in=1000, head_hidden=512, lr=0.001, ckpt_path=None, **kwargs: Any
+    ) -> None:
         super().__init__(*args, **kwargs)
         self.conv = tv.models.resnet18()
         self.relu = nn.ReLU()
-        self.head = nn.Linear(1000, 10)
-        self.lr = 0.001
-        self.augmentation = K.augmentation.ImageSequential(
-            K.augmentation.ColorJitter(0.1, 0.1, 0.1, 0.1, p=0.25),
-            K.augmentation.RandomResizedCrop((32, 32), scale=(0.5, 1), p=0.25),
-            K.augmentation.RandomRotation((-30, 30), p=0.25),
-            # K.augmentation.RandomHorizontalFlip(0.5),
-            K.augmentation.RandomContrast((0.6, 1.8), p=0.25),
-            K.augmentation.RandomSharpness((0.4, 2), p=0.25),
-            K.augmentation.RandomBrightness((0.6, 1.8), p=0.25),
-            K.augmentation.RandomMixUpV2(p=0.5),
-        )
+        self.head_in = nn.Linear(head_in, head_hidden)
+        self.head_out = nn.Linear(head_hidden, num_classes)
+        self.lr = lr
+        if ckpt_path is not None:
+            self.init_from_ckpt(ckpt_path)
+
+    def init_from_ckpt(self, path):
+        sd = torch.load(path, map_location="cpu")
+        if "state_dict" in list(sd.keys()):
+            sd = sd["state_dict"]
+        missing, unexpected = self.load_state_dict(sd, strict=False)
+        print(f"Restored from {path} with {len(missing)} missing and {len(unexpected)} unexpected keys")
+        if len(missing) > 0:
+            print(f"Missing Keys: {missing}")
+        if len(unexpected) > 0:
+            print(f"Unexpected Keys: {unexpected}")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.conv(x)
         out = self.relu(out)
-        return self.head(out)
+        out = self.head_in(out)
+        out = self.relu(out)
+        return self.head_out(out)
 
     def training_step(self, batch, batch_idx):
         imgs, labels = batch
         imgs = imgs.transpose(1, 3)
-        imgs = self.augmentation(imgs)
         preds = self(imgs)
 
         loss = nn.functional.cross_entropy(preds, labels)
@@ -41,8 +48,7 @@ class WideResNet(pl.LightningModule):
         loss_dict = {"train/loss": loss, "train/accuracy": acc}
         self.log_dict(loss_dict, prog_bar=True, logger=True, on_step=True, on_epoch=True)
 
-        self.log("global_step", self.global_step,
-                 prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        self.log("global_step", self.global_step, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         return {"loss": loss}
 
     def validation_step(self, batch, batch_idx):
@@ -55,8 +61,7 @@ class WideResNet(pl.LightningModule):
         loss_dict = {"val/loss": loss, "val/accuracy": acc}
         self.log_dict(loss_dict, prog_bar=True, logger=True, on_step=False, on_epoch=True)
 
-        self.log("global_step", self.global_step,
-                 prog_bar=True, logger=True, on_step=False, on_epoch=False)
+        self.log("global_step", self.global_step, prog_bar=True, logger=True, on_step=False, on_epoch=False)
         return loss_dict
 
     def configure_optimizers(self):
@@ -86,20 +91,18 @@ class WideResNetEncoder(pl.LightningModule):
             monitor="val/rec_loss",
             ckpt_path="logs/Autoencoder_2023-04-15T23-50-00/checkpoints/last.ckpt",
             ddconfig={
-              "double_z": True,
-              "z_channels": 4,
-              "resolution": 32,
-              "in_channels": 3,
-              "out_ch": 3,
-              "ch": 128,
-              "ch_mult": [1, 2, 4],  # num_down = len(ch_mult)-1
-              "num_res_blocks": 1,
-              "attn_resolutions": [],
-              "dropout": 0.0,
+                "double_z": True,
+                "z_channels": 4,
+                "resolution": 32,
+                "in_channels": 3,
+                "out_ch": 3,
+                "ch": 128,
+                "ch_mult": [1, 2, 4],  # num_down = len(ch_mult)-1
+                "num_res_blocks": 1,
+                "attn_resolutions": [],
+                "dropout": 0.0,
             },
-            lossconfig={
-                "target": "torch.nn.Identity"
-            }
+            lossconfig={"target": "torch.nn.Identity"},
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -121,8 +124,7 @@ class WideResNetEncoder(pl.LightningModule):
         loss_dict = {"train/loss": loss, "train/accuracy": acc}
         self.log_dict(loss_dict, prog_bar=True, logger=True, on_step=True, on_epoch=True)
 
-        self.log("global_step", self.global_step,
-                 prog_bar=True, logger=True, on_step=True, on_epoch=False)
+        self.log("global_step", self.global_step, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         return {"loss": loss}
 
     def validation_step(self, batch, batch_idx):
@@ -136,10 +138,8 @@ class WideResNetEncoder(pl.LightningModule):
         loss_dict = {"val/loss": loss, "val/accuracy": acc}
         self.log_dict(loss_dict, prog_bar=True, logger=True, on_step=False, on_epoch=True)
 
-        self.log("global_step", self.global_step,
-                 prog_bar=True, logger=True, on_step=False, on_epoch=False)
+        self.log("global_step", self.global_step, prog_bar=True, logger=True, on_step=False, on_epoch=False)
         return loss_dict
 
     def configure_optimizers(self):
         return torch.optim.Adam(self.parameters(), lr=self.lr)
-

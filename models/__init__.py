@@ -60,6 +60,8 @@ def get_model_class(name: str):
         return ClassConditionedDDPM
     elif name == "ddpm":
         return DDPM
+    elif name == "resnet18":
+        return ResNet
     elif name == "diffmatch_pooling_multilabel":
         return DiffMatchPoolingMultilabel
     elif name == "joint_latent_diffusion_multilabel":
