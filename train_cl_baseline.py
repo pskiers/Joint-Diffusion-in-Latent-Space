@@ -75,7 +75,7 @@ if __name__ == "__main__":
     if old_classifier_path is not None:
         classifier_params["ckpt_path"] = old_classifier_path
         old_classifer = get_model_class(classifier_type)(**classifier_params)
-    
+
     diffusion_type = diffusion_config.model.get("model_type")
     diffusion_params = diffusion_config.model.get("params", dict())
     old_diffusion = None
@@ -214,7 +214,6 @@ if __name__ == "__main__":
 
         return generate_samples
 
-
     generate_old_samples = None
     if old_diffusion_path is not None and old_diffusion_path is not None:
         generate_old_samples = get_generator(old_diffusion, old_classifer)
@@ -251,9 +250,9 @@ if __name__ == "__main__":
             if weight_reinit == "none":
                 pass
             elif weight_reinit == "unused classes":
-                torch.nn.init.xavier_uniform_(model.classifier[-1].weight[len(prev_tasks) :])
+                torch.nn.init.xavier_uniform_(model.head_out[-1].weight[len(prev_tasks) :])
             elif weight_reinit == "classifier":
-                for layer in model.classifier:
+                for layer in [model.head_in, model.head_out]:
                     if hasattr(layer, "weight"):
                         torch.nn.init.xavier_uniform_(layer.weight)
             trainer.fit(
