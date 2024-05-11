@@ -18,7 +18,7 @@ model:
     classifier_hidden: 1024
     num_classes: 10
     dropout: 0.1
-    classification_start: 10000
+    classification_start: 20000
     augmentations: False
     sampling_method: "conditional_to_x"
     sample_grad_scale: 0
@@ -46,9 +46,9 @@ model:
 cl:
   reply_type: "unconditional_replay_only"
   grad_scale: 0
-  # ddim_steps: 250
+  ddim_steps: 250
   use_soft_labels: False
-  samples_per_class: 5000
+  samples_per_class: 1000
   sampling_method: "unconditional"
   weight_reinit: "unused classes"
   mean: [0.5, 0.5, 0.5]
@@ -64,7 +64,7 @@ dataloaders:
       split: "test"
       download: True
       batch_size: 256
-      num_workers: 16
+      num_workers: 8
       sampler: "none"
       shuffle: False
       transforms:
@@ -81,8 +81,8 @@ dataloaders:
               root: "data"
               split: "train"
               download: True
-              batch_size: 256
-              num_workers: 16
+              batch_size: 128
+              num_workers: 8
               sampler: "none"
               shuffle: True
               transforms:
@@ -119,7 +119,7 @@ lightning:
     benchmark: True
     checkpoint_callback: True
     max_steps: 40000
-    # accumulate_grad_batches: 2
+    accumulate_grad_batches: 2
 
   callbacks:
     # fid_logger:
