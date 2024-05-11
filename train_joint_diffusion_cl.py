@@ -69,7 +69,7 @@ if __name__ == "__main__":
 
     cl_config = config.pop("cl")
 
-    reply_buff = get_replay(cl_config.get("reply_type"))(train_bs=tasks_bs, sample_bs=250, dl_num_workers=16)
+    reply_buff = get_replay(cl_config.get("reply_type"))(train_bs=tasks_bs, sample_bs=2000, dl_num_workers=16)
 
     model_type = config.model.get("model_type")
     params = config.model.get("params", dict())
@@ -231,6 +231,7 @@ if __name__ == "__main__":
                     ]
                 )
                 samples = denormalize(samples)
+                samples = torch.clamp(samples, 0, 1)
             generator.sampling_method = "unconditional"
             generator.sample_classes = None
             return samples, labels.cpu()
