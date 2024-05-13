@@ -8,10 +8,10 @@ model:
     lr: 0.001
 
 cl:
-  reply_type: "unconditional_replay_and_new_dataset"
+  reply_type: "one_supervised_task"
   grad_scale: 0
   # ddim_steps: 250
-  samples_per_class: 5000
+  samples_per_class: 1000
   sampling_method: "unconditional"
   weight_reinit: "none"
   mean: [0.5, 0.5, 0.5]

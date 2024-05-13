@@ -1,14 +1,19 @@
 model:
   base_learning_rate: 0.0002
-  model_type: resnet18
+  model_type: resnet18_with_kd
   params:
     num_classes: 10
     head_in: 1000
     head_hidden: 512 
     lr: 0.001
 
+    old_classes: [0, 1, 2, 3, 4, 5]
+    new_classes: [6, 7]
+    kd_classification_weight: 1.0
+    classification_weight: 0.01
+
 cl:
-  reply_type: "unconditional_replay_and_new_dataset"
+  reply_type: "unconditional_replay_only"
   grad_scale: 0
   # ddim_steps: 250
   samples_per_class: 5000
@@ -72,7 +77,7 @@ lightning:
   trainer:
     benchmark: True
     checkpoint_callback: True
-    max_steps: 60000
+    max_steps: 32000
     # accumulate_grad_batches: 2
 
   callbacks:

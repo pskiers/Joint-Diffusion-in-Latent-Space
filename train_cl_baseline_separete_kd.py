@@ -28,6 +28,8 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint", "-c", type=Path, required=False, help="Path to model checkpoint file")
     parser.add_argument("--old_diffusion", type=Path, required=False, help="Ckpt to old tasks data generator")
     parser.add_argument("--old_classifier", type=Path, required=False, help="Ckpt to old tasks data classifer")
+    parser.add_argument("--new_diffusion", type=Path, required=False, help="Ckpt to new tasks data generator")
+    parser.add_argument("--new_classifier", type=Path, required=False, help="Ckpt to new tasks data classifer")
     parser.add_argument("--task", "-t", type=int, required=True, help="Task id")
     parser.add_argument("--learned", "-l", type=int, required=False, help="Learned tasks", nargs="+")
     parser.add_argument("--dir", "-d", type=str, required=False, help="Name for experiments log dir")
@@ -38,6 +40,8 @@ if __name__ == "__main__":
     checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
     old_diffusion_path = str(args.old_diffusion) if args.old_diffusion is not None else None
     old_classifier_path = str(args.old_classifier) if args.old_classifier is not None else None
+    new_diffusion_path = str(args.new_diffusion) if args.new_diffusion is not None else None
+    new_classifier_path = str(args.new_classifier) if args.new_classifier is not None else None
     current_task = args.task
     tasks_learned = args.learned if args.learned is not None else []
     to_train = args.train
@@ -73,18 +77,37 @@ if __name__ == "__main__":
     classifier_params = classifier_config.model.get("params", dict())
     old_classifer = None
     if old_classifier_path is not None:
+        classifier_params["old_model"] = None
+        classifier_params["new_model"] = None
         classifier_params["ckpt_path"] = old_classifier_path
-        old_classifer = get_model_class(classifier_type)(**classifier_params)
+        old_classifer = get_model_class(classifier_type)(**classifier_params).to(torch.device("cuda"))
+    new_classifer = None
+    if new_classifier_path is not None:
+        classifier_params["old_model"] = None
+        classifier_params["new_model"] = None
+        classifier_params["ckpt_path"] = new_classifier_path
+        new_classifer = get_model_class(classifier_type)(**classifier_params).to(torch.device("cuda"))
 
     diffusion_type = diffusion_config.model.get("model_type")
     diffusion_params = diffusion_config.model.get("params", dict())
     old_diffusion = None
     if old_diffusion_path is not None:
+        diffusion_params["old_model"] = None
+        diffusion_params["new_model"] = None
         diffusion_params["ckpt_path"] = old_diffusion_path
-        old_diffusion = get_model_class(diffusion_type)(**diffusion_params)
+        old_diffusion = get_model_class(diffusion_type)(**diffusion_params).to(torch.device("cuda"))
+    new_diffusion = None
+    if new_diffusion_path is not None:
+        diffusion_params["old_model"] = None
+        diffusion_params["new_model"] = None
+        diffusion_params["ckpt_path"] = new_diffusion_path
+        new_diffusion = get_model_class(diffusion_type)(**diffusion_params).to(torch.device("cuda"))
 
     model_type = config.model.get("model_type")
     params = config.model.get("params", dict())
+    params = OmegaConf.to_container(params, resolve=True)
+    params["old_model"] = old_diffusion if to_train == "diffusion" else old_classifer
+    params["new_model"] = new_diffusion if to_train == "diffusion" else new_classifer    
     if checkpoint_path is not None:
         config.model.params["ckpt_path"] = checkpoint_path
     model = get_model_class(model_type)(**params)
@@ -217,14 +240,14 @@ if __name__ == "__main__":
     generate_old_samples = None
     if old_diffusion_path is not None and old_diffusion_path is not None:
         generate_old_samples = get_generator(old_diffusion, old_classifer)
+    
+    generate_new_samples = None
+    if new_diffusion_path is not None and new_diffusion_path is not None:
+        generate_new_samples = get_generator(new_diffusion, new_classifer)
 
     prev_tasks = []
     for i, (datasets, task) in enumerate(zip(tasks_datasets, tasks)):
         if i == current_task:
-            if old_diffusion is not None:
-                old_diffusion.to(torch.device("cuda"))
-            if old_classifer is not None:
-                old_classifer.to(torch.device("cuda"))
             (labeled_ds, unlabeled_ds) = datasets if len(datasets) == 2 else (datasets[0], None)
             train_dls = reply_buff.get_data_for_task(
                 sup_ds=labeled_ds,
@@ -232,16 +255,12 @@ if __name__ == "__main__":
                 prev_tasks=prev_tasks,
                 samples_per_task=cl_config["samples_per_class"],
                 old_sample_generator=generate_old_samples,
-                new_sample_generator=None,  # dummy for class conditioned baseline stuff
+                new_sample_generator=generate_new_samples,
                 current_task=task,
                 filename=nowname,
                 saved_samples=cl_config.get("saved_samples", None),
                 saved_labels=cl_config.get("saved_labels", None),
             )
-            if old_diffusion is not None:
-                del old_diffusion
-            if old_classifer is not None:
-                del old_classifer
 
             trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
             trainer.logdir = logdir
