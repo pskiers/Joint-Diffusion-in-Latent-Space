@@ -2,6 +2,7 @@ from omegaconf import OmegaConf
 import argparse
 import torch
 from torchvision import transforms
+from pytorch_lightning import seed_everything
 import torch.utils.data as data
 import pytorch_lightning as pl
 from models import get_model_class, DDIMSamplerGradGuided
@@ -37,6 +38,7 @@ if __name__ == "__main__":
     parser.add_argument("--old", "-o", type=Path, required=False, help="Ckpt to old tasks data generator")
     parser.add_argument("--tags", type=str, required=False, help="Additional tags", nargs="+")
     parser.add_argument("--dir", "-d", type=str, required=False, help="Name for experiments log dir")
+    parser.add_argument("--seed", "-s", type=int, required=False, help="Seed")
     args = parser.parse_args()
     config_path = str(args.path)
     checkpoint_path = str(args.checkpoint) if args.checkpoint is not None else None
@@ -46,8 +48,10 @@ if __name__ == "__main__":
     tasks_learned = args.learned if args.learned is not None else []
     tags = args.tags if args.tags is not None else []
     custom_dir = args.dir
+    seed = args.seed if args.seed is not None else 42
 
     config = OmegaConf.load(config_path)
+    seed_everything(seed)
 
     lightning_config = config.pop("lightning", OmegaConf.create())
 
