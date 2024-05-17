@@ -172,13 +172,14 @@ class JointDiffusionNoisyClassifier(DDPM):
         return loss, loss_dict
 
     def on_validation_epoch_end(self) -> None:
-        wandb.log({"val/conf_mat": wandb.plot.confusion_matrix(
-            probs=None,
-            y_true=self.val_labels.numpy(),
-            preds=self.val_preds.numpy(),
-        )})
-        self.val_labels = torch.tensor([])
-        self.val_preds = torch.tensor([])
+        if self.trainer.global_rank == 0:
+            wandb.log({"val/conf_mat": wandb.plot.confusion_matrix(
+                probs=None,
+                y_true=self.val_labels.numpy(),
+                preds=self.val_preds.numpy(),
+            )})
+            self.val_labels = torch.tensor([])
+            self.val_preds = torch.tensor([])
 
     def log_images(self,
                    batch,

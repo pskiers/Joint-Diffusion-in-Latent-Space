@@ -109,7 +109,7 @@ if __name__ == "__main__":
         f"task {current_task}",
         f"learned tasks {tasks_learned}",
     ]
-    trainer_kwargs["logger"] = pl.loggers.WandbLogger(name=nowname, id=nowname, tags=tags)
+    trainer_kwargs["logger"] = pl.loggers.WandbLogger(name=nowname+"_"+now, id=nowname+"_"+now, tags=tags)
 
     # modelcheckpoint - use TrainResult/EvalResult(checkpoint_on=metric) to
     # specify which metric is used to determine best models

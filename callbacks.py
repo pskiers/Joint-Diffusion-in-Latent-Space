@@ -418,7 +418,7 @@ class CUDACallback(Callback):
         torch.cuda.synchronize(trainer.root_gpu)
         self.start_time = time.time()
 
-    def on_train_epoch_end(self, trainer, pl_module, outputs):
+    def on_train_epoch_end(self, trainer, pl_module):
         torch.cuda.synchronize(trainer.root_gpu)
         max_memory = torch.cuda.max_memory_allocated(trainer.root_gpu) / 2**20
         epoch_time = time.time() - self.start_time
@@ -469,6 +469,7 @@ class SetupCallback(Callback):
                     )
             print("Project config")
             print(OmegaConf.to_yaml(self.config))
+
             OmegaConf.save(
                 self.config,
                 os.path.join(self.cfgdir, "{}-project.yaml".format(self.now)),
@@ -486,17 +487,16 @@ class SetupCallback(Callback):
                 OmegaConf.create({"dataloading": self.dl_config}),
                 os.path.join(self.cfgdir, "{}-dataloading.yaml".format(self.now)),
             )
-
         else:
             # ModelCheckpoint callback created log directory --- remove it
             if not self.resume and os.path.exists(self.logdir):
                 dst, name = os.path.split(self.logdir)
                 dst = os.path.join(dst, "child_runs", name)
                 os.makedirs(os.path.split(dst)[0], exist_ok=True)
-                try:
-                    os.rename(self.logdir, dst)
-                except FileNotFoundError:
-                    pass
+                # try:
+                #     os.rename(self.logdir, dst)
+                # except FileNotFoundError:
+                #     pass
 
 
 class CheckpointEveryNSteps(pl.Callback):
