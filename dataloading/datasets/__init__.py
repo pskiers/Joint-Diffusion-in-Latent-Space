@@ -6,6 +6,7 @@ from .mnist import MNISTDataset
 from .stl10 import STL10Dataset
 from .svhn import SVHNDataset
 from .isic2019 import ISIC2019Dataset
+from .imagenet100 import Imagenet100
 
 
 def str_to_split(string: str) -> Split:
@@ -34,5 +35,7 @@ def get_dataset_cls(name: str):
         return SVHNDataset
     elif name == "isic2019":
         return ISIC2019Dataset
+    elif name == "imagenet100":
+        return Imagenet100
     else:
         raise ValueError("Dataset not implemented")

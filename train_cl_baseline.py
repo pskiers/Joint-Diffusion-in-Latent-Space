@@ -67,7 +67,7 @@ if __name__ == "__main__":
 
     cl_config = config.pop("cl")
 
-    reply_buff = get_replay(cl_config.get("reply_type"))(train_bs=tasks_bs, sample_bs=250, dl_num_workers=16)
+    reply_buff = get_replay(cl_config.get("reply_type"))(train_bs=tasks_bs, sample_bs=1500, dl_num_workers=16)
 
     classifier_type = classifier_config.model.get("model_type")
     classifier_params = classifier_config.model.get("params", dict())

@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List, Callable, Tuple, Optional, Union
 from torch.utils.data import DataLoader, ConcatDataset, RandomSampler, Dataset
 import torch
+import torchvision.transforms as transforms
 from dataloading import BaseDataset, BaseTensorDataset
 
 
@@ -274,8 +275,10 @@ class UnconditionalOnlyGenerativeReplay(Replay):
         if saved_samples is None or saved_labels is None:
             # samples for old tasks
             to_generate = {task: samples_per_task for task in prev_tasks}
+            generated = 0
             while any([val > 0 for val in to_generate.values()]):
                 imgs, labels = old_sample_generator(self.sample_bs, None)
+                generated += len(imgs)
                 for task, sampl_left in to_generate.items():
                     mask = labels == task if len(labels.shape) == 1 else labels.argmax(dim=-1) == task
                     task_imgs = imgs[mask][:sampl_left]
@@ -284,12 +287,36 @@ class UnconditionalOnlyGenerativeReplay(Replay):
                     generated_labels = torch.concat((generated_labels, task_labels))
                     to_generate[task] -= len(task_labels)
                     print(f"{to_generate[task]} left for label {task}")
+                if generated > len(prev_tasks) * samples_per_task * 2:
+                    transform = transforms.Compose(
+                        [
+                            transforms.ToPILImage(),
+                            transforms.RandomHorizontalFlip(),
+                            transforms.RandomResizedCrop(
+                                size=generated_imgs.shape[2], scale=[0.90, 1.0], antialias=True
+                            ),
+                            transforms.ToTensor(),
+                        ]
+                    )
+                    for task, sampl_left in to_generate.items():
+                        while sampl_left > 0:
+                            task_imgs = generated_imgs[generated_labels == task][:sampl_left]
+                            for i, img in enumerate(task_imgs):
+                                task_imgs[i] = transform(img)
+                            task_labels = generated_labels[generated_labels == task][:sampl_left]
+                            generated_imgs = torch.concat((generated_imgs, task_imgs))
+                            generated_labels = torch.concat((generated_labels, task_labels))
+                            sampl_left -= len(task_labels)
+                            print(f"{sampl_left} left for label {task}")
+                    break
 
             # samples for new task
             assert current_task is not None
             to_generate = {task: samples_per_task for task in current_task}
+            generated = 0
             while any([val > 0 for val in to_generate.values()]):
                 imgs, labels = new_sample_generator(self.sample_bs, None)
+                generated += len(imgs)
                 for task, sampl_left in to_generate.items():
                     mask = labels == task if len(labels.shape) == 1 else labels.argmax(dim=-1) == task
                     task_imgs = imgs[mask][:sampl_left]
@@ -298,6 +325,29 @@ class UnconditionalOnlyGenerativeReplay(Replay):
                     generated_labels = torch.concat((generated_labels, task_labels))
                     to_generate[task] -= len(task_labels)
                     print(f"{to_generate[task]} left for label {task}")
+                if generated > len(current_task) * samples_per_task * 2:
+                    transform = transforms.Compose(
+                        [
+                            transforms.ToPILImage(),
+                            transforms.RandomHorizontalFlip(),
+                            transforms.RandomResizedCrop(
+                                size=generated_imgs.shape[2], scale=[0.85, 1.0], antialias=True
+                            ),
+                            transforms.ToTensor(),
+                        ]
+                    )
+                    for task, sampl_left in to_generate.items():
+                        while sampl_left > 0:
+                            task_imgs = generated_imgs[generated_labels == task][:sampl_left]
+                            for i, img in enumerate(task_imgs):
+                                task_imgs[i] = transform(img)
+                            task_labels = generated_labels[generated_labels == task][:sampl_left]
+                            generated_imgs = torch.concat((generated_imgs, task_imgs))
+                            generated_labels = torch.concat((generated_labels, task_labels))
+                            sampl_left -= len(task_labels)
+                            print(f"{sampl_left} left for label {task}")
+                    break
+
             torch.save(generated_imgs, f"./data/cl/{filename}_imgs.pt")
             torch.save(generated_labels, f"./data/cl/{filename}_labels.pt")
         else:
@@ -351,8 +401,10 @@ class UnconditionalGenerativeCombinedReplay(Replay):
         if saved_samples is None or saved_labels is None:
             # samples for old tasks
             to_generate = {task: samples_per_task for task in prev_tasks}
+            generated = 0
             while any([val > 0 for val in to_generate.values()]):
                 imgs, labels = old_sample_generator(self.sample_bs, None)
+                generated += len(imgs)
                 for task, sampl_left in to_generate.items():
                     task_imgs = imgs[labels == task][:sampl_left]
                     task_labels = labels[labels == task][:sampl_left]
@@ -360,6 +412,28 @@ class UnconditionalGenerativeCombinedReplay(Replay):
                     generated_labels = torch.concat((generated_labels, task_labels))
                     to_generate[task] -= len(task_labels)
                     print(f"{to_generate[task]} left for label {task}")
+                if generated > len(prev_tasks) * samples_per_task * 2:
+                    transform = transforms.Compose(
+                        [
+                            transforms.ToPILImage(),
+                            transforms.RandomHorizontalFlip(),
+                            transforms.RandomResizedCrop(
+                                size=generated_imgs.shape[2], scale=[0.85, 1.0], antialias=True
+                            ),
+                            transforms.ToTensor(),
+                        ]
+                    )
+                    for task, sampl_left in to_generate.items():
+                        while sampl_left > 0:
+                            task_imgs = generated_imgs[generated_labels == task][:sampl_left]
+                            for i, img in enumerate(task_imgs):
+                                task_imgs[i] = transform(img)
+                            task_labels = generated_labels[generated_labels == task][:sampl_left]
+                            generated_imgs = torch.concat((generated_imgs, task_imgs))
+                            generated_labels = torch.concat((generated_labels, task_labels))
+                            sampl_left -= len(task_labels)
+                            print(f"{sampl_left} left for label {task}")
+                    break
             torch.save(generated_imgs, f"./data/cl/{filename}_imgs.pt")
             torch.save(generated_labels, f"./data/cl/{filename}_labels.pt")
         else:
