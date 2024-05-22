@@ -7,7 +7,7 @@ It is recommended highly recommended that one uses the provided installation scr
 
 ### Requirements of the installation script
 Required components before you start the installation:
-* Anaconda (or Miniconda)
+* Miniconda (or Anaconda)
 * GPU drivers required to run pytorch models on GPU
 
 Also you should also make sure that Anaconda sees all necessary drivers and libraries, because more often than not it does not and you need to add them manually. For more information see troubleshooting section down bellow.
@@ -27,8 +27,45 @@ Project contains 3 main folders:
 
 ## Training a model
 
-### Training diffusion from scratch
+### Reproducing results from paper
+To reproduce the results from the paper simply run:
+* CIFAR10 supervised 5 tasks
+```
+bash cifar10.sh
+```
+* CIFAR10 5% labels 5 tasks
+```
+bash cifar10_5%.sh
+```
+* CIFAR10 0.8% labels 5 tasks 
+```
+bash cifar10_08%.sh
+```
+* CIFAR100 supervised 5 tasks
+```
+bash cifar100_5t.sh
+```
+* CIFAR100 supervised 10 tasks
+```
+bash cifar100_10t.sh
+```
+* CIFAR100 5% labels 10 tasks
+```
+bash cifar100_10t_5%.sh
+```
+* CIFAR100 0.8% labels 10 tasks 
+```
+bash cifar100_10t_08%.sh
+```
+
+### Training part of JDCL from scratch
 It is recommended to have a wandb account created. If you do not then it is recommended to create one. To train a model run:
+```
+python train_joint_diffusion_cl.py -p {PATH_TO_CONFIG}
+```
+
+### Training joint diffusion from scratch
+To train a model run:
 ```
 python train_joint_diffusion.py -p {PATH_TO_CONFIG}
 ```
