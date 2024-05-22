@@ -23,7 +23,7 @@ model:
     sampling_method: "conditional_to_x"
     sample_grad_scale: 0
     old_classes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79]
-    new_classes: [60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79]
+    new_classes: [80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99]
     kd_loss_weight: 1.0
     l_simple_weight: 0.01
     # sampling_recurence_steps: 4
@@ -46,15 +46,15 @@ model:
 cl:
   reply_type: "unconditional_replay_only"
   grad_scale: 0
-  # ddim_steps: 250
+  ddim_steps: 250
   use_soft_labels: False
-  samples_per_class: 5000
+  samples_per_class: 400
   sampling_method: "unconditional"
   weight_reinit: "unused classes"
   mean: [0.5, 0.5, 0.5]
   std: [0.5, 0.5, 0.5]
-  # saved_samples: data/cl/JointDiffusionKnowledgeDistillation_2024-05-05T04-35-04_imgs.pt
-  # saved_labels: data/cl/JointDiffusionKnowledgeDistillation_2024-05-05T04-35-04_labels.pt
+  # saved_samples: data/cl/CL_CIFAR100T5_SUP_TASK1-5_SEED12_imgs.pt
+  # saved_labels: data/cl/CL_CIFAR100T5_SUP_TASK1-5_SEED12_labels.pt
 
 
 dataloaders:
@@ -118,7 +118,7 @@ lightning:
   trainer:
     benchmark: True
     checkpoint_callback: True
-    max_steps: 1000000
+    max_steps: 70000
     # accumulate_grad_batches: 2
 
   callbacks:
