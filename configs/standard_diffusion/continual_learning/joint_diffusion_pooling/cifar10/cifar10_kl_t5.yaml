@@ -18,7 +18,7 @@ model:
     classifier_hidden: 1024
     num_classes: 10
     dropout: 0.1
-    classification_start: 20000
+    classification_start: 10000
     augmentations: False
     sampling_method: "conditional_to_x"
     sample_grad_scale: 0
@@ -64,7 +64,7 @@ dataloaders:
       split: "test"
       download: True
       batch_size: 256
-      num_workers: 8
+      num_workers: 16
       sampler: "none"
       shuffle: False
       transforms:
@@ -81,8 +81,8 @@ dataloaders:
               root: "data"
               split: "train"
               download: True
-              batch_size: 128
-              num_workers: 8
+              batch_size: 256
+              num_workers: 16
               sampler: "none"
               shuffle: True
               transforms:
@@ -118,8 +118,8 @@ lightning:
   trainer:
     benchmark: True
     checkpoint_callback: True
-    max_steps: 40000
-    accumulate_grad_batches: 2
+    max_steps: 35000
+    # accumulate_grad_batches: 2
 
   callbacks:
     # fid_logger:
