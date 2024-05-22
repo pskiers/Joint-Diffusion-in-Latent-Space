@@ -28,8 +28,45 @@ Project contains 3 main folders:
 
 ## Training a model
 
-### Training diffusion from scratch
+### Reproducing results from paper
+To reproduce the results from the paper simply run:
+* CIFAR10 supervised 5 tasks
+```
+bash cifar10.sh
+```
+* CIFAR10 5% labels 5 tasks
+```
+bash cifar10_5%.sh
+```
+* CIFAR10 0.8% labels 5 tasks 
+```
+bash cifar10_08%.sh
+```
+* CIFAR100 supervised 5 tasks
+```
+bash cifar100_5t.sh
+```
+* CIFAR100 supervised 10 tasks
+```
+bash cifar100_10t.sh
+```
+* CIFAR100 5% labels 10 tasks
+```
+bash cifar100_10t_5%.sh
+```
+* CIFAR100 0.8% labels 10 tasks 
+```
+bash cifar100_10t_08%.sh
+```
+
+### Training part of JDCL from scratch
 It is recommended to have a wandb account created. If you do not then it is recommended to create one. To train a model run:
+```
+python train_joint_diffusion_cl.py -p {PATH_TO_CONFIG}
+```
+
+### Training joint diffusion from scratch
+To train a model run:
 ```
 python train_joint_diffusion.py -p {PATH_TO_CONFIG}
 ```
