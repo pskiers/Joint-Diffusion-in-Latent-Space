@@ -266,7 +266,7 @@ class UnconditionalOnlyGenerativeReplay(Replay):
         saved_labels: Optional[str] = None,
     ):
         assert isinstance(self.train_bs, list)
-        assert new_sample_generator is not None
+        # assert new_sample_generator is not None
 
         generated_imgs = torch.tensor([])
         generated_labels = torch.tensor([], dtype=torch.int64)
