@@ -131,7 +131,7 @@ def get_dataloaders(name: str,
         runtime=3
         warnings.warn('&&&&&&&&&&&&&&&&&& ACPL DATASETS - REMEMBER WE HAVE LABEL RATIO AND RUNTIME HARDCODED AND MOCKED IN DIFFERENT PLACES!!!!!!!!!')
         loader = ChestACPLDataloader(
-            batch_size=16,
+            batch_size=val_batch,
             num_workers=num_workers,
             training_platform='local_sano',
         )
@@ -139,6 +139,12 @@ def get_dataloaders(name: str,
             "test",
             ratio=label_ratio,
             runtime=runtime,
+        )
+
+        loader = ChestACPLDataloader(
+            batch_size=train_batches[0],
+            num_workers=num_workers,
+            training_platform='local_sano',
         )
         
         (label_loader1, label_dataset, label_sampler,) = loader.run(
@@ -184,7 +190,7 @@ def get_dataloaders(name: str,
         runtime=3
         warnings.warn('&&&&&&&&&&&&&&&&&& ACPL DATASETS - REMEMBER WE HAVE LABEL RATIO AND RUNTIME HARDCODED AND MOCKED IN DIFFERENT PLACES self.mock_acpl_args()!!!!!!!!!')
         loader = ChestACPLDataloader(
-            batch_size=train_batches[0],
+            batch_size=val_batch,
             num_workers=num_workers,
             training_platform=training_platform,
         )
@@ -194,6 +200,12 @@ def get_dataloaders(name: str,
             runtime=runtime,
         )
         
+        loader = ChestACPLDataloader(
+            batch_size=train_batches[0],
+            num_workers=num_workers,
+            training_platform=training_platform,
+        )
+
         (label_loader1, label_dataset, label_sampler,) = loader.run(
             "labeled",
             ratio=label_ratio,

@@ -43,16 +43,16 @@ class ChestACPLDataset(Dataset):
         self.mode = mode
         if self.mode == "labeled":
             transformList = []
-            transformList.append(transforms.RandomResizedCrop(256))
+            transformList.append(transforms.RandomResizedCrop(256, scale=(0.2, 1.0)))
             transformList.append(transforms.RandomHorizontalFlip())
             transformList.append(transforms.ToTensor())
-            transformList.append(transforms.Normalize(0.5, 0.5)) #[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]))  #adjusted to 14 classes    
+            transformList.append(transforms.Normalize(0.5, 0.5)) #[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]))  #adjusted to 1 channel    
             self.transform=transforms.Compose(transformList)
         else:
             transformList = []
             transformList.append(transforms.Resize(256))
             transformList.append(transforms.ToTensor())
-            transformList.append(transforms.Normalize(0.5, 0.5)) #[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]))  #adjusted to 14 classes
+            transformList.append(transforms.Normalize(0.5, 0.5)) #[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]))  #adjusted to 1 channel
             self.transform=transforms.Compose(transformList)
 
         gr_path = os.path.join(root_dir, "Data_Entry_2017.csv")

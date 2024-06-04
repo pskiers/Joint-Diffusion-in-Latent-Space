@@ -89,8 +89,8 @@ if __name__ == "__main__":
         LearningRateMonitor(logging_interval='step')
     ]
 
-    trainer = pl.Trainer.from_argparse_args(trainer_opt, check_val_every_n_epoch=10, 
-        reload_dataloaders_every_n_epochs = 10, **trainer_kwargs)
+    trainer = pl.Trainer.from_argparse_args(trainer_opt, check_val_every_n_epoch=1, 
+        reload_dataloaders_every_n_epochs = 1, **trainer_kwargs)
     
    
     trainer.logdir = logdir

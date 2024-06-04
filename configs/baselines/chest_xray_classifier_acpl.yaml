@@ -2,18 +2,18 @@
 
 model:
   #logdir: /net/tscratch/people/plgjoaxkal/Joint-Diffusion-in-Latent-Space/
-  logdir: /data/jan_dubinski/Joint-Diffusion-in-Latent-Space/
+  logdir: ./Joint-Diffusion-in-Latent-Space/
   model_type: multilabel_classifier_acpl
   params:
-    classifier_test_mode: "resnet" #"densenet"
+    classifier_test_mode: "densenet"
     image_size: 256 # 32 for latent #not taken from config, hardcoded somewhere
     channels: 4
     monitor: test/auroc
     in_features: 1024 # encoder+resnet18 512, resnet50 2048, linear 4096; densenest121 1024
-    num_classes: 15
+    num_classes: 14
     dropout: 0.3
     learning_rate: 0.03
-    weight_decay: 0.00001
+    weight_decay: 0.0000
     ft_enc: False
 
     first_stage_config:
@@ -35,7 +35,7 @@ model:
           dropout: 0.0
         lossconfig:
           target: torch.nn.Identity
-    weights: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,1]
+    weights: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,]
     #14 classes, log
     #weights: [0.741790821, 1.485960814, 1.253424332, 1.581670469, 0.718735907, 1.567343026, 1.624709854, 2.581797199, 0.464784148, 1.092677857, 1.019675586, 1.363090079, 1.782541339, 1.289286516]
     # 14 classes sqrt
@@ -45,13 +45,13 @@ model:
     
 dataloaders:
   name: chest_xray_acpl
-  train_batches: [ 32 ] #not taken from config, hardcoded somewhere
-  val_batch: 32 #not taken from config, hardcoded somewhere
+  train_batches: [ 16 ] #not taken from config, hardcoded somewhere
+  val_batch: 512 #not taken from config, hardcoded somewhere
   num_workers: 4
   num_labeled: null
   pin_memory: True
   persistent_workers: True
-  training_platform: de #not taken from config, hardcoded somewhere
+  training_platform: local_sano #not taken from config, hardcoded somewhere
 
 
 lightning:
@@ -59,6 +59,6 @@ lightning:
     benchmark: True
     checkpoint_callback: True
     max_epochs: 70
-    gpus: [1]
+    gpus: [2]
     accelerator: ddp
     # accumulate_grad_batches: 2

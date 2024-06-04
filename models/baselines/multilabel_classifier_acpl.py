@@ -15,7 +15,7 @@ from torch.nn import functional as F
 import pytorch_lightning as pl
 from ldm.models.diffusion.ddpm import LatentDiffusion
 from ldm.modules.diffusionmodules.util import timestep_embedding
-from torchvision.models import resnet50, densenet121
+# from torchvision.models import resnet50, densenet121
 import importlib
 from torchvision.models import DenseNet121_Weights
 from datasets.chest_xray_acpl import ChestACPLDataloader, ChestACPLDataset
@@ -47,7 +47,13 @@ def instantiate_from_config(config):
     return get_obj_from_str(config["target"])(**config.get("params", dict()))
 
 def lr_lambda(epoch: int):
-        if epoch > 14: #0.7 of 20epochs
+        #70% of epochs
+        if 20>epoch>=14 or \
+            30>epoch>=27 or \
+            40>epoch>=37 or \
+            50>epoch>=47 or \
+            60>epoch>=57 or \
+            70>epoch>=67:
             return 0.1
         else:
             return 1.0
@@ -129,13 +135,16 @@ class MultilabelClassifierACPL(pl.LightningModule):
                 nn.Linear(self.in_features, self.num_classes),
                 )
         elif self.classifier_test_mode == "densenet":
-            # # ref impl https://github.com/zoogzog/chexnet/blob/master/DensenetModels.py
+            # ref impl https://github.com/zoogzog/chexnet/blob/master/DensenetModels.py
             # self.densenet = densenet121(weights = DenseNet121_Weights.DEFAULT)
+            # self.densenet.features[0] = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+
             # self.num_classes = self.num_classes
             # self.densenet.classifier = nn.Sequential(nn.Linear(self.in_features, self.num_classes))
             self.densenet = densenet121(pretrained=True)
             in_features = 1024
             self.densenet.classifier = nn.Linear(in_features, self.num_classes)
+            self.densenet.features[0] = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
             self.densenet = nn.SyncBatchNorm.convert_sync_batchnorm(self.densenet)
 
         else:
@@ -189,12 +198,12 @@ class MultilabelClassifierACPL(pl.LightningModule):
         elif self.classifier_test_mode == "resnet":
             out = self.resnet(imgs)
         elif self.classifier_test_mode == "densenet":
-            out, repr = self.densenet(imgs)
-            # repr = self.densenet.features(imgs)
-            # repr = F.relu(repr, inplace=True)
-            # repr = F.adaptive_avg_pool2d(repr, (1, 1))
-            # repr = torch.flatten(repr, 1)
-            # out = self.densenet.classifier(repr)
+            #out, repr = self.densenet(imgs)
+            repr = self.densenet.features(imgs)
+            repr = F.relu(repr, inplace=True)
+            repr = F.adaptive_avg_pool2d(repr, (1, 1))
+            repr = torch.flatten(repr, 1)
+            out = self.densenet.classifier(repr)
         return out
     
     def forward_with_repr(self, imgs: torch.Tensor):
@@ -203,35 +212,35 @@ class MultilabelClassifierACPL(pl.LightningModule):
         elif self.classifier_test_mode == "encoder_linear":
             raise NotImplementedError
         elif self.classifier_test_mode == "resnet":
-            repr = self.resnet.features(imgs)
-            repr = F.relu(repr, inplace=True)
-            repr = F.adaptive_avg_pool2d(repr, (1, 1))
+            repr = torch.nn.Sequential(*(list(self.resnet.children())[:-1]))(imgs)
+            # repr = F.relu(repr, inplace=True)
+            # repr = F.adaptive_avg_pool2d(repr, (1, 1))
             repr = torch.flatten(repr, 1)
             out = self.resnet.fc(repr)
             repr = F.normalize(repr, dim=-1, p=2)
         elif self.classifier_test_mode == "densenet":
-             out, repr = self.densenet(imgs)
-            # repr = self.densenet.features(imgs)
-            # repr = F.relu(repr, inplace=True)
-            # repr = F.adaptive_avg_pool2d(repr, (1, 1))
-            # repr = torch.flatten(repr, 1)
-            # out = self.densenet.classifier(repr)
+             #out, repr = self.densenet(imgs)
+            repr = self.densenet.features(imgs)
+            repr = F.relu(repr, inplace=True)
+            repr = F.adaptive_avg_pool2d(repr, (1, 1))
+            repr = torch.flatten(repr, 1)
+            out = self.densenet.classifier(repr)
 
-        return out, repr #F.normalize(repr, dim=-1, p=2)
+        return out, F.normalize(repr, dim=-1, p=2) #repr
 
     
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay = self.weight_decay, eps=0.1, betas=(0.9, 0.99))
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate, weight_decay = self.weight_decay, betas=(0.9, 0.99), eps=0.1)
         scheduler = {
         'scheduler': LambdaLR(optimizer, lr_lambda=lr_lambda),
     }
         return [optimizer], [scheduler]
-        return optimizer
+        #return optimizer
 
     def training_step(self, batch, batch_idx):
         loss_dict = {}
         x, y, _, _ = batch
-        if len(x)<4:
+        if len(x.shape)<4:
             x = x.unsqueeze(1)
         if x.shape[-1]==3:
             x= x.permute(0,3,1,2)
@@ -253,7 +262,7 @@ class MultilabelClassifierACPL(pl.LightningModule):
         self.log("global_step", self.global_step,
                     prog_bar=True, logger=True, on_step=True, on_epoch=False)
         x, y, _, _ = batch
-        if len(x)<4:
+        if len(x.shape)<4:
             x = x.unsqueeze(1)
         if x.shape[-1]==3:
             x= x.permute(0,3,1,2)
@@ -348,7 +357,7 @@ class MultilabelClassifierACPL(pl.LightningModule):
             # we want it only once, in original ACPL it was before acpl loops
             self.trainer.anchor = self._anchor_ext()
             if dist.get_rank() == 0:
-                torch.save(self.trainer.anchor, f"{self.trainer.logdir}/anchor0.pth.tar")
+                torch.save(self.trainer.anchor, f"{self.trainer.logdir}/anchor0_{self.global_step}.pth.tar")
 
         print(f"Finished {self.acpl_loop} acpl loop (Loop 0 had no pseudolabels, PseudoLabel started in loop 1). Now KNN and pseudolabeling for the next loop.")
         self.acpl_loop+=1
@@ -454,6 +463,10 @@ class MultilabelClassifierACPL(pl.LightningModule):
             # we operate on unlabeled dataloader
             for batch_idx, batch in enumerate(tqdm(self.trainer.unlabeled_loader)):
                 (inputs, labels, item, input_path) = self.transfer_batch_to_device(batch, self.device, dataloader_idx=1)
+                if len(inputs.shape)<4:
+                    inputs = inputs.unsqueeze(1)
+                if inputs.shape[-1]==3:
+                    inputs= inputs.permute(0,3,1,2)
                 outputs1, feat1 = self.forward_with_repr(inputs)
                 
                 # inputs, labels = inputs.cuda(), labels.cuda(args.gpu)
@@ -507,6 +520,10 @@ class MultilabelClassifierACPL(pl.LightningModule):
 
             for batch_idx, batch in enumerate(self.trainer.anchor_loader):
                 (inputs, labels, item, _)  = self.transfer_batch_to_device(batch, self.device, dataloader_idx=0)
+                if len(inputs.shape)<4:
+                    inputs = inputs.unsqueeze(1)
+                if inputs.shape[-1]==3:
+                    inputs= inputs.permute(0,3,1,2)
                 outputs1, feat1 = self.forward_with_repr(inputs)
                 #item = torch.from_numpy(item.numpy())#.cuda(args.gpu)
                 embed1 = torch.cat((embed1, feat1))
