@@ -26,9 +26,9 @@ class ISIC2019Dataset(BaseDataset):
         elif self.split == Split.TRAIN:
             df = pd.read_csv(os.path.join(self.root, "train_val_split.csv"))
         self.set_data(df["image_path"].values)
-        self.set_targets(
-            df[["mel", "nv", "bcc", "ak", "bkl", "df", "vasc", "scc"]].values
-        )
+        targets = df[["mel", "nv", "bcc", "ak", "bkl", "df", "vasc", "scc"]].values
+        targets = targets.argmax(axis=1)
+        self.set_targets(targets)
 
     def __getitem__(self, index) -> Tuple:
         data = self.get_data()[index]
