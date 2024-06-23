@@ -1,14 +1,15 @@
 import torch
 import torch.nn as nn
 from torchvision import transforms
+from torchmetrics import AUROC
 from einops import rearrange
 import kornia as K
 from .ssl_joint_diffusion import SSLJointLatentDiffusion, SSLJointLatentDiffusionV2
-from .joint_latent_diffusion import JointLatentDiffusion, JointLatentDiffusionAttention
+from .joint_latent_diffusion import JointLatentDiffusion
 from ..representation_transformer import RepresentationTransformer
 from ..adjusted_unet import AdjustedUNet
 from ..ddim import DDIMSamplerGradGuided
-from ..utils import FixMatchEma, interleave, de_interleave
+from ..utils import interleave, de_interleave
 
 
 class LatentDiffMatch(SSLJointLatentDiffusion):
@@ -518,12 +519,11 @@ class LatentDiffMatchPooling(JointLatentDiffusion):
                  classifier_hidden,
                  num_classes,
                  min_confidence=0.95,
-                 mu=7,
-                 batch_size=64,
                  classification_start=0,
                  dropout=0,
                  classification_loss_weight=1.0,
                  classification_key=1,
+                 use_fixmatch=True,
                  num_timesteps_cond=None,
                  cond_stage_key="image",
                  cond_stage_trainable=False,
@@ -556,9 +556,13 @@ class LatentDiffMatchPooling(JointLatentDiffusion):
             **kwargs
         )
         self.min_confidence = min_confidence
-        self.mu = mu
-        self.batch_size = batch_size
         self.classification_start = classification_start
+        self.use_fixmatch = use_fixmatch
+        self.auroc_train = AUROC(num_classes=self.num_classes)
+        self.auroc_val = AUROC(num_classes=self.num_classes)
+        self.auroc_val_ema = AUROC(num_classes=self.num_classes)
+        self.auroc_test_per_class = AUROC(num_classes=self.num_classes, average=None)
+        self.auroc_test = AUROC(num_classes=self.num_classes)
 
     def get_input(self,
                   batch,
@@ -607,49 +611,121 @@ class LatentDiffMatchPooling(JointLatentDiffusion):
         loss_dict = {}
         x, y, weak_img, strong_img = self.get_train_classification_input(
             batch, self.first_stage_key)
-        t = torch.zeros((x.shape[0]*(2*self.mu+1),), device=self.device).long()
-
-        inputs = interleave(
-            torch.cat((x, weak_img, strong_img)), 2*self.mu+1)
-
         unet: AdjustedUNet = self.model.diffusion_model
-        representations = unet.just_representations(inputs, t)
-        representations = self.transform_representations(representations)
-        logits = self.classifier(representations)
+        if self.use_fixmatch:
+            mu = weak_img.shape[0] // x.shape[0]
+            batch_size = x.shape[0]
+            t = torch.zeros((x.shape[0]*(2*mu+1),), device=self.device).long()
 
-        logits = de_interleave(logits, 2*self.mu+1)
-        preds_x = logits[:self.batch_size]
-        preds_weak, preds_strong = logits[self.batch_size:].chunk(2)
-        del logits
+            inputs = interleave(
+                torch.cat((x, weak_img, strong_img)), 2*mu+1)
+
+            representations = unet.just_representations(inputs, t)
+            representations = self.transform_representations(representations)
+            logits = self.classifier(representations)
+
+            logits = de_interleave(logits, 2*mu+1)
+            preds_x = logits[:batch_size]
+            preds_weak, preds_strong = logits[batch_size:].chunk(2)
+            del logits
+        else:
+            t = torch.zeros(x.shape[0], device=self.device).long()
+            preds_x = unet.just_representations(x, t, pooled=False)
 
         loss_classification = nn.functional.cross_entropy(
             preds_x, y, reduction="mean")
         loss += loss_classification * self.classification_loss_weight
         accuracy = torch.sum(torch.argmax(preds_x, dim=1) == y) / len(y)
+        self.auroc_train.update(preds_x, y.int())
+        self.log("train/auroc", self.auroc_train, on_step=False, on_epoch=True)
         loss_dict.update(
             {'train/loss_classification': loss_classification})
         loss_dict.update({'train/loss': loss})
         loss_dict.update({'train/accuracy': accuracy})
 
-        pseudo_label = torch.softmax(preds_weak.detach(), dim=-1)
-        max_probs, targets_u = torch.max(pseudo_label, dim=-1)
-        mask = max_probs.ge(self.min_confidence).float()
-        ssl_loss = (nn.functional.cross_entropy(
-            preds_strong, targets_u, reduction='none') * mask).mean()
-        loss += ssl_loss * self.classification_loss_weight
-        accuracy = torch.sum(
-            (torch.argmax(preds_strong, dim=1) == targets_u) * mask
-        ) / mask.sum() if mask.sum() > 0 else 0
-        loss_dict.update(
-            {'train/ssl_above_threshold': mask.mean().item()})
-        loss_dict.update({'train/ssl_max_confidence': mask.max().item()})
-        loss_dict.update({'train/loss_ssl_classification': ssl_loss})
-        loss_dict.update({'train/loss': loss})
-        loss_dict.update({'train/ssl_accuracy': accuracy})
+        if self.use_fixmatch:
+            pseudo_label = torch.softmax(preds_weak.detach(), dim=-1)
+            max_probs, targets_u = torch.max(pseudo_label, dim=-1)
+            mask = max_probs.ge(self.min_confidence).float()
+            ssl_loss = (nn.functional.cross_entropy(
+                preds_strong, targets_u, reduction='none') * mask).mean()
+            loss += ssl_loss * self.classification_loss_weight
+            accuracy = torch.sum(
+                (torch.argmax(preds_strong, dim=1) == targets_u) * mask
+            ) / mask.sum() if mask.sum() > 0 else 0
+            loss_dict.update(
+                {'train/ssl_above_threshold': mask.mean().item()})
+            loss_dict.update({'train/ssl_max_confidence': mask.max().item()})
+            loss_dict.update({'train/loss_ssl_classification': ssl_loss})
+            loss_dict.update({'train/loss': loss})
+            loss_dict.update({'train/ssl_accuracy': accuracy})
 
         self.log_dict(loss_dict, prog_bar=True,
                       logger=True, on_step=True, on_epoch=True)
         return loss
+
+    def do_classification(self, x, t, y):
+        unet: AdjustedUNet = self.model.diffusion_model
+        representations = unet.just_representations(x, t, pooled=False)
+        representations = self.transform_representations(representations)
+        y_pred = self.classifier(representations)
+
+        loss = nn.functional.cross_entropy(y_pred, y)
+        accuracy = torch.sum(torch.argmax(y_pred, dim=1) == y) / len(y)
+        return loss, accuracy, y_pred
+
+    def validation_step(self, batch, batch_idx):
+        x, y = self.get_valid_classification_input(batch, self.first_stage_key)
+        t = torch.zeros((x.shape[0],), device=self.device).long()
+        x_diff, c = self.get_input(batch, self.first_stage_key)
+
+        loss, loss_dict_no_ema = self(x_diff, c)
+        loss_cls, accuracy, y_pred = self.do_classification(x, t, y)
+        loss_dict_no_ema.update({'val/loss_classification': loss_cls})
+        loss_dict_no_ema.update({'val/loss_full': loss + loss_cls})
+        loss_dict_no_ema.update({'val/accuracy': accuracy})
+        self.auroc_val.update(y_pred, y.int())
+        self.log(
+            "val/auroc",
+            self.auroc_val,
+            on_step=False,
+            on_epoch=True,
+            sync_dist=True,
+            add_dataloader_idx=False,
+        )
+
+        with self.ema_scope():
+            loss, loss_dict_ema = self(x_diff, c)
+            loss_cls, accuracy, y_pred = self.do_classification(x, t, y)
+            loss_dict_ema.update({'val/loss_classification': loss_cls})
+            loss_dict_ema.update({'val/loss_full': loss + loss_cls})
+            loss_dict_ema.update({'val/accuracy': accuracy})
+            loss_dict_ema = {
+                key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
+            self.auroc_val_ema.update(y_pred, y.int())
+            self.log(
+                "val/auroc_ema",
+                self.auroc_val_ema,
+                on_step=False,
+                on_epoch=True,
+                sync_dist=True,
+                add_dataloader_idx=False,
+            )
+
+        self.log_dict(
+            loss_dict_no_ema,
+            prog_bar=False,
+            logger=True,
+            on_step=False,
+            on_epoch=True
+        )
+        self.log_dict(
+            loss_dict_ema,
+            prog_bar=False,
+            logger=True,
+            on_step=False,
+            on_epoch=True
+        )
 
 
 class LatentDiffMatchAttention(LatentDiffMatchPooling):
@@ -658,11 +734,10 @@ class LatentDiffMatchAttention(LatentDiffMatchPooling):
                  cond_stage_config,
                  attention_config,
                  min_confidence=0.95,
-                 mu=7,
-                 batch_size=64,
                  classification_start=0,
                  classification_loss_weight=1,
                  classification_key=1,
+                 use_fixmatch=True,
                  num_timesteps_cond=None,
                  cond_stage_key="image",
                  cond_stage_trainable=False,
@@ -684,6 +759,7 @@ class LatentDiffMatchAttention(LatentDiffMatchPooling):
             conditioning_key,
             scale_factor,
             scale_by_std,
+            use_fixmatch=use_fixmatch,
             *args,
             **kwargs
         )
@@ -692,8 +768,6 @@ class LatentDiffMatchAttention(LatentDiffMatchPooling):
         self.gradient_guided_sampling = False
         self.augmentations = None
         self.min_confidence = min_confidence
-        self.mu = mu
-        self.batch_size = batch_size
         self.classification_start = classification_start
         self.classifier = RepresentationTransformer(**attention_config)
 

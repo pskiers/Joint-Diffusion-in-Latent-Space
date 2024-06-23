@@ -1,7 +1,6 @@
 model:
   base_learning_rate: 5.0e-05
-  weight_decay: 0.0000
-  model_type: latent_diffmatch_multilabel
+  model_type: latent_diffmatch_pooling
   params:
     linear_start: 0.0015
     linear_end: 0.0195
@@ -12,19 +11,15 @@ model:
     image_size: 32
     channels: 4
     monitor: val/auroc_ema
-    weights: [1, 1, 1, 1, 1, 1, 1, 1]
 
-    classifier_lr: 1.0e-05
     classification_key: 1
-    classification_loss_weight: 0.00005
-    classification_start: 20000
-    classify_every_n: 13
-    classify_every_n_times: 4
-    augmentations: False
+    classification_loss_weight: 0.001
+    classification_start: 0
     classifier_in_features: 5632
-    classifier_hidden: 1024 #we dont use it, now computed in code
+    classifier_hidden: 1024
     num_classes: 8
     dropout: 0.3
+    use_fixmatch: True
 
     unet_config:
       target: models.AdjustedUNet
@@ -90,9 +85,10 @@ dataloaders:
         split: "train"
         resize: 256
 
-        num_labeled: 405
+        num_labeled: 405.3
         min_labeled: 32
-        equal_labels: False
+        equal_labels: True
+        keep_proportions: True
         seed: 42
 
         supervised:
@@ -122,17 +118,45 @@ dataloaders:
           sampler: "random"
           shuffle: False
           transforms:
-            - RandomHorizontalFlip:
-            - RandomResizedCrop:
-                size: 256
-                scale: [0.64, 1.0]
-                antialias: True
-            - ToTensor:
-            - Normalize:
-                mean: [0.5, 0.5, 0.5]
-                std: [0.5, 0.5, 0.5]
-            - Permute:
-                dims: [1, 2, 0]
+            - ParallelTransforms:
+              -
+                - RandomHorizontalFlip:
+                - RandomResizedCrop:
+                    size: 256
+                    scale: [0.64, 1.0]
+                    antialias: True
+                - ToTensor:
+                - Normalize:
+                    mean: [0.5, 0.5, 0.5]
+                    std: [0.5, 0.5, 0.5]
+                - Permute:
+                    dims: [1, 2, 0]
+
+              -
+                - RandomHorizontalFlip:
+                - RandomCrop:
+                    size: 256
+                    padding: 32
+                    padding_mode: "reflect"
+                - ToTensor:
+                - Normalize:
+                    mean: [0.5, 0.5, 0.5]
+                    std: [0.5, 0.5, 0.5]
+                - Permute:
+                    dims: [1, 2, 0]
+
+              -
+                - RandomHorizontalFlip:
+                - RandomCrop:
+                    size: 256
+                    padding: 32
+                    padding_mode: "reflect"
+                - ToTensor:
+                - Normalize:
+                    mean: [0.5, 0.5, 0.5]
+                    std: [0.5, 0.5, 0.5]
+                - Permute:
+                    dims: [1, 2, 0]
 
 
 lightning:
