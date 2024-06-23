@@ -587,13 +587,18 @@ class LatentDiffMatchPooling(JointLatentDiffusion):
 
     def get_train_classification_input(self, batch, k):
         x = batch[0][k]
-        x = self.to_latent(x, arrange=False)
-
         y = batch[0][self.classification_key]
-
         _, weak_img, strong_img = batch[1][0]
-        weak_img = self.to_latent(weak_img, arrange=False)
-        strong_img = self.to_latent(strong_img, arrange=False)
+
+        mu = weak_img.shape[0] // x.shape[0]
+        batch_size = x.shape[0]
+
+        inputs = interleave(torch.cat((x, weak_img, strong_img)), 2*mu+1)
+        inputs = self.to_latent(inputs, arrange=False)
+        inputs = de_interleave(inputs, 2*mu+1)
+        x = inputs[:batch_size]
+        weak_img, strong_img = inputs[batch_size:].chunk(2)
+        del inputs
 
         return x, y, weak_img, strong_img
 
