@@ -11,6 +11,7 @@ def ssl_dataset_split(
     num_labeled: int,
     min_labeled: Optional[int] = None,
     equal_labels: bool = True,
+    keep_proportions: bool = False,
     seed: int = 42,
 ) -> Tuple[BaseDataset, BaseDataset]:
     np.random.seed(seed)
@@ -23,12 +24,15 @@ def ssl_dataset_split(
         labeled_idx = []
         for i in range(dataset.get_num_classes()):
             idx = np.where(labels == i)[0]
+            if keep_proportions:
+                label_per_class = int(np.round(len(idx) / (len(labels) / num_labeled)))
             idx = np.random.choice(idx, label_per_class, False)
             labeled_idx.extend(idx)
         labeled_idx_arr = np.array(labeled_idx)
     else:
         labeled_idx_arr = np.random.choice(labels.shape[0], num_labeled, False)
-    assert len(labeled_idx_arr) == num_labeled
+    if not keep_proportions:
+        assert len(labeled_idx_arr) == num_labeled
 
     if min_labeled is not None and num_labeled < min_labeled:
         num_expand_x = math.ceil(min_labeled / num_labeled)

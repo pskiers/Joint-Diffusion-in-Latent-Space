@@ -179,6 +179,7 @@ def get_ssl_datasets(kwargs):
         min_labeled=kwargs.get("min_labeled", None),
         equal_labels=kwargs.get("equal_labels", True),
         seed=kwargs.get("seed", 42),
+        keep_proportions=kwargs.get("keep_proportions", False),
     )
     labeled_transforms = get_transform(sup_kwargs["transforms"])
     labeled_ds.set_transforms(labeled_transforms)
