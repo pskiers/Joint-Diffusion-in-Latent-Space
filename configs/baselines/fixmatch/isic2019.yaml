@@ -1,10 +1,10 @@
 model:
-  base_learning_rate: 0.0003
+  base_learning_rate: 0.0001
   model_type: fixmatch
   params:
     min_confidence: 0.95
-    mu: 7
-    batch_size: 16
+    mu: 3
+    batch_size: 9
     img_key: 0
     label_key: 1
     unsup_img_key: 0
@@ -15,8 +15,8 @@ dataloaders:
     name: "isic2019"
     root: "data/isic-2019"
     split: "test"
-    resize: 64
-    batch_size: 256
+    resize: 256
+    batch_size: 64
     num_workers: 16
     sampler: "none"
     shuffle: False
@@ -30,7 +30,7 @@ dataloaders:
         name: "isic2019"
         root: "data/isic-2019"
         split: "train"
-        resize: 64
+        resize: 256
 
         num_labeled: 405
         min_labeled: 32
@@ -38,14 +38,14 @@ dataloaders:
         seed: 42
 
         supervised:
-          batch_size: 16
+          batch_size: 9
           num_workers: 4
           sampler: "random"
           shuffle: False
           transforms:
             - RandomHorizontalFlip:
             - RandomCrop:
-                size: 64
+                size: 256
                 padding: 8
                 padding_mode: "reflect"
             - ToTensor:
@@ -54,7 +54,7 @@ dataloaders:
                 std: [0.5, 0.5, 0.5]
 
         unsupervised:
-          batch_size: 112
+          batch_size: 27
           num_workers: 12
           sampler: "random"
           shuffle: False
@@ -69,7 +69,7 @@ dataloaders:
               - 
                 - RandomHorizontalFlip:
                 - RandomCrop:
-                    size: 64
+                    size: 256
                     padding: 8
                     padding_mode: "reflect"
                 - ToTensor:
@@ -80,16 +80,13 @@ dataloaders:
               - 
                 - RandomHorizontalFlip:
                 - RandomCrop:
-                    size: 64
+                    size: 256
                     padding: 8
                     padding_mode: "reflect"
-                - RandAugment:
-                    n: 2
-                    m: 10
                 - ToTensor:
                 - Normalize:
                     mean: [0.5, 0.5, 0.5]
-                    std: [0.5, 0.5, 0.5]
+                    std: [0.5, 0.5, 0.5] 
 
 
 lightning:
@@ -97,4 +94,4 @@ lightning:
     benchmark: True
     checkpoint_callback: True
     max_steps: 1000000
-    accumulate_grad_batches: 4
+    # accumulate_grad_batches: 4
