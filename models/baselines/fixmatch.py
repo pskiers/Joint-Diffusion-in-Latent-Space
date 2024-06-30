@@ -204,8 +204,8 @@ class FixMatch(pl.LightningModule):
             # accuracy = torch.sum((preds.detach() >= 0).long() == y) / torch.numel(y)
             loss_dict_ema.update({'val/loss': loss})
             loss_dict_ema.update({'val/accuracy': accuracy})
-            # self.auroc_val.update(preds, y.int())
-            # self.log('val/auroc_ema', self.auroc_val, on_step=False, on_epoch=True)
+            self.auroc_val.update(preds, y.int())
+            self.log('val/auroc_ema', self.auroc_val, on_step=False, on_epoch=True)
             loss_dict_ema = {key + '_ema': loss_dict_ema[key] for key in loss_dict_ema}
         self.log_dict(loss_dict_no_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
         self.log_dict(loss_dict_ema, prog_bar=False, logger=True, on_step=False, on_epoch=True)
