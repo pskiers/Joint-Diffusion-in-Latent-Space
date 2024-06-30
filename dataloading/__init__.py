@@ -17,6 +17,7 @@ def make_dataloader(
     num_workers: int = 0,
     sampler: str = "none",
     shuffle: bool = True,
+    drop_last: bool = False,
 ) -> DataLoader:
     sampl = (
         None
@@ -29,6 +30,7 @@ def make_dataloader(
         sampler=sampl,
         shuffle=shuffle,
         num_workers=num_workers,
+        drop_last=drop_last,
     )
 
 
@@ -107,6 +109,7 @@ def get_dataloaders(
                 num_workers=sup_kwargs.get("num_workers", 0),
                 sampler=sup_kwargs.get("sampler", "none"),
                 shuffle=sup_kwargs.get("shuffle", True),
+                drop_last=sup_kwargs.get("drop_last", True),
             )
 
             unlabeled_dl = make_dataloader(
@@ -115,6 +118,7 @@ def get_dataloaders(
                 num_workers=unsup_kwargs.get("num_workers", 0),
                 sampler=unsup_kwargs.get("sampler", "none"),
                 shuffle=unsup_kwargs.get("shuffle", True),
+                drop_last=unsup_kwargs.get("drop_last", True),
             )
 
             train_dataloaders.append(labeled_dl)
@@ -127,6 +131,7 @@ def get_dataloaders(
                 num_workers=kwargs.get("num_workers", 0),
                 sampler=kwargs.get("sampler", "none"),
                 shuffle=kwargs.get("shuffle", True),
+                drop_last=kwargs.get("drop_last", True),
             )
             train_dataloaders.append(dataloader)
 
@@ -145,6 +150,7 @@ def get_dataloaders(
         num_workers=val.get("num_workers", 0),
         sampler=val.get("sampler", "none"),
         shuffle=val.get("shuffle", True),
+        drop_last=val.get("drop_last", False),
     )
 
     if len(train_dataloaders) == 1:
