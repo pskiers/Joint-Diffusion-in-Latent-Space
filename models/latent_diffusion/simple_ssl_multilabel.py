@@ -89,13 +89,13 @@ class LatentSSLPoolingMultilabel(JointLatentDiffusionMultilabel):
             x = batch[0][k]
         else:
             x = batch[k]
-        x = self.to_latent(x, arrange=True)
+        x = self.to_latent(x, arrange=False)
         y = batch[self.classification_key]
         return x, y 
 
     def get_valid_classification_input(self, batch, k):
         x = batch[k]
-        x = self.to_latent(x, arrange=True)
+        x = self.to_latent(x, arrange=False)
         y = batch[self.classification_key]
         return x, y
     

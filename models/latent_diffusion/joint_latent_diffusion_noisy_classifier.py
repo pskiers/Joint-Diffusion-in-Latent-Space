@@ -117,7 +117,7 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
                 aug.RandomBrightness((0.6, 1.8), p=0.25),
                 aug.RandomMixUpV2(p=0.5),
                 # random_apply=(1, 6),
-                aug.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+                aug.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             )
 
         self.init_ema()
@@ -165,7 +165,7 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
     @torch.no_grad()
     def get_valid_classification_input(self, batch, k):
         x = batch[k]
-        x = self.to_latent(x)
+        x = self.to_latent(x, arrange=False)
         y = batch[self.classification_key]
         return x, y
 
@@ -471,7 +471,7 @@ class JointLatentDiffusionNoisyAttention(JointLatentDiffusionNoisyClassifier):
                 aug.RandomBrightness((0.6, 1.8), p=0.25),
                 aug.RandomMixUpV2(p=0.5),
                 # random_apply=(1, 6),
-                aug.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+                aug.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             )
 
         self.classifier = RepresentationTransformer(**attention_config)

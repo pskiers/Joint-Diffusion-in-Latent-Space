@@ -156,3 +156,8 @@ sano_machines/
 slurm*/
 vce_*/*
 m-25012018-123527.pth.tar
+models_imagenet/imagenet_diff_renamed.cpkt
+models_imagenet/imagenet_vae.ckpt
+models_imagenet/ref_weights.ckpt
+models_imagenet/imagenet_diff.cpkt
+models_imagenet/imagenet_diff_renamed_modified.cpkt

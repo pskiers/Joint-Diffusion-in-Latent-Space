@@ -92,7 +92,7 @@ class ChestXRay_nih_ssl(ChestXRay_nih):
         #del self.X_unlabeled, self.y_unlabeled, X_labeled, y_labeled, self.X_labeled_train, self.y_labeled_train, self.X_labeled_val, self.y_labeled_val, X, y
         del self.X_unlabeled, self.y_unlabeled, self.X_labeled_train, self.y_labeled_train, self.X_labeled_val, self.y_labeled_val, X, y
 
-        self.fixmatch_transform = TransformFixMatch(mean=0.5, std=0.5)
+        self.fixmatch_transform = TransformFixMatch(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         
     def __len__(self):
         return len(self.final_image_df)
@@ -105,14 +105,14 @@ class ChestXRay_nih_ssl(ChestXRay_nih):
             label = self.final_label[index]
         
             image = PIL.Image.open(img_path)
-            image = image.convert('L')
+            image = image.convert('RGB')
             image_transformed = self.transform(image).squeeze()
             return image_transformed, label
 
         else:
             img_path = self.final_image_df[index].item()
             image = PIL.Image.open(img_path)
-            image = image.convert('L')
+            image = image.convert('RGB')
             image_transformed = self.fixmatch_transform(image)
             return image_transformed, self.final_label[index]
 

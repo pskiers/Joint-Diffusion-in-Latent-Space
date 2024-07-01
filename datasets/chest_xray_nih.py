@@ -49,7 +49,7 @@ class ChestXRay_nih(torch.utils.data.Dataset):
                 transformList = []
                 transformList.append(transforms.Resize(256))
                 transformList.append(transforms.ToTensor())
-                transformList.append(transforms.Normalize(mean=0.5, std=0.5))  
+                transformList.append(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))  
                 self.transform=transforms.Compose(transformList)
 
             elif mode =='train':
@@ -59,7 +59,7 @@ class ChestXRay_nih(torch.utils.data.Dataset):
                 transformList.append(transforms.RandomResizedCrop(256))
                 transformList.append(transforms.RandomHorizontalFlip())
                 transformList.append(transforms.ToTensor())
-                transformList.append(transforms.Normalize(mean=0.5, std=0.5))      
+                transformList.append(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))      
                 self.transform=transforms.Compose(transformList)
 
             
@@ -74,7 +74,7 @@ class ChestXRay_nih(torch.utils.data.Dataset):
             transformList = []
             transformList.append(transforms.Resize(256))
             transformList.append(transforms.ToTensor())
-            transformList.append(transforms.Normalize(mean=0.5, std=0.5))  
+            transformList.append(transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))  
             self.transform=transforms.Compose(transformList)
 
         
@@ -85,7 +85,7 @@ class ChestXRay_nih(torch.utils.data.Dataset):
 
         img_path = self.final_image_df.loc[index, 'image_path']
         image = PIL.Image.open(img_path)
-        image = image.convert('L')
+        image = image.convert('RGB')
         image_transformed = self.transform(image).squeeze()
         return image_transformed, self.final_image_df.loc[index, [*self.labels, "no_finding"]].to_numpy(dtype=int)
         

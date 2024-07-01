@@ -320,7 +320,7 @@ class JointDiffusionAugmentations(JointDiffusion):
                 aug.RandomBrightness((0.6, 1.8), p=0.25),
                 aug.RandomMixUpV2(p=0.5),
                 # random_apply=(1, 6),
-                aug.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+                aug.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
             )
         if self.use_ema:
             self.model_ema = LitEma(self)
