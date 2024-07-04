@@ -140,3 +140,24 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+
+# data
+chest_xray/
+chest_xray_nih/
+chest_xray_nih_full/
+isic2019/
+
+#auxiliary files
+trash.ipynb
+
+#plgrid out files
+_job_outputs/
+chest_xray_nih.zip
+vce_results/
+*.zip
+vce_results_baseline/
+sano_machines/
+slurm*/
+vce_*/*
+m-25012018-123527.pth.tar
