@@ -572,9 +572,10 @@ class LatentDiffMatchPooling(JointLatentDiffusion):
                   cond_key=None,
                   return_original_cond=False,
                   bs=None):
-        if self.training is True:
+        if self.training is True or isinstance(batch[1], list):
             batch = batch[1][0]
-        batch[k] = rearrange(batch[k], 'b c h w -> b h w c')
+        if batch[k].shape[1] == 3:
+            batch[k] = rearrange(batch[k], 'b c h w -> b h w c')
         return super().get_input(
             batch,
             k,
@@ -635,7 +636,9 @@ class LatentDiffMatchPooling(JointLatentDiffusion):
             del logits
         else:
             t = torch.zeros(x.shape[0], device=self.device).long()
-            preds_x = unet.just_representations(x, t, pooled=False)
+            representations = unet.just_representations(x, t, pooled=False)
+            representations = self.transform_representations(representations)
+            preds_x = self.classifier(representations)
 
         loss_classification = nn.functional.cross_entropy(
             preds_x, y, reduction="mean")
