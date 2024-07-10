@@ -11,7 +11,28 @@ from ..adjusted_unet import AdjustedUNet
 from ..ddim import DDIMSamplerGradGuided
 from ..utils import FixMatchEma, interleave, de_interleave
 from sklearn.metrics import accuracy_score
+# import importlib
 
+# def disabled_train(self, mode=True):
+#     """Overwrite model.train with this function to make sure train/eval mode
+#     does not change anymore."""
+#     return self
+
+# def get_obj_from_str(string, reload=False):
+#     module, cls = string.rsplit(".", 1)
+#     if reload:
+#         module_imp = importlib.import_module(module)
+#         importlib.reload(module_imp)
+#     return getattr(importlib.import_module(module, package=None), cls)
+
+# def instantiate_from_config(config):
+#     if not "target" in config:
+#         if config == '__is_first_stage__':
+#             return None
+#         elif config == "__is_unconditional__":
+#             return None
+#         raise KeyError("Expected key `target` to instantiate.")
+#     return get_obj_from_str(config["target"])(**config.get("params", dict()))
 
 class LatentSSLPoolingMultilabel(JointLatentDiffusionMultilabel):
     def __init__(self,
@@ -34,7 +55,6 @@ class LatentSSLPoolingMultilabel(JointLatentDiffusionMultilabel):
                  scale_factor=1,
                  scale_by_std=False,
                  weights=[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-
                  *args,
                  **kwargs):
         super().__init__(
@@ -60,6 +80,67 @@ class LatentSSLPoolingMultilabel(JointLatentDiffusionMultilabel):
             *args,
             **kwargs
         )
+
+    #     #self.ft_enc = ft_enc
+    #     # ## unfreeze encoder
+    #     print("UNFREEZING ENCODER")
+    #     for param in self.first_stage_model.encoder.parameters():
+    #         param.requires_grad = True
+
+    # def configure_optimizers(self):
+    #         lr = self.learning_rate
+    #         weight_decay = 0#self.weight_decay
+    #         params = list(self.model.parameters())
+    #         if self.cond_stage_trainable:
+    #             print(f"{self.__class__.__name__}: Also optimizing conditioner params!")
+    #             params = params + list(self.cond_stage_model.parameters())
+    #         if self.learn_logvar:
+    #             print('Diffusion model optimizing logvar')
+    #             params.append(self.logvar)
+            
+    #         if True:
+    #             opt = torch.optim.AdamW([
+    #                 {'params':[*self.first_stage_model.encoder.parameters()], 'lr' : lr*5000},
+    #                 {'params':[*self.model.parameters()], 'lr':lr, 'weight_decay':weight_decay}
+    #                 ])
+    #             print("OPT", opt)
+    #         else:
+    #             opt = torch.optim.AdamW([
+    #                 {'params':[*self.model.parameters()], 'lr':lr, 'weight_decay':weight_decay}
+    #                 ])
+                
+    #         if self.use_scheduler:
+    #             assert 'target' in self.scheduler_config
+    #             scheduler = instantiate_from_config(self.scheduler_config)
+
+    #             print("Setting up LambdaLR scheduler...")
+    #             scheduler = [
+    #                 {
+    #                     'scheduler': LambdaLR(opt, lr_lambda=scheduler.schedule),
+    #                     'interval': 'step',
+    #                     'frequency': 1
+    #                 }]
+    #             return [opt], scheduler
+            
+    #         # if True:
+    #         #     print("Setting up OneCycleLR scheduler...")
+    #         #     scheduler = [
+    #         #         {
+    #         #             'scheduler': OneCycleLR(opt, max_lr=1e-3, total_steps=self.trainer.max_steps),
+
+    #         #         }]
+    #         #     return [opt], scheduler
+
+    #         return opt
+    
+    # # override to allow encoder finetuning.
+    # def instantiate_first_stage(self, config):
+    #     if not True:
+    #         #UNFREEZE ENCODER"
+    #         super().instantiate_first_stage(config)
+    #     else:
+    #         self.first_stage_model = instantiate_from_config(config)
+    
 
     def get_sampl(self):
         print("sampling_method, gradient_guided_samplings", self.sampling_method, self.gradient_guided_sampling)
@@ -93,6 +174,7 @@ class LatentSSLPoolingMultilabel(JointLatentDiffusionMultilabel):
         y = batch[self.classification_key]
         return x, y 
 
+    @torch.no_grad()
     def get_valid_classification_input(self, batch, k):
         x = batch[k]
         x = self.to_latent(x, arrange=False)
@@ -135,6 +217,7 @@ class LatentSSLPoolingMultilabel(JointLatentDiffusionMultilabel):
                  prog_bar=True, logger=True, on_step=True, on_epoch=False)
         if self.use_scheduler:
             lr = self.optimizers().param_groups[0]['lr']
+            #lr = self.optimizers().param_groups[1]['lr'] #change here
             self.log('lr_abs', lr, prog_bar=True, logger=True, on_step=True, on_epoch=False)
         
         loss = self.train_classification_step(batch[0], loss)

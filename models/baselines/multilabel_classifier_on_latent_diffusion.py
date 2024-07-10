@@ -77,49 +77,49 @@ class MultilabelClassifierOnLatentDiffusion(JointLatentDiffusionMultilabel):
             )
 
     def configure_optimizers(self):
-            lr = self.learning_rate
-            weight_decay = self.weight_decay
-            params = list(self.model.parameters())
-            if self.cond_stage_trainable:
-                print(f"{self.__class__.__name__}: Also optimizing conditioner params!")
-                params = params + list(self.cond_stage_model.parameters())
-            if self.learn_logvar:
-                print('Diffusion model optimizing logvar')
-                params.append(self.logvar)
+        lr = self.learning_rate
+        weight_decay = self.weight_decay
+        params = list(self.model.parameters())
+        if self.cond_stage_trainable:
+            print(f"{self.__class__.__name__}: Also optimizing conditioner params!")
+            params = params + list(self.cond_stage_model.parameters())
+        if self.learn_logvar:
+            print('Diffusion model optimizing logvar')
+            params.append(self.logvar)
+        
+        if self.ft_enc:
+            opt = torch.optim.AdamW([
+                {'params':[*self.first_stage_model.parameters()], 'lr' : lr/50},
+                {'params':[*self.model.parameters()], 'lr':lr, 'weight_decay':weight_decay}
+                ])
+        else:
+            opt = torch.optim.AdamW([
+                {'params':[*self.model.parameters()], 'lr':lr, 'weight_decay':weight_decay}
+                ])
             
-            if self.ft_enc:
-                opt = torch.optim.AdamW([
-                    {'params':[*self.first_stage_model.parameters()], 'lr' : lr/50},
-                    {'params':[*self.model.parameters()], 'lr':lr, 'weight_decay':weight_decay}
-                    ])
-            else:
-                opt = torch.optim.AdamW([
-                    {'params':[*self.model.parameters()], 'lr':lr, 'weight_decay':weight_decay}
-                    ])
-                
-            if self.use_scheduler:
-                assert 'target' in self.scheduler_config
-                scheduler = instantiate_from_config(self.scheduler_config)
+        if self.use_scheduler:
+            assert 'target' in self.scheduler_config
+            scheduler = instantiate_from_config(self.scheduler_config)
 
-                print("Setting up LambdaLR scheduler...")
-                scheduler = [
-                    {
-                        'scheduler': LambdaLR(opt, lr_lambda=scheduler.schedule),
-                        'interval': 'step',
-                        'frequency': 1
-                    }]
-                return [opt], scheduler
-            
-            # if True:
-            #     print("Setting up OneCycleLR scheduler...")
-            #     scheduler = [
-            #         {
-            #             'scheduler': OneCycleLR(opt, max_lr=1e-3, total_steps=self.trainer.max_steps),
+            print("Setting up LambdaLR scheduler...")
+            scheduler = [
+                {
+                    'scheduler': LambdaLR(opt, lr_lambda=scheduler.schedule),
+                    'interval': 'step',
+                    'frequency': 1
+                }]
+            return [opt], scheduler
+        
+        # if True:
+        #     print("Setting up OneCycleLR scheduler...")
+        #     scheduler = [
+        #         {
+        #             'scheduler': OneCycleLR(opt, max_lr=1e-3, total_steps=self.trainer.max_steps),
 
-            #         }]
-            #     return [opt], scheduler
+        #         }]
+        #     return [opt], scheduler
 
-            return opt
+        return opt
 
     # override to allow encoder finetuning.
     def instantiate_first_stage(self, config):

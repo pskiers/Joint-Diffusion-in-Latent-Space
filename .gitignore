@@ -161,3 +161,5 @@ models_imagenet/imagenet_vae.ckpt
 models_imagenet/ref_weights.ckpt
 models_imagenet/imagenet_diff.cpkt
 models_imagenet/imagenet_diff_renamed_modified.cpkt
+*.ckpt
+*.pt

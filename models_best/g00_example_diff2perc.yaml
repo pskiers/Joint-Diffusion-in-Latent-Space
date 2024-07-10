@@ -1,0 +1,110 @@
+model:
+  logdir: home/jk/Joint-Diffusion-in-Latent-Space/
+  base_learning_rate: 5.0e-05
+  classifier_lr: 1.0e-05
+  weight_decay: 0.0000
+  model_type: latent_ssl_pooling_multilabel
+  params:
+    linear_start: 0.0015
+    linear_end: 0.0195
+    num_timesteps_cond: 1
+    log_every_t: 200
+    timesteps: 1000
+    first_stage_key: 0
+    image_size: 32
+    channels: 4
+    #vat: None 
+    ckpt_path: /home/jk/Joint-Diffusion-in-Latent-Space/models_best/last.ckpt
+    monitor: test/auroc_ema
+    weights: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    # 15 classes, log
+    # weights: [1.065099588, 1.779603253, 1.551821122, 1.873975748, 1.043947633, 1.859830453, 1.916502338, 2.869185932, 0.818237579, 1.396153514, 1.326128693, 1.658934256, 2.072830496, 1.586778408, 0.02886104]
+    #14 classes, log
+    # weights: [0.741790821, 1.485960814, 1.253424332, 1.581670469, 0.718735907, 1.567343026, 1.624709854, 2.581797199, 0.464784148, 1.092677857, 1.019675586, 1.363090079, 1.782541339, 1.289286516]
+
+    classification_key: 1
+    classification_loss_weight: 0.00005
+    augmentations: False
+    classification_start: 5000
+    classifier_in_features: 5632
+    classifier_hidden: 1024 #we dont use it, now computed in code
+    num_classes: 14 # we can have 15 with last column 'no findings', or 14 without. AUROC always for 14- hardcoded
+    dropout: 0.3
+
+    unet_config:
+      target: models.AdjustedUNet
+      params:
+        image_size: 32
+        in_channels: 4
+        out_channels: 4
+        model_channels: 256
+        attention_resolutions: [ 4,2,1 ]
+        num_res_blocks: 2
+        channel_mult: [ 1, 2, 4]
+        #num_head_channels: 32
+        pool_size: 10000
+        pool_type: avg
+        num_head_channels: 32
+
+    first_stage_config:
+      target: ldm.models.autoencoder.AutoencoderKL
+      params:
+        embed_dim: 4
+        monitor: "val/rec_loss"
+        #ckpt_path: /data/jan_dubinski/Joint-Diffusion-in-Latent-Space/sano_machines/compvis32x32x4_all_randomresizedcrop_Autoencoder_2024-01-17T13-15-27/epoch=000025.ckpt
+        #ckpt_path: "/net/pr2/projects/plgrid/plggsano/plgjoaxkal_storage/Joint-Diffusion-in-Latent-Space/logs/compvis32x32x4_all_randomresizedcrop_Autoencoder_2024-01-17T13-15-27/checkpoints/epoch=000025.ckpt"
+        #ckpt_path: "logs/compvis32x32x4_nihAll_maxstron_aug_Autoencoder_2024-01-30T22-29-08/checkpoints/epoch=000028.ckpt"
+        #ckpt_path: /data/jan_dubinski/Joint-Diffusion-in-Latent-Space/sano_machines/compvis32x32x4_nihAll_maxstron_aug_Autoencoder_2024-01-30T22-29-08/checkpoints/epoch=000028.ckpt
+        #ckpt_path: "/net/tscratch/people/plgjoaxkal/Joint-Diffusion-in-Latent-Space/logs/checkpoints/compvis32x32x4_nihAll_maxstron_aug_Autoencoder_2024-01-30T22-29-08/checkpoints/epoch=000028.ckpt"
+        ckpt_path:  "/home/jk/Joint-Diffusion-in-Latent-Space/logs/c16_nih_epoch93.ckpt"
+        ddconfig:
+          double_z: True
+          z_channels: 4
+          resolution: 256
+          in_channels: 1
+          out_ch: 1
+          ch: 128
+          ch_mult: [ 1,2,4,4 ]  # num_down = len(ch_mult)-1
+          num_res_blocks: 2
+          attn_resolutions: []
+          dropout: 0.0
+        lossconfig:
+          target: torch.nn.Identity
+    cond_stage_config: __is_unconditional__
+
+batch_size: 32 # we need labeled train batch also here - the code was not optimized. I could have fixed it but i just didnt
+dataloaders:
+  name: chest_xray_nih_ssl
+  train_batches: [32] 
+  val_batch: 64
+  num_workers: 6
+  num_labeled: 1500
+  pin_memory: True
+  persistent_workers: True
+  training_platform: local_sano # pls check your data paths in datasets/chest_xray_nih.py
+  #training_platform: plgrid # pls check your data paths in datasets/chest_xray_nih.py
+
+
+lightning:
+  trainer:
+    benchmark: True
+    checkpoint_callback: True
+    max_steps: 300000
+    gpus: -1
+    strategy: ddp
+    resume_from_checkpoint: "/data/jan_dubinski/Joint-Diffusion-in-Latent-Space/logs/f33res_pavg_lr510_5_cllr_10_5_clw_510_5_dr03_st5k_ev4_encnihcrop_bs128_fixload_LatentSSLPoolingMultilabel_2024-04-23T07-03-25/checkpoints/last.ckpt"
+    #accumulate_grad_batches: 8
+      
+  callbacks:
+    img_logger:
+      batch_frequency: 5000
+      max_images: 10
+      clamp: True
+      increase_log_steps: False
+      log_images_kwargs: {
+          "N": 10,
+          "inpaint": False,
+          "sample_classes": [0,1,2,3,4,5,6,7,8,9,10,11,12,13],
+          "mean": 0.5,
+          "std": 0.5
+      }
