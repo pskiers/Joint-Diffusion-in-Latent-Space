@@ -42,8 +42,8 @@ def embed_imgs(model, data_loader, max_samples=100000):
 
 if __name__=='__main__':
 
-    T_values = [200] # [300, 200]
-    scale_values = [1000] #[500, 200]
+    T_values = [200]
+    scale_values = [3000]
     T_scale_comb = list(itertools.product(T_values, scale_values))
     print(T_scale_comb)
 
@@ -80,6 +80,7 @@ if __name__=='__main__':
         # model_2.eval()
 
         cl_list = ["Atelectasis","Cardiomegaly","Consolidation","Edema","Effusion","Emphysema","Fibrosis", "Hernia","Infiltration", "Mass", "Nodule","Pleural_Thickening","Pneumonia","Pneumothorax","No Finding"]
+        #cl_list = ["Infiltration"]
         cl_list_loop=cl_list.copy()
         
 
