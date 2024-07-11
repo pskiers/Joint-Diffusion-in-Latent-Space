@@ -117,7 +117,8 @@ if __name__=='__main__':
                     shape = z_noisy.shape           
                     samples, pred_o = model.p_sample_loop(cond=None, shape = shape, original_img = z, 
                                                         return_intermediates=False, x_T=z_noisy, start_T=T, 
-                                                        pick_class=class_, return_pred_o=True)
+                                                        #very quick and very bad workaour TODO
+                                                        pick_class="{}_{}".format(class_, "enforce"), return_pred_o=True)
                     x_samples = model.decode_first_stage(samples)
                     
                     #predictions with external clasisfier, currently we dont have external model - I removed it -,-

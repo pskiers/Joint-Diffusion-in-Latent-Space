@@ -42,8 +42,8 @@ def embed_imgs(model, data_loader, max_samples=100000):
 
 if __name__=='__main__':
 
-    T_values = [200, 300, 500]
-    scale_values = [300, 100, 0]
+    T_values = [300, 200]
+    scale_values = [500, 200]
     T_scale_comb = list(itertools.product(T_values, scale_values))
     print(T_scale_comb)
 
@@ -87,7 +87,7 @@ if __name__=='__main__':
 
             pick_class = class_
 
-            folder_to_save = f"simple_guidance_class_removing_maxnoised{T}_gradscale{model.sample_grad_scale}_remove_{pick_class}"
+            folder_to_save = f"simple_guidance_class_removing_maxnoised{T}_gradscale{model.sample_grad_scale}"
             folder_to_save = f"/home/jk/Joint-Diffusion-in-Latent-Space/vce_results/{folder_to_save}"
             os.makedirs(folder_to_save, exist_ok=True)
 
@@ -119,7 +119,8 @@ if __name__=='__main__':
                     shape = z_noisy.shape           
                     samples, pred_o = model.p_sample_loop(cond=None, shape = shape, original_img = z, 
                                                         return_intermediates=False, x_T=z_noisy, start_T=T, 
-                                                        pick_class=pick_class, return_pred_o=True)
+                                                        #very quick and very bad workaour TODO
+                                                        pick_class="{}_{}".format(pick_class, "remove"), return_pred_o=True)
                     x_samples = model.decode_first_stage(samples)
                     
                     #predictions with external clasisfier, currently we dont have external model - I removed it -,-
