@@ -278,7 +278,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             return model_mean, posterior_variance, posterior_log_variance
 
     @torch.no_grad()
-    def guided_apply_model(self, x: torch.Tensor, t, original_img=None, pick_class='Cardiomegaly_enforce', return_pred_o=False):
+    def guided_apply_model(self, x: torch.Tensor, t, original_img=None, pick_class='Cardiomegaly&enforce', return_pred_o=False):
         unet: AdjustedUNet = self.model.diffusion_model
         if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
             return unet.just_reconstruction(x, t)
@@ -310,7 +310,7 @@ class JointLatentDiffusionMultilabel(JointLatentDiffusionNoisyClassifier):
             cl_list = ["Atelectasis","Cardiomegaly","Consolidation","Edema","Effusion","Emphysema","Fibrosis", 
                        "Hernia","Infiltration", "Mass", "Nodule","Pleural_Thickening","Pneumonia","Pneumothorax","No Finding"]
             #sample_classes = torch.ones((x.shape[0], self.num_classes)).cuda()
-            pick_class, remove_or_enforce = pick_class.split("_")
+            pick_class, remove_or_enforce = pick_class.split("&")
             id_class = cl_list.index(pick_class)
             if remove_or_enforce=="remove":
                 print("removing")

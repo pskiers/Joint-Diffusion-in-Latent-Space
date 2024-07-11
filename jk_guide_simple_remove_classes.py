@@ -42,8 +42,8 @@ def embed_imgs(model, data_loader, max_samples=100000):
 
 if __name__=='__main__':
 
-    T_values = [300, 200]
-    scale_values = [500, 200]
+    T_values = [200] # [300, 200]
+    scale_values = [1000] #[500, 200]
     T_scale_comb = list(itertools.product(T_values, scale_values))
     print(T_scale_comb)
 
@@ -120,7 +120,7 @@ if __name__=='__main__':
                     samples, pred_o = model.p_sample_loop(cond=None, shape = shape, original_img = z, 
                                                         return_intermediates=False, x_T=z_noisy, start_T=T, 
                                                         #very quick and very bad workaour TODO
-                                                        pick_class="{}_{}".format(pick_class, "remove"), return_pred_o=True)
+                                                        pick_class="{}&{}".format(pick_class, "remove"), return_pred_o=True)
                     x_samples = model.decode_first_stage(samples)
                     
                     #predictions with external clasisfier, currently we dont have external model - I removed it -,-

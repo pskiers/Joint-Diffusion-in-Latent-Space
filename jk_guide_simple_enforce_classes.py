@@ -83,7 +83,7 @@ if __name__=='__main__':
         # model_2.to("cuda")
         # model_2.eval()
 
-        cl_list = ["Atelectasis","Cardiomegaly","Consolidation","Edema","Effusion","Emphysema","Fibrosis", "Hernia","Infiltration", "Mass", "Nodule","Pleural_Thickening","Pneumonia","Pneumothorax","No Finding"]
+        cl_list = ["Atelectasis","Cardiomegaly","Consolidation","Edema","Effusion","Emphysema","Fibrosis", "Hernia","Infiltration", "Mass", "Nodule","Pleural_Thickening","Pneumonia","Pneumothorax"] #,"No Finding"]
         cl_list_loop=cl_list.copy()
         
 
@@ -118,7 +118,7 @@ if __name__=='__main__':
                     samples, pred_o = model.p_sample_loop(cond=None, shape = shape, original_img = z, 
                                                         return_intermediates=False, x_T=z_noisy, start_T=T, 
                                                         #very quick and very bad workaour TODO
-                                                        pick_class="{}_{}".format(class_, "enforce"), return_pred_o=True)
+                                                        pick_class="{}&{}".format(class_, "enforce"), return_pred_o=True)
                     x_samples = model.decode_first_stage(samples)
                     
                     #predictions with external clasisfier, currently we dont have external model - I removed it -,-
