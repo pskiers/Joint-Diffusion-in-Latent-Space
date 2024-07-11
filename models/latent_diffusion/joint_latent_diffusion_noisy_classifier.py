@@ -63,7 +63,7 @@ class JointLatentDiffusionNoisyClassifier(LatentDiffusion):
                  dropout=0,
                  classification_start=0,
                  classification_loss_weight=1.0,
-                 sample_grad_scale=60,
+                 sample_grad_scale=500,
                  classification_key=1,
                  augmentations=True,
                  num_timesteps_cond=None,
