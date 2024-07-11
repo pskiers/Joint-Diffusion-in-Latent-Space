@@ -42,8 +42,8 @@ def embed_imgs(model, data_loader, max_samples=100000):
 
 if __name__=='__main__':
 
-    T_values = [200]
-    scale_values = [3000]
+    T_values = [200, ]
+    scale_values = [500]
     T_scale_comb = list(itertools.product(T_values, scale_values))
     print(T_scale_comb)
 
