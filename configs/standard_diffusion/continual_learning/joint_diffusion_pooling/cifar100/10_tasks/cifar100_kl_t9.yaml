@@ -26,6 +26,7 @@ model:
     new_classes: [80, 81, 82, 83, 84, 85, 86, 87, 88, 89]
     kd_loss_weight: 1.0
     l_simple_weight: 0.01
+    no_wait_kl_classification: True
     # sampling_recurence_steps: 4
 
     unet_config:
@@ -53,8 +54,8 @@ cl:
   weight_reinit: "unused classes"
   mean: [0.5, 0.5, 0.5]
   std: [0.5, 0.5, 0.5]
-  # saved_samples: data/cl/JointDiffusionKnowledgeDistillation_2024-05-05T04-35-04_imgs.pt
-  # saved_labels: data/cl/JointDiffusionKnowledgeDistillation_2024-05-05T04-35-04_labels.pt
+  # saved_samples: pulled_checkpoints/imgs_19.pt
+  # saved_labels: pulled_checkpoints/labels_19.pt
 
 
 dataloaders:

@@ -587,6 +587,7 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
         *args,
         kd_loss_weight=1.0,
         kl_classification_weight=0.001,
+        no_wait_kl_classification=False,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
@@ -597,7 +598,10 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
         self.kd_loss_weight = kd_loss_weight
         self.kl_classification_weight = kl_classification_weight
         self.x_recon = None
-        self.x_noisy = None
+        self.x_noisy = None    
+        
+        self.classes_per_task = len(new_classes)
+        self.no_wait_kl_classification = no_wait_kl_classification
 
     def named_parameters(self, recurse: bool = True):
         named_parameters = super().named_parameters(recurse=recurse)
@@ -656,7 +660,7 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
         loss += self.kd_loss_weight * (loss_new + loss_old)
         loss_dict.update({f'{prefix}/loss_diffusion_kl': loss_old + loss_new})
 
-        if self.classification_start <= 0:
+        if self.classification_start <= 0 or self.no_wait_kl_classification:
             # classifier knowledge distillation
             loss_old = 0
             if old_classes_mask.sum() != 0:
@@ -693,4 +697,16 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
             loss += self.kl_classification_weight * self.kd_loss_weight * (loss_new + loss_old)
             loss_dict.update({f'{prefix}/loss_classifier_kl': loss_old + loss_new})
             loss_dict.update({f'{prefix}/loss': loss})
+        
+        # per class accuracy logging
+        for i in range(len(self.old_classes) // self.classes_per_task):
+            task_classes = self.old_classes[i*self.classes_per_task:(i+1)*self.classes_per_task]
+            task_mask = torch.any(self.batch_classes.unsqueeze(-1) == task_classes.to(self.device), dim=-1)
+            curr_task_acc = torch.sum(torch.argmax(
+                self.batch_class_predictions[task_mask], dim=1) == self.batch_classes[task_mask]) / len(self.batch_classes[task_mask])
+            loss_dict.update({f'{prefix}/task{i}_accuracy': curr_task_acc})
+        i += 1
+        curr_task_acc = torch.sum(torch.argmax(
+            self.batch_class_predictions[new_classes_mask], dim=1) == self.batch_classes[new_classes_mask]) / len(self.batch_classes[new_classes_mask])
+        loss_dict.update({f'{prefix}/task{i}_accuracy': curr_task_acc})
         return loss, loss_dict
