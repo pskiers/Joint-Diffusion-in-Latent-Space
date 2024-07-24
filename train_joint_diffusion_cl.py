@@ -73,7 +73,7 @@ if __name__ == "__main__":
 
     cl_config = config.pop("cl")
 
-    reply_buff = get_replay(cl_config.get("reply_type"))(train_bs=tasks_bs, sample_bs=2000, dl_num_workers=16)
+    reply_buff = get_replay(cl_config.get("reply_type"))(train_bs=tasks_bs, sample_bs=2000, dl_num_workers=8)
 
     model_type = config.model.get("model_type")
     params = config.model.get("params", dict())
@@ -249,6 +249,9 @@ if __name__ == "__main__":
         new_samples_generate = get_generator(new_generator)
 
     prev_tasks = []
+    for i, task in enumerate(tasks):
+        if i in tasks_learned:
+            prev_tasks.extend(task)
     for i, (datasets, task) in enumerate(zip(tasks_datasets, tasks)):
         if i == current_task:
             if old_generator is not None:
@@ -281,16 +284,23 @@ if __name__ == "__main__":
             weight_reinit = cl_config.get("weight_reinit", "none")
             if weight_reinit == "none":
                 pass
-            elif weight_reinit == "unused classes":
+            elif weight_reinit == ["unused classes", "freeze+reinit_unused"]:
                 torch.nn.init.xavier_uniform_(model.classifier[-1].weight[len(prev_tasks) :])
             elif weight_reinit == "classifier":
                 for layer in model.classifier:
                     if hasattr(layer, "weight"):
                         torch.nn.init.xavier_uniform_(layer.weight)
+            elif weight_reinit in ["freeze", "freeze+reinit_unused"]:
+
+                def zero_grad_old_tasks(grad):
+                    grad_clone = grad.clone()
+                    grad_clone[: len(prev_tasks)] = 0
+                    return grad_clone
+
+                model.classifier[-1].weight.register_hook(zero_grad_old_tasks)
+                model.classifier[-1].bias.register_hook(zero_grad_old_tasks)
             trainer.fit(
                 model,
                 train_dataloaders=train_dls,
                 val_dataloaders=test_dl,
             )
-        elif i in tasks_learned:
-            prev_tasks.extend(task)
