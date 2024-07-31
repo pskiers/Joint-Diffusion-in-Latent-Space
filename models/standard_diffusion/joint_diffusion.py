@@ -588,6 +588,8 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
         kd_loss_weight=1.0,
         kl_classification_weight=0.001,
         no_wait_kl_classification=False,
+        old_samples_weight=1.0,
+        new_samples_weight=1.0,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
@@ -599,6 +601,8 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
         self.kl_classification_weight = kl_classification_weight
         self.x_recon = None
         self.x_noisy = None    
+        self.old_samples_weight = old_samples_weight
+        self.new_samples_weight = new_samples_weight
         
         self.classes_per_task = len(new_classes)
         self.no_wait_kl_classification = no_wait_kl_classification
@@ -657,8 +661,8 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
             with torch.no_grad():
                 new_outputs = new_unet.just_reconstruction(self.x_noisy[new_classes_mask], t[new_classes_mask])
             loss_new = self.get_loss(self.x_recon[new_classes_mask], new_outputs, mean=True)
-        loss += self.kd_loss_weight * (loss_new + loss_old)
-        loss_dict.update({f'{prefix}/loss_diffusion_kl': loss_old + loss_new})
+        loss += self.kd_loss_weight * (loss_new * self.new_samples_weight + loss_old * self.old_samples_weight)
+        loss_dict.update({f'{prefix}/loss_diffusion_kl': loss_new * self.new_samples_weight + loss_old * self.old_samples_weight})
 
         if self.classification_start <= 0 or self.no_wait_kl_classification:
             # classifier knowledge distillation
@@ -694,8 +698,8 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
                     new_preds = nn.functional.softmax(new_preds, dim=1).detach()
                 loss_new = nn.functional.cross_entropy(self.batch_class_predictions[new_classes_mask], new_preds)
 
-            loss += self.kl_classification_weight * self.kd_loss_weight * (loss_new + loss_old)
-            loss_dict.update({f'{prefix}/loss_classifier_kl': loss_old + loss_new})
+            loss += self.kl_classification_weight * self.kd_loss_weight * (loss_new * self.new_samples_weight + loss_old * self.old_samples_weight)
+            loss_dict.update({f'{prefix}/loss_classifier_kl': loss_new * self.new_samples_weight + loss_old * self.old_samples_weight})
             loss_dict.update({f'{prefix}/loss': loss})
         
         # per class accuracy logging
