@@ -796,39 +796,36 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         loss_old = 0
         if old_classes_mask.sum() != 0:
             if self.disc_input_mode == "x0":
-                with torch.no_grad():
-                    x_false = (
-                        self.x_noisy[old_classes_mask]
-                        - extract_into_tensor(
-                            self.sqrt_one_minus_alphas_cumprod,
-                            t[old_classes_mask],
-                            self.x_noisy[old_classes_mask].shape,
-                        )
-                        * self.model_pred[old_classes_mask]
-                    ) / extract_into_tensor(
-                        self.sqrt_alphas_cumprod, t[old_classes_mask], self.x_noisy[old_classes_mask].shape
+                x_false = (
+                    self.x_noisy[old_classes_mask]
+                    - extract_into_tensor(
+                        self.sqrt_one_minus_alphas_cumprod,
+                        t[old_classes_mask],
+                        self.x_noisy[old_classes_mask].shape,
                     )
+                    * self.model_pred[old_classes_mask]
+                ) / extract_into_tensor(
+                    self.sqrt_alphas_cumprod, t[old_classes_mask], self.x_noisy[old_classes_mask].shape
+                )
                 t_false = torch.zeros_like(t[old_classes_mask])
             elif self.disc_input_mode == "x_t-1":
-                with torch.no_grad():
-                    x_false = self.p_sample(self.x_noisy[old_classes_mask], t[old_classes_mask], clip_denoised=False)
+                x_false = self.p_sample(self.x_noisy[old_classes_mask], t[old_classes_mask], clip_denoised=False)
                 t_false = t[old_classes_mask] - 1
             elif self.disc_input_mode == "x0_renoised":
-                with torch.no_grad():
-                    x0_pred = (
-                        self.x_noisy[old_classes_mask]
-                        - extract_into_tensor(
-                            self.sqrt_one_minus_alphas_cumprod,
-                            t[old_classes_mask],
-                            self.x_noisy[old_classes_mask].shape,
-                        )
-                        * self.model_pred[old_classes_mask]
-                    ) / extract_into_tensor(
-                        self.sqrt_alphas_cumprod, t[old_classes_mask], self.x_noisy[old_classes_mask].shape
+                x0_pred = (
+                    self.x_noisy[old_classes_mask]
+                    - extract_into_tensor(
+                        self.sqrt_one_minus_alphas_cumprod,
+                        t[old_classes_mask],
+                        self.x_noisy[old_classes_mask].shape,
                     )
-                    t_false = self.sample_renoise_timestep(t[old_classes_mask].shape)
-                    noise = torch.randn_like(x0_pred)
-                    x_false = self.q_sample(x_start=x0_pred, t=t_false, noise=noise)
+                    * self.model_pred[old_classes_mask]
+                ) / extract_into_tensor(
+                    self.sqrt_alphas_cumprod, t[old_classes_mask], self.x_noisy[old_classes_mask].shape
+                )
+                t_false = self.sample_renoise_timestep(t[old_classes_mask].shape)
+                noise = torch.randn_like(x0_pred)
+                x_false = self.q_sample(x_start=x0_pred, t=t_false, noise=noise)
 
             if self.disc_input_mode == "x0":
                 x_true = x_start[old_classes_mask]
@@ -859,39 +856,36 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         loss_new = 0
         if new_classes_mask.sum() != 0:
             if self.disc_input_mode == "x0":
-                with torch.no_grad():
-                    x_false = (
-                        self.x_noisy[new_classes_mask]
-                        - extract_into_tensor(
-                            self.sqrt_one_minus_alphas_cumprod,
-                            t[new_classes_mask],
-                            self.x_noisy[new_classes_mask].shape,
-                        )
-                        * self.model_pred[new_classes_mask]
-                    ) / extract_into_tensor(
-                        self.sqrt_alphas_cumprod, t[new_classes_mask], self.x_noisy[new_classes_mask].shape
+                x_false = (
+                    self.x_noisy[new_classes_mask]
+                    - extract_into_tensor(
+                        self.sqrt_one_minus_alphas_cumprod,
+                        t[new_classes_mask],
+                        self.x_noisy[new_classes_mask].shape,
                     )
+                    * self.model_pred[new_classes_mask]
+                ) / extract_into_tensor(
+                    self.sqrt_alphas_cumprod, t[new_classes_mask], self.x_noisy[new_classes_mask].shape
+                )
                 t_false = torch.zeros_like(t[new_classes_mask])
             elif self.disc_input_mode == "x_t-1":
-                with torch.no_grad():
-                    x_false = self.p_sample(self.x_noisy[new_classes_mask], t[new_classes_mask], clip_denoised=False)
+                x_false = self.p_sample(self.x_noisy[new_classes_mask], t[new_classes_mask], clip_denoised=False)
                 t_false = t[new_classes_mask] - 1
             elif self.disc_input_mode == "x0_renoised":
-                with torch.no_grad():
-                    x0_pred = (
-                        self.x_noisy[new_classes_mask]
-                        - extract_into_tensor(
-                            self.sqrt_one_minus_alphas_cumprod,
-                            t[new_classes_mask],
-                            self.x_noisy[new_classes_mask].shape,
-                        )
-                        * self.model_pred[new_classes_mask]
-                    ) / extract_into_tensor(
-                        self.sqrt_alphas_cumprod, t[new_classes_mask], self.x_noisy[new_classes_mask].shape
+                x0_pred = (
+                    self.x_noisy[new_classes_mask]
+                    - extract_into_tensor(
+                        self.sqrt_one_minus_alphas_cumprod,
+                        t[new_classes_mask],
+                        self.x_noisy[new_classes_mask].shape,
                     )
-                    t_false = self.sample_renoise_timestep(t[new_classes_mask].shape)
-                    noise = torch.randn_like(x0_pred)
-                    x_false = self.q_sample(x_start=x0_pred, t=t_false, noise=noise)
+                    * self.model_pred[new_classes_mask]
+                ) / extract_into_tensor(
+                    self.sqrt_alphas_cumprod, t[new_classes_mask], self.x_noisy[new_classes_mask].shape
+                )
+                t_false = self.sample_renoise_timestep(t[new_classes_mask].shape)
+                noise = torch.randn_like(x0_pred)
+                x_false = self.q_sample(x_start=x0_pred, t=t_false, noise=noise)
             if self.disc_input_mode == "x0":
                 x_true = x_start[new_classes_mask]
                 t_true = torch.zeros_like(t[new_classes_mask])
