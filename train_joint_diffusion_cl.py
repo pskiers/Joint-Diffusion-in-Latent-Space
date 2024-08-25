@@ -79,19 +79,19 @@ if __name__ == "__main__":
     params = config.model.get("params", dict())
     new_generator = None
     if new_generator_path is not None:
-        if model_type == "joint_diffusion_knowledge_distillation":
+        if model_type in ["joint_diffusion_knowledge_distillation", "joint_diffusion_adversarial_knowledge_distillation"]:
             params["new_model"] = None
             params["old_model"] = None
         config.model.params["ckpt_path"] = new_generator_path
         new_generator = get_model_class(model_type)(**params)
     old_generator = None
     if old_generator_path is not None:
-        if model_type == "joint_diffusion_knowledge_distillation":
+        if model_type in ["joint_diffusion_knowledge_distillation", "joint_diffusion_adversarial_knowledge_distillation"]:
             params["new_model"] = None
             params["old_model"] = None
         config.model.params["ckpt_path"] = old_generator_path
         old_generator = get_model_class(model_type)(**params)
-    if model_type == "joint_diffusion_knowledge_distillation":
+    if model_type in ["joint_diffusion_knowledge_distillation", "joint_diffusion_adversarial_knowledge_distillation"]:
         params = OmegaConf.to_container(params, resolve=True)
         params["new_model"] = new_generator
         params["old_model"] = old_generator

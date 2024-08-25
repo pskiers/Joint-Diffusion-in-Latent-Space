@@ -70,6 +70,8 @@ def get_model_class(name: str):
         return LatentDiffMatchPoolingMultilabel
     elif name == "joint_diffusion_knowledge_distillation":
         return JointDiffusionKnowledgeDistillation
+    elif name == "joint_diffusion_adversarial_knowledge_distillation":
+        return JointDiffusionAdversarialKnowledgeDistillation
     elif name == "ddpm_with_kd":
         return DDPMWithKD
     elif name == "resnet18_with_kd":

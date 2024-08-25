@@ -1,8 +1,9 @@
-from typing import Optional
+from typing import List, Tuple
 import numpy as np
 from pytorch_lightning.utilities.types import STEP_OUTPUT
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import wandb
 from tqdm import tqdm
 from einops import repeat
@@ -15,6 +16,7 @@ from ldm.modules.ema import LitEma
 from contextlib import contextmanager
 from ..representation_transformer import RepresentationTransformer
 from ..adjusted_unet import AdjustedUNet
+from ..stylegan_classifier import StyleGANDiscriminator
 
 
 class JointDiffusionNoisyClassifier(DDPM):
@@ -594,16 +596,20 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
     ):
         super().__init__(*args, **kwargs)
         self.old_model = old_model
+        if self.old_model is not None:
+            self.old_model.requires_grad_(False)
         self.old_classes = torch.tensor(old_classes, device=self.device)
         self.new_model = new_model
+        if self.new_model is not None:
+            self.new_model.requires_grad_(False)
         self.new_classes = torch.tensor(new_classes, device=self.device)
         self.kd_loss_weight = kd_loss_weight
         self.kl_classification_weight = kl_classification_weight
-        self.x_recon = None
-        self.x_noisy = None    
+        self.model_pred = None
+        self.x_noisy = None
         self.old_samples_weight = old_samples_weight
         self.new_samples_weight = new_samples_weight
-        
+
         self.classes_per_task = len(new_classes)
         self.no_wait_kl_classification = no_wait_kl_classification
 
@@ -622,7 +628,7 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
             raise NotImplementedError("This feature is not available for this model")
 
         self.x_noisy = x_noisy
-        x_recon = self.model.diffusion_model.just_reconstruction(x_noisy, t)
+        model_pred = self.model.diffusion_model.just_reconstruction(x_noisy, t)
         if self.x_start is not None:
             representations = self.model.diffusion_model.just_representations(
                 self.x_start,
@@ -635,12 +641,12 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
             else:
                 self.batch_class_predictions = representations
 
-        if isinstance(x_recon, tuple) and not return_ids:
-            self.x_recon = x_recon[0]
-            return x_recon[0]
+        if isinstance(model_pred, tuple) and not return_ids:
+            self.model_pred = model_pred[0]
+            return model_pred[0]
         else:
-            self.x_recon = x_recon
-            return x_recon
+            self.model_pred = model_pred
+            return model_pred
 
     def p_losses(self, x_start, t, noise=None):
         prefix = 'train' if self.training else 'val'
@@ -655,12 +661,12 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
         if old_classes_mask.sum() != 0:
             with torch.no_grad():
                 old_outputs = old_unet.just_reconstruction(self.x_noisy[old_classes_mask], t[old_classes_mask])
-            loss_old = self.get_loss(self.x_recon[old_classes_mask], old_outputs, mean=True)
+            loss_old = self.get_loss(self.model_pred[old_classes_mask], old_outputs, mean=True)
         loss_new = 0
         if new_classes_mask.sum() != 0:
             with torch.no_grad():
                 new_outputs = new_unet.just_reconstruction(self.x_noisy[new_classes_mask], t[new_classes_mask])
-            loss_new = self.get_loss(self.x_recon[new_classes_mask], new_outputs, mean=True)
+            loss_new = self.get_loss(self.model_pred[new_classes_mask], new_outputs, mean=True)
         loss += self.kd_loss_weight * (loss_new * self.new_samples_weight + loss_old * self.old_samples_weight)
         loss_dict.update({f'{prefix}/loss_diffusion_kl': loss_new * self.new_samples_weight + loss_old * self.old_samples_weight})
 
@@ -701,7 +707,7 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
             loss += self.kl_classification_weight * self.kd_loss_weight * (loss_new * self.new_samples_weight + loss_old * self.old_samples_weight)
             loss_dict.update({f'{prefix}/loss_classifier_kl': loss_new * self.new_samples_weight + loss_old * self.old_samples_weight})
             loss_dict.update({f'{prefix}/loss': loss})
-        
+
         # per class accuracy logging
         for i in range(len(self.old_classes) // self.classes_per_task):
             task_classes = self.old_classes[i*self.classes_per_task:(i+1)*self.classes_per_task]
@@ -713,4 +719,194 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
         curr_task_acc = torch.sum(torch.argmax(
             self.batch_class_predictions[new_classes_mask], dim=1) == self.batch_classes[new_classes_mask]) / len(self.batch_classes[new_classes_mask])
         loss_dict.update({f'{prefix}/task{i}_accuracy': curr_task_acc})
+        return loss, loss_dict
+
+
+class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDistillation):
+    def __init__(
+            self,
+            repr_sizes: List[int],
+            disc_lr: float,
+            classifier_lr: float,
+            disc_channel_div: int = 1,
+            adv_loss_scale: float = 1.0,
+            disc_input_mode: str = "x0",
+            renoiser_mean: float = 1.0,
+            renoiser_std: float = 1.0,
+            start_from_mean_weights: bool = True,
+            *args,
+            **kwargs
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.new_disc = StyleGANDiscriminator(context_dims=repr_sizes, projection_div=disc_channel_div)
+        self.old_disc = StyleGANDiscriminator(context_dims=repr_sizes, projection_div=disc_channel_div)
+        self.adv_loss_scale = adv_loss_scale
+        self.disc_lr = disc_lr
+        self.classifier_lr = classifier_lr
+        self.automatic_optimization = False
+        self.phase = "student"
+        assert disc_input_mode in ["x0", "x_t-1", "x0_renoised"]
+        self.disc_input_mode = disc_input_mode
+
+        self.renoiser_mean = renoiser_mean
+        self.renoiser_std = renoiser_std
+        self.renoiser_distribution = torch.distributions.Normal(renoiser_mean, renoiser_std)
+
+        if start_from_mean_weights and self.old_model is not None and self.new_model is not None:
+            for param, param_old, param_new in zip(self.parameters(), self.old_model.parameters(), self.new_model.parameters()):
+                param.data = (param_old.data + param_new.data) / 2.0
+        if self.use_ema:
+            self.model_ema = LitEma(self)
+            print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
+
+    def sample_renoise_timestep(self, shape: Tuple[int]) -> torch.Tensor:
+        norm_samples = self.renoiser_distribution.rsample(shape).to(self.device)
+        logitnormal = torch.sigmoid(norm_samples)
+        return (logitnormal * self.num_timesteps).long()
+
+    def configure_optimizers(self):
+        params_diffusion = list(self.model.parameters())
+        opt_diffusion = torch.optim.AdamW(params_diffusion, lr=self.learning_rate)
+
+        params_classifier = list(self.classifier.parameters())
+        opt_classifier = torch.optim.AdamW(params=params_classifier, lr=self.classifier_lr)
+
+        params_disc = list(self.new_disc.parameters()) + list(self.old_disc.parameters())
+        opt_disc = torch.optim.AdamW(params=params_disc, lr=self.disc_lr)
+
+        return opt_diffusion, opt_classifier, opt_disc
+
+    def training_step(self, batch, batch_idx):
+        opt_diffusion, opt_classifier, opt_disc = self.optimizers()
+        self.phase = "student" if batch_idx % 2 == 0 else "disc"
+        opt_diffusion.zero_grad()
+        opt_classifier.zero_grad()
+        opt_disc.zero_grad()
+        loss = super().training_step(batch, batch_idx)
+        self.manual_backward(loss)
+        if self.phase == "student":
+            opt_disc.zero_grad()
+            opt_diffusion.step()
+            opt_classifier.step()
+        elif self.phase == "disc":
+            opt_diffusion.zero_grad()
+            opt_disc.step()
+            opt_classifier.step()
+
+    def p_losses(self, x_start, t, noise=None):
+        prefix = 'train' if self.training else 'val'
+        loss, loss_dict = super().p_losses(x_start, t, noise)
+        old_unet: AdjustedUNet = self.old_model.model.diffusion_model
+        new_unet: AdjustedUNet = self.new_model.model.diffusion_model
+        old_classes_mask = torch.any(self.batch_classes.unsqueeze(-1) == self.old_classes.to(self.device), dim=-1)
+        new_classes_mask = torch.any(self.batch_classes.unsqueeze(-1) == self.new_classes.to(self.device), dim=-1)
+
+        # adversarial diffusion distillation
+        loss_old = 0
+        if old_classes_mask.sum() != 0:
+            if self.disc_input_mode == "x0":
+                with torch.no_grad():
+                    x_false = (
+                        (self.x_noisy[old_classes_mask] - extract_into_tensor(
+                            self.sqrt_one_minus_alphas_cumprod, t[old_classes_mask], self.x_noisy[old_classes_mask].shape
+                        ) * self.model_pred[old_classes_mask]) /
+                        extract_into_tensor(self.sqrt_alphas_cumprod, t[old_classes_mask], self.x_noisy[old_classes_mask].shape)
+                    )
+                t_false = torch.zeros_like(t[old_classes_mask])
+            elif self.disc_input_mode == "x_t-1":
+                with torch.no_grad():
+                    x_false = self.p_sample(self.x_noisy[old_classes_mask], t[old_classes_mask], clip_denoised=False)
+                t_false = t[old_classes_mask] - 1
+            elif self.disc_input_mode == "x0_renoised":
+                with torch.no_grad():
+                    x0_pred = (
+                        (self.x_noisy[old_classes_mask] - extract_into_tensor(
+                            self.sqrt_one_minus_alphas_cumprod, t[old_classes_mask], self.x_noisy[old_classes_mask].shape
+                        ) * self.model_pred[old_classes_mask]) /
+                        extract_into_tensor(self.sqrt_alphas_cumprod, t[old_classes_mask], self.x_noisy[old_classes_mask].shape)
+                    )
+                    t_false = self.sample_renoise_timestep(t[old_classes_mask].shape)
+                    noise = default(noise, lambda: torch.randn_like(x0_pred))
+                    x_false = self.q_sample(x_start=x0_pred, t=t_false, noise=noise)
+
+            if self.disc_input_mode == "x0":
+                x_true = x_start[old_classes_mask]
+                t_true = torch.zeros_like(t[old_classes_mask])
+            else:
+                t_true = self.sample_renoise_timestep(t[old_classes_mask].shape)
+                noise = default(noise, lambda: torch.randn_like(x_start[old_classes_mask]))
+                x_true = self.q_sample(x_start=x_start[old_classes_mask], t=t_true, noise=noise)
+
+            repr_false = old_unet.just_representations(x_false, timesteps=t_false, pooled=False)
+            out_false = self.old_disc(repr_false)
+            if self.phase == "student":
+                loss_old = -out_false.sum(dim=1).mean()
+            elif self.phase == "disc":
+                repr_true = old_unet.just_representations(x_true, timesteps=t_true, pooled=False)
+                out_true = self.old_disc(repr_true)
+                loss_old = F.relu(1 - out_true).sum(dim=1).mean() + F.relu(1 + out_false).sum(dim=1).mean()
+
+                bs = out_true.shape[0]
+                acc_true = (out_true.view(bs, -1).mean(dim=1) > 0).sum().item() / bs
+                acc_false = (out_false.view(bs, -1).mean(dim=1) < 0).sum().item() / bs
+                mean_true = out_true.mean().item()
+                mean_false = out_false.mean().item()
+                loss_dict.update({f"{prefix}/disc_acc_true_old": acc_true})
+                loss_dict.update({f"{prefix}/disc_acc_false_old": acc_false})
+                loss_dict.update({f"{prefix}/disc_mean_logit_true_old": mean_true})
+                loss_dict.update({f"{prefix}/disc_mean_logit_false_old": mean_false})
+        loss_new = 0
+        if new_classes_mask.sum() != 0:
+            if self.disc_input_mode == "x0":
+                with torch.no_grad():
+                    x_false = (
+                        (self.x_noisy[new_classes_mask] - extract_into_tensor(
+                            self.sqrt_one_minus_alphas_cumprod, t[new_classes_mask], self.x_noisy[new_classes_mask].shape
+                        ) * self.model_pred[new_classes_mask]) /
+                        extract_into_tensor(self.sqrt_alphas_cumprod, t[new_classes_mask], self.x_noisy[new_classes_mask].shape)
+                    )
+                t_false = torch.zeros_like(t[new_classes_mask])
+            elif self.disc_input_mode == "x_t-1":
+                with torch.no_grad():
+                    x_false = self.p_sample(self.x_noisy[new_classes_mask], t[new_classes_mask], clip_denoised=False)
+                t_false = t[new_classes_mask] - 1
+            elif self.disc_input_mode == "x0_renoised":
+                with torch.no_grad():
+                    x0_pred = (
+                        (self.x_noisy[new_classes_mask] - extract_into_tensor(
+                            self.sqrt_one_minus_alphas_cumprod, t[new_classes_mask], self.x_noisy[new_classes_mask].shape
+                        ) * self.model_pred[new_classes_mask]) /
+                        extract_into_tensor(self.sqrt_alphas_cumprod, t[new_classes_mask], self.x_noisy[new_classes_mask].shape)
+                    )
+                    t_false = self.sample_renoise_timestep(t[new_classes_mask].shape)
+                    noise = default(noise, lambda: torch.randn_like(x0_pred))
+                    x_false = self.q_sample(x_start=x0_pred, t=t_false, noise=noise)
+            if self.disc_input_mode == "x0":
+                x_true = x_start[new_classes_mask]
+                t_true = torch.zeros_like(t[new_classes_mask])
+            else:
+                t_true = self.sample_renoise_timestep(t[new_classes_mask].shape)
+                noise = default(noise, lambda: torch.randn_like(x_start[new_classes_mask]))
+                x_true = self.q_sample(x_start=x_start[new_classes_mask], t=t_true, noise=noise)
+
+            repr_false = new_unet.just_representations(x_false, timesteps=t_false, pooled=False)
+            out_false = self.new_disc(repr_false)
+            if self.phase == "student":
+                loss_new = -out_false.sum(dim=1).mean()
+            elif self.phase == "disc":
+                repr_true = new_unet.just_representations(x_true, timesteps=t_true, pooled=False)
+                out_true = self.new_disc(repr_true)
+                loss_new = F.relu(1 - out_true).sum(dim=1).mean() + F.relu(1 + out_false).sum(dim=1).mean()
+
+                bs = out_true.shape[0]
+                acc_true = (out_true.view(bs, -1).mean(dim=1) > 0).sum().item() / bs
+                acc_false = (out_false.view(bs, -1).mean(dim=1) < 0).sum().item() / bs
+                mean_true = out_true.mean().item()
+                mean_false = out_false.mean().item()
+                loss_dict.update({f"{prefix}/disc_acc_true_new": acc_true})
+                loss_dict.update({f"{prefix}/disc_acc_false_new": acc_false})
+                loss_dict.update({f"{prefix}/disc_mean_logit_true_new": mean_true})
+                loss_dict.update({f"{prefix}/disc_mean_logit_false_new": mean_false})
+        loss += self.adv_loss_scale * (loss_new * self.new_samples_weight + loss_old * self.old_samples_weight)
+        loss_dict.update({f'{prefix}/loss_diffusion_adv': loss_new * self.new_samples_weight + loss_old * self.old_samples_weight})
         return loss, loss_dict
