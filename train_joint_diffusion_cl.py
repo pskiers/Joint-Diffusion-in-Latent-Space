@@ -196,6 +196,8 @@ if __name__ == "__main__":
                         generator.image_size,
                     )
                     if ema:
+                        # so that ema works
+                        generator.requires_grad_(True)
                         with generator.ema_scope():
                             ddim_sampler = DDIMSamplerGradGuided(generator)
                             samples, _ = ddim_sampler.sample(
@@ -205,6 +207,7 @@ if __name__ == "__main__":
                                 cond=None,
                                 verbose=False,
                             )
+                        generator.requires_grad_(False)
                     else:
                         ddim_sampler = DDIMSamplerGradGuided(generator)
                         samples, _ = ddim_sampler.sample(
