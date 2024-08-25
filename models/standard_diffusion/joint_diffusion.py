@@ -827,7 +827,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
                         self.sqrt_alphas_cumprod, t[old_classes_mask], self.x_noisy[old_classes_mask].shape
                     )
                     t_false = self.sample_renoise_timestep(t[old_classes_mask].shape)
-                    noise = default(noise, lambda: torch.randn_like(x0_pred))
+                    noise = torch.randn_like(x0_pred)
                     x_false = self.q_sample(x_start=x0_pred, t=t_false, noise=noise)
 
             if self.disc_input_mode == "x0":
@@ -835,7 +835,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
                 t_true = torch.zeros_like(t[old_classes_mask])
             else:
                 t_true = self.sample_renoise_timestep(t[old_classes_mask].shape)
-                noise = default(noise, lambda: torch.randn_like(x_start[old_classes_mask]))
+                noise = torch.randn_like(x_start[old_classes_mask])
                 x_true = self.q_sample(x_start=x_start[old_classes_mask], t=t_true, noise=noise)
 
             repr_false = old_unet.just_representations(x_false, timesteps=t_false, pooled=False)
@@ -890,14 +890,14 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
                         self.sqrt_alphas_cumprod, t[new_classes_mask], self.x_noisy[new_classes_mask].shape
                     )
                     t_false = self.sample_renoise_timestep(t[new_classes_mask].shape)
-                    noise = default(noise, lambda: torch.randn_like(x0_pred))
+                    noise = torch.randn_like(x0_pred)
                     x_false = self.q_sample(x_start=x0_pred, t=t_false, noise=noise)
             if self.disc_input_mode == "x0":
                 x_true = x_start[new_classes_mask]
                 t_true = torch.zeros_like(t[new_classes_mask])
             else:
                 t_true = self.sample_renoise_timestep(t[new_classes_mask].shape)
-                noise = default(noise, lambda: torch.randn_like(x_start[new_classes_mask]))
+                noise = torch.randn_like(x_start[new_classes_mask])
                 x_true = self.q_sample(x_start=x_start[new_classes_mask], t=t_true, noise=noise)
 
             repr_false = new_unet.just_representations(x_false, timesteps=t_false, pooled=False)
