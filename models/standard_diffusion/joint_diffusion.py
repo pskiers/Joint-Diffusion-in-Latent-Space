@@ -20,27 +20,25 @@ from ..stylegan_classifier import StyleGANDiscriminator
 
 
 class JointDiffusionNoisyClassifier(DDPM):
-    def __init__(self,
-                 unet_config,
-                 classifier_in_features,
-                 classifier_hidden,
-                 num_classes,
-                 dropout=0,
-                 classification_loss_scale=1,
-                 classification_start=0,
-                 sample_grad_scale=60,
-                 classification_key=1,
-                 first_stage_key="image",
-                 conditioning_key=None,
-                 sampling_method="conditional_to_x",
-                 *args,
-                 **kwargs):
+    def __init__(
+        self,
+        unet_config,
+        classifier_in_features,
+        classifier_hidden,
+        num_classes,
+        dropout=0,
+        classification_loss_scale=1,
+        classification_start=0,
+        sample_grad_scale=60,
+        classification_key=1,
+        first_stage_key="image",
+        conditioning_key=None,
+        sampling_method="conditional_to_x",
+        *args,
+        **kwargs,
+    ):
         super().__init__(
-            unet_config,
-            first_stage_key=first_stage_key,
-            conditioning_key=conditioning_key,
-            *args,
-            **kwargs
+            unet_config, first_stage_key=first_stage_key, conditioning_key=conditioning_key, *args, **kwargs
         )
         self.num_classes = num_classes
         self.classification_key = classification_key
@@ -50,7 +48,7 @@ class JointDiffusionNoisyClassifier(DDPM):
             nn.LeakyReLU(negative_slope=0.2),
             nn.Dropout(p=dropout),
             # nn.ReLU(),
-            nn.Linear(classifier_hidden, self.num_classes)
+            nn.Linear(classifier_hidden, self.num_classes),
         )
         self.sampling_method = sampling_method
         self.sample_grad_scale = sample_grad_scale
@@ -103,11 +101,10 @@ class JointDiffusionNoisyClassifier(DDPM):
 
     def apply_model(self, x_noisy, t, return_ids=False):
         if hasattr(self, "split_input_params"):
-            raise NotImplementedError(
-                "This feature is not available for this model")
+            raise NotImplementedError("This feature is not available for this model")
 
         x_recon, representations = self.model.diffusion_model(x_noisy, t, pooled=False)
-        if isinstance(representations, list): # TODO refactor this shit
+        if isinstance(representations, list):  # TODO refactor this shit
             representations = self.transform_representations(representations)
             self.batch_class_predictions = self.classifier(representations)
         else:
@@ -124,7 +121,7 @@ class JointDiffusionNoisyClassifier(DDPM):
         model_output = self.apply_model(x_noisy, t)
 
         loss_dict = {}
-        prefix = 'train' if self.training else 'val'
+        prefix = "train" if self.training else "val"
 
         if self.parameterization == "x0":
             target = x_start
@@ -134,72 +131,69 @@ class JointDiffusionNoisyClassifier(DDPM):
             raise NotImplementedError()
 
         loss_simple = self.get_loss(model_output, target, mean=False).mean([1, 2, 3])
-        loss_dict.update({f'{prefix}/loss_simple': loss_simple.mean()})
+        loss_dict.update({f"{prefix}/loss_simple": loss_simple.mean()})
 
         t = t.cpu()
         logvar_t = self.logvar[t].to(self.device)
         loss = loss_simple / torch.exp(logvar_t) + logvar_t
         # loss = loss_simple / torch.exp(self.logvar) + self.logvar
         if self.learn_logvar:
-            loss_dict.update({f'{prefix}/loss_gamma': loss.mean()})
-            loss_dict.update({'logvar': self.logvar.data.mean()})
+            loss_dict.update({f"{prefix}/loss_gamma": loss.mean()})
+            loss_dict.update({"logvar": self.logvar.data.mean()})
 
         loss = self.l_simple_weight * loss.mean()
 
         loss_vlb = self.get_loss(model_output, target, mean=False).mean(dim=(1, 2, 3))
         loss_vlb = (self.lvlb_weights[t] * loss_vlb).mean()
-        loss_dict.update({f'{prefix}/loss_vlb': loss_vlb})
-        loss += (self.original_elbo_weight * loss_vlb)
-        loss_dict.update({f'{prefix}/loss': loss})
+        loss_dict.update({f"{prefix}/loss_vlb": loss_vlb})
+        loss += self.original_elbo_weight * loss_vlb
+        loss_dict.update({f"{prefix}/loss": loss})
 
         if (self.batch_classes is not None) and ((self.classification_start <= 0) or not self.training):
-            prefix = 'train' if self.training else 'val'
-            self.batch_classes = self.batch_classes if len(self.batch_classes.shape) == 1 else nn.functional.softmax(self.batch_classes, dim=-1)
-            loss_classification = nn.functional.cross_entropy(
-                self.batch_class_predictions, self.batch_classes)
+            prefix = "train" if self.training else "val"
+            self.batch_classes = (
+                self.batch_classes
+                if len(self.batch_classes.shape) == 1
+                else nn.functional.softmax(self.batch_classes, dim=-1)
+            )
+            loss_classification = nn.functional.cross_entropy(self.batch_class_predictions, self.batch_classes)
             loss += loss_classification * self.classification_loss_scale
-            loss_dict.update(
-                {f'{prefix}/loss_classification': loss_classification})
-            loss_dict.update({f'{prefix}/loss': loss})
-            self.batch_classes = self.batch_classes if len(self.batch_classes.shape) == 1 else self.batch_classes.argmax(dim=-1)
-            accuracy = torch.sum(torch.argmax(
-                self.batch_class_predictions, dim=1) == self.batch_classes) / len(self.batch_classes)
-            loss_dict.update({f'{prefix}/accuracy': accuracy})
+            loss_dict.update({f"{prefix}/loss_classification": loss_classification})
+            loss_dict.update({f"{prefix}/loss": loss})
+            self.batch_classes = (
+                self.batch_classes if len(self.batch_classes.shape) == 1 else self.batch_classes.argmax(dim=-1)
+            )
+            accuracy = torch.sum(torch.argmax(self.batch_class_predictions, dim=1) == self.batch_classes) / len(
+                self.batch_classes
+            )
+            loss_dict.update({f"{prefix}/accuracy": accuracy})
             if prefix == "val":
                 self.val_labels = torch.concat([self.val_labels, self.batch_classes.detach().cpu()])
-                self.val_preds = torch.concat([self.val_preds, self.batch_class_predictions.argmax(dim=1).detach().cpu()])
+                self.val_preds = torch.concat(
+                    [self.val_preds, self.batch_class_predictions.argmax(dim=1).detach().cpu()]
+                )
 
         if self.classification_start > 0:
             self.classification_start -= 1
         return loss, loss_dict
 
     def on_validation_epoch_end(self) -> None:
-        wandb.log({"val/conf_mat": wandb.plot.confusion_matrix(
-            probs=None,
-            y_true=self.val_labels.numpy(),
-            preds=self.val_preds.numpy(),
-        )})
+        wandb.log(
+            {
+                "val/conf_mat": wandb.plot.confusion_matrix(
+                    probs=None,
+                    y_true=self.val_labels.numpy(),
+                    preds=self.val_preds.numpy(),
+                )
+            }
+        )
         self.val_labels = torch.tensor([])
         self.val_preds = torch.tensor([])
 
-    def log_images(self,
-                   batch,
-                   N=8,
-                   n_row=4,
-                   sample=True,
-                   return_keys=None,
-                   sample_classes=None,
-                   **kwargs):
+    def log_images(self, batch, N=8, n_row=4, sample=True, return_keys=None, sample_classes=None, **kwargs):
         if self.sampling_method == "conditional_to_x":
             self.sample_classes = torch.tensor(sample_classes).to(self.device)
-        return super().log_images(
-            batch,
-            N,
-            n_row,
-            sample,
-            return_keys,
-            **kwargs
-        )
+        return super().log_images(batch, N, n_row, sample, return_keys, **kwargs)
 
     def p_mean_variance(self, x, t, clip_denoised: bool):
         if (self.sampling_method == "unconditional") or (self.sample_grad_scale == 0):
@@ -219,7 +213,7 @@ class JointDiffusionNoisyClassifier(DDPM):
         elif self.parameterization == "x0":
             x_recon = model_out
         if clip_denoised:
-            x_recon.clamp_(-1., 1.)
+            x_recon.clamp_(-1.0, 1.0)
 
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
         return model_mean, posterior_variance, posterior_log_variance
@@ -238,13 +232,13 @@ class JointDiffusionNoisyClassifier(DDPM):
             raise NotImplementedError()
 
         if clip_denoised:
-            x_recon.clamp_(-1., 1.)
+            x_recon.clamp_(-1.0, 1.0)
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(x_start=x_recon, x_t=x, t=t)
         return model_mean, posterior_variance, posterior_log_variance
 
     @torch.no_grad()
     def guided_apply_model(self, x, t):
-        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
+        if not hasattr(self.model.diffusion_model, "forward_input_blocks"):
             return self.apply_model(x, t)
         t_in = t
 
@@ -266,8 +260,7 @@ class JointDiffusionNoisyClassifier(DDPM):
 
     def transform_representations(self, representations):
         representations = self.model.diffusion_model.pool_representations(representations)
-        representations = [torch.flatten(z_i, start_dim=1)
-                           for z_i in representations]
+        representations = [torch.flatten(z_i, start_dim=1) for z_i in representations]
         representations = torch.concat(representations, dim=1)
         return representations
 
@@ -290,9 +283,7 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
         x_recon = self.model.diffusion_model.just_reconstruction(x_noisy, t)
         if self.x_start is not None:
             representations = self.model.diffusion_model.just_representations(
-                self.x_start,
-                torch.zeros(self.x_start.shape[0], device=self.device),
-                pooled=False
+                self.x_start, torch.zeros(self.x_start.shape[0], device=self.device), pooled=False
             )
             if isinstance(representations, list):  # TODO refactor this shit
                 representations = self.transform_representations(representations)
@@ -308,27 +299,20 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
     @torch.no_grad()
     def guided_apply_model(self, x: torch.Tensor, t):
         unet: AdjustedUNet = self.model.diffusion_model
-        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
+        if not hasattr(self.model.diffusion_model, "forward_input_blocks"):
             return unet.just_reconstruction(x, t)
 
         with torch.enable_grad():
             x = x.requires_grad_(True)
-            pred_noise = unet.just_reconstruction(
-                x, t, context=None)
+            pred_noise = unet.just_reconstruction(x, t, context=None)
             pred_x_start = (
-                (x - extract_into_tensor(
-                    self.sqrt_one_minus_alphas_cumprod, t, x.shape
-                ) * pred_noise) /
-                extract_into_tensor(self.sqrt_alphas_cumprod, t, x.shape)
-            )
-            representations = unet.just_representations(
-                pred_x_start, t, context=None, pooled=False)
-            pooled_representations = self.transform_representations(
-                representations)
+                x - extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * pred_noise
+            ) / extract_into_tensor(self.sqrt_alphas_cumprod, t, x.shape)
+            representations = unet.just_representations(pred_x_start, t, context=None, pooled=False)
+            pooled_representations = self.transform_representations(representations)
             pred = self.classifier(pooled_representations)
 
-            loss = nn.functional.cross_entropy(
-                pred, self.sample_classes, reduction="sum")
+            loss = nn.functional.cross_entropy(pred, self.sample_classes, reduction="sum")
             grad = torch.autograd.grad(loss, x)[0]
             s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
             model_out = (pred_noise + s_t * grad).detach()
@@ -337,7 +321,7 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
 
     @torch.no_grad()
     def guided_repr_apply_model(self, x, t):
-        if not hasattr(self.model.diffusion_model, 'forward_input_blocks'):
+        if not hasattr(self.model.diffusion_model, "forward_input_blocks"):
             return self.apply_model(x, t)
         t_in = t
 
@@ -349,27 +333,35 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
 
             pred_noise = unet.forward_output_blocks(x, None, emb, representations)
             pred_x_start = (
-                (x - extract_into_tensor(
-                    self.sqrt_one_minus_alphas_cumprod, t, x.shape
-                ) * pred_noise) /
-                extract_into_tensor(self.sqrt_alphas_cumprod, t, x.shape)
-            )
-            repr_x0 = unet.just_representations(
-                pred_x_start, t, context=None, pooled=False)
-            pooled_representations = self.transform_representations(
-                repr_x0)
+                x - extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, x.shape) * pred_noise
+            ) / extract_into_tensor(self.sqrt_alphas_cumprod, t, x.shape)
+            repr_x0 = unet.just_representations(pred_x_start, t, context=None, pooled=False)
+            pooled_representations = self.transform_representations(repr_x0)
             class_predictions = self.classifier(pooled_representations)
             # loss = -torch.log(torch.gather(class_predictions, 1, self.sample_classes.unsqueeze(dim=1))).sum()
             loss = -nn.functional.cross_entropy(class_predictions, self.sample_classes, reduction="sum")
             s_t = self.sample_grad_scale * extract_into_tensor(self.sqrt_one_minus_alphas_cumprod, t, (1,))[0]
             grads = torch.autograd.grad(loss, representations)
-            representations = [(h + self.sample_grad_scale * grad * s_t).detach() for h, grad in zip(representations, grads)]
+            representations = [
+                (h + self.sample_grad_scale * grad * s_t).detach() for h, grad in zip(representations, grads)
+            ]
 
         model_out = unet.forward_output_blocks(x, None, emb, representations)
         return model_out
 
     @torch.no_grad()
-    def log_images(self, batch, N=8, n_row=2, sample=True, return_keys=None, sample_classes=None, use_ema=True, grad_scales=None, **kwargs):
+    def log_images(
+        self,
+        batch,
+        N=8,
+        n_row=2,
+        sample=True,
+        return_keys=None,
+        sample_classes=None,
+        use_ema=True,
+        grad_scales=None,
+        **kwargs,
+    ):
         if self.sampling_method != "unconditional":
             self.sample_classes = torch.tensor(sample_classes).to(self.device)
         log = dict()
@@ -385,7 +377,7 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
 
         for t in range(self.num_timesteps):
             if t % self.log_every_t == 0 or t == self.num_timesteps - 1:
-                t = repeat(torch.tensor([t]), '1 -> b', b=n_row)
+                t = repeat(torch.tensor([t]), "1 -> b", b=n_row)
                 t = t.to(self.device).long()
                 noise = torch.randn_like(x_start)
                 x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
@@ -424,21 +416,13 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
         return log
 
     @torch.no_grad()
-    def p_sample_loop(
-        self, shape, return_intermediates=False, x_start=None, t_start=None
-    ):
+    def p_sample_loop(self, shape, return_intermediates=False, x_start=None, t_start=None):
         device = self.betas.device
         b = shape[0]
-        img = (
-            torch.randn(shape, device=device)
-            if x_start is None
-            else x_start.clone().to(device)
-        )
+        img = torch.randn(shape, device=device) if x_start is None else x_start.clone().to(device)
         num_timesteps = self.num_timesteps if t_start is None else t_start
         intermediates = [img]
-        for i in tqdm(
-            reversed(range(0, num_timesteps)), desc="Sampling t", total=num_timesteps
-        ):
+        for i in tqdm(reversed(range(0, num_timesteps)), desc="Sampling t", total=num_timesteps):
             t = torch.full((b,), i, device=device, dtype=torch.long)
             for _ in range(self.sampling_recurence_steps - 1):
                 z_t_minus_1 = self.p_sample(
@@ -466,9 +450,7 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
         return img
 
     @torch.no_grad()
-    def sample(
-        self, batch_size=16, return_intermediates=False, x_start=None, t_start=None
-    ):
+    def sample(self, batch_size=16, return_intermediates=False, x_start=None, t_start=None):
         image_size = self.image_size
         channels = self.channels
         return self.p_sample_loop(
@@ -531,13 +513,7 @@ class JointDiffusionAugmentations(JointDiffusion):
 
 class JointDiffusionAttention(JointDiffusionAugmentations):
     def __init__(self, attention_config, *args, **kwargs):
-        super().__init__(
-            classifier_in_features=0,
-            classifier_hidden=0,
-            num_classes=0,
-            *args,
-            **kwargs
-        )
+        super().__init__(classifier_in_features=0, classifier_hidden=0, num_classes=0, *args, **kwargs)
         self.classifier = RepresentationTransformer(**attention_config)
 
         if self.use_ema:
@@ -592,7 +568,7 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
         no_wait_kl_classification=False,
         old_samples_weight=1.0,
         new_samples_weight=1.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.old_model = old_model
@@ -615,7 +591,9 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
 
     def named_parameters(self, recurse: bool = True):
         named_parameters = super().named_parameters(recurse=recurse)
-        named_parameters = [(name, param) for name, param in named_parameters if "new_model" not in name and "old_model" not in name]
+        named_parameters = [
+            (name, param) for name, param in named_parameters if "new_model" not in name and "old_model" not in name
+        ]
         return named_parameters
 
     def parameters(self, recurse: bool = True):
@@ -631,9 +609,7 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
         model_pred = self.model.diffusion_model.just_reconstruction(x_noisy, t)
         if self.x_start is not None:
             representations = self.model.diffusion_model.just_representations(
-                self.x_start,
-                torch.zeros(self.x_start.shape[0], device=self.device),
-                pooled=False
+                self.x_start, torch.zeros(self.x_start.shape[0], device=self.device), pooled=False
             )
             if isinstance(representations, list):  # TODO refactor this shit
                 representations = self.transform_representations(representations)
@@ -649,7 +625,7 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
             return model_pred
 
     def p_losses(self, x_start, t, noise=None):
-        prefix = 'train' if self.training else 'val'
+        prefix = "train" if self.training else "val"
         loss, loss_dict = super().p_losses(x_start, t, noise)
         old_unet = self.old_model.model.diffusion_model
         new_unet = self.new_model.model.diffusion_model
@@ -668,7 +644,9 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
                 new_outputs = new_unet.just_reconstruction(self.x_noisy[new_classes_mask], t[new_classes_mask])
             loss_new = self.get_loss(self.model_pred[new_classes_mask], new_outputs, mean=True)
         loss += self.kd_loss_weight * (loss_new * self.new_samples_weight + loss_old * self.old_samples_weight)
-        loss_dict.update({f'{prefix}/loss_diffusion_kl': loss_new * self.new_samples_weight + loss_old * self.old_samples_weight})
+        loss_dict.update(
+            {f"{prefix}/loss_diffusion_kl": loss_new * self.new_samples_weight + loss_old * self.old_samples_weight}
+        )
 
         if self.classification_start <= 0 or self.no_wait_kl_classification:
             # classifier knowledge distillation
@@ -678,7 +656,7 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
                     old_repr = old_unet.just_representations(
                         self.x_start[old_classes_mask],
                         torch.zeros(self.x_start[old_classes_mask].shape[0], device=self.device),
-                        pooled=False
+                        pooled=False,
                     )
                     if isinstance(old_repr, list):  # TODO refactor this shit
                         old_repr = self.old_model.transform_representations(old_repr)
@@ -694,7 +672,7 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
                     new_repr = new_unet.just_representations(
                         self.x_start[new_classes_mask],
                         torch.zeros(self.x_start[new_classes_mask].shape[0], device=self.device),
-                        pooled=False
+                        pooled=False,
                     )
                     if isinstance(new_repr, list):  # TODO refactor this shit
                         new_repr = self.new_model.transform_representations(new_repr)
@@ -704,38 +682,49 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
                     new_preds = nn.functional.softmax(new_preds, dim=1).detach()
                 loss_new = nn.functional.cross_entropy(self.batch_class_predictions[new_classes_mask], new_preds)
 
-            loss += self.kl_classification_weight * self.kd_loss_weight * (loss_new * self.new_samples_weight + loss_old * self.old_samples_weight)
-            loss_dict.update({f'{prefix}/loss_classifier_kl': loss_new * self.new_samples_weight + loss_old * self.old_samples_weight})
-            loss_dict.update({f'{prefix}/loss': loss})
+            loss += (
+                self.kl_classification_weight
+                * self.kd_loss_weight
+                * (loss_new * self.new_samples_weight + loss_old * self.old_samples_weight)
+            )
+            loss_dict.update(
+                {
+                    f"{prefix}/loss_classifier_kl": loss_new * self.new_samples_weight
+                    + loss_old * self.old_samples_weight
+                }
+            )
+            loss_dict.update({f"{prefix}/loss": loss})
 
         # per class accuracy logging
         for i in range(len(self.old_classes) // self.classes_per_task):
-            task_classes = self.old_classes[i*self.classes_per_task:(i+1)*self.classes_per_task]
+            task_classes = self.old_classes[i * self.classes_per_task : (i + 1) * self.classes_per_task]
             task_mask = torch.any(self.batch_classes.unsqueeze(-1) == task_classes.to(self.device), dim=-1)
-            curr_task_acc = torch.sum(torch.argmax(
-                self.batch_class_predictions[task_mask], dim=1) == self.batch_classes[task_mask]) / len(self.batch_classes[task_mask])
-            loss_dict.update({f'{prefix}/task{i}_accuracy': curr_task_acc})
+            curr_task_acc = torch.sum(
+                torch.argmax(self.batch_class_predictions[task_mask], dim=1) == self.batch_classes[task_mask]
+            ) / len(self.batch_classes[task_mask])
+            loss_dict.update({f"{prefix}/task{i}_accuracy": curr_task_acc})
         i += 1
-        curr_task_acc = torch.sum(torch.argmax(
-            self.batch_class_predictions[new_classes_mask], dim=1) == self.batch_classes[new_classes_mask]) / len(self.batch_classes[new_classes_mask])
-        loss_dict.update({f'{prefix}/task{i}_accuracy': curr_task_acc})
+        curr_task_acc = torch.sum(
+            torch.argmax(self.batch_class_predictions[new_classes_mask], dim=1) == self.batch_classes[new_classes_mask]
+        ) / len(self.batch_classes[new_classes_mask])
+        loss_dict.update({f"{prefix}/task{i}_accuracy": curr_task_acc})
         return loss, loss_dict
 
 
 class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDistillation):
     def __init__(
-            self,
-            repr_sizes: List[int],
-            disc_lr: float,
-            classifier_lr: float,
-            disc_channel_div: int = 1,
-            adv_loss_scale: float = 1.0,
-            disc_input_mode: str = "x0",
-            renoiser_mean: float = 1.0,
-            renoiser_std: float = 1.0,
-            start_from_mean_weights: bool = True,
-            *args,
-            **kwargs
+        self,
+        repr_sizes: List[int],
+        disc_lr: float,
+        classifier_lr: float,
+        disc_channel_div: int = 1,
+        adv_loss_scale: float = 1.0,
+        disc_input_mode: str = "x0",
+        renoiser_mean: float = 1.0,
+        renoiser_std: float = 1.0,
+        start_from_mean_weights: bool = True,
+        *args,
+        **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
         self.new_disc = StyleGANDiscriminator(context_dims=repr_sizes, projection_div=disc_channel_div)
@@ -753,7 +742,9 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         self.renoiser_distribution = torch.distributions.Normal(renoiser_mean, renoiser_std)
 
         if start_from_mean_weights and self.old_model is not None and self.new_model is not None:
-            for param, param_old, param_new in zip(self.parameters(), self.old_model.parameters(), self.new_model.parameters()):
+            for param, param_old, param_new in zip(
+                self.parameters(), self.old_model.parameters(), self.new_model.parameters()
+            ):
                 param.data = (param_old.data + param_new.data) / 2.0
         if self.use_ema:
             self.model_ema = LitEma(self)
@@ -794,7 +785,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
             opt_classifier.step()
 
     def p_losses(self, x_start, t, noise=None):
-        prefix = 'train' if self.training else 'val'
+        prefix = "train" if self.training else "val"
         loss, loss_dict = super().p_losses(x_start, t, noise)
         old_unet: AdjustedUNet = self.old_model.model.diffusion_model
         new_unet: AdjustedUNet = self.new_model.model.diffusion_model
@@ -807,10 +798,15 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
             if self.disc_input_mode == "x0":
                 with torch.no_grad():
                     x_false = (
-                        (self.x_noisy[old_classes_mask] - extract_into_tensor(
-                            self.sqrt_one_minus_alphas_cumprod, t[old_classes_mask], self.x_noisy[old_classes_mask].shape
-                        ) * self.model_pred[old_classes_mask]) /
-                        extract_into_tensor(self.sqrt_alphas_cumprod, t[old_classes_mask], self.x_noisy[old_classes_mask].shape)
+                        self.x_noisy[old_classes_mask]
+                        - extract_into_tensor(
+                            self.sqrt_one_minus_alphas_cumprod,
+                            t[old_classes_mask],
+                            self.x_noisy[old_classes_mask].shape,
+                        )
+                        * self.model_pred[old_classes_mask]
+                    ) / extract_into_tensor(
+                        self.sqrt_alphas_cumprod, t[old_classes_mask], self.x_noisy[old_classes_mask].shape
                     )
                 t_false = torch.zeros_like(t[old_classes_mask])
             elif self.disc_input_mode == "x_t-1":
@@ -820,10 +816,15 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
             elif self.disc_input_mode == "x0_renoised":
                 with torch.no_grad():
                     x0_pred = (
-                        (self.x_noisy[old_classes_mask] - extract_into_tensor(
-                            self.sqrt_one_minus_alphas_cumprod, t[old_classes_mask], self.x_noisy[old_classes_mask].shape
-                        ) * self.model_pred[old_classes_mask]) /
-                        extract_into_tensor(self.sqrt_alphas_cumprod, t[old_classes_mask], self.x_noisy[old_classes_mask].shape)
+                        self.x_noisy[old_classes_mask]
+                        - extract_into_tensor(
+                            self.sqrt_one_minus_alphas_cumprod,
+                            t[old_classes_mask],
+                            self.x_noisy[old_classes_mask].shape,
+                        )
+                        * self.model_pred[old_classes_mask]
+                    ) / extract_into_tensor(
+                        self.sqrt_alphas_cumprod, t[old_classes_mask], self.x_noisy[old_classes_mask].shape
                     )
                     t_false = self.sample_renoise_timestep(t[old_classes_mask].shape)
                     noise = default(noise, lambda: torch.randn_like(x0_pred))
@@ -860,10 +861,15 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
             if self.disc_input_mode == "x0":
                 with torch.no_grad():
                     x_false = (
-                        (self.x_noisy[new_classes_mask] - extract_into_tensor(
-                            self.sqrt_one_minus_alphas_cumprod, t[new_classes_mask], self.x_noisy[new_classes_mask].shape
-                        ) * self.model_pred[new_classes_mask]) /
-                        extract_into_tensor(self.sqrt_alphas_cumprod, t[new_classes_mask], self.x_noisy[new_classes_mask].shape)
+                        self.x_noisy[new_classes_mask]
+                        - extract_into_tensor(
+                            self.sqrt_one_minus_alphas_cumprod,
+                            t[new_classes_mask],
+                            self.x_noisy[new_classes_mask].shape,
+                        )
+                        * self.model_pred[new_classes_mask]
+                    ) / extract_into_tensor(
+                        self.sqrt_alphas_cumprod, t[new_classes_mask], self.x_noisy[new_classes_mask].shape
                     )
                 t_false = torch.zeros_like(t[new_classes_mask])
             elif self.disc_input_mode == "x_t-1":
@@ -873,10 +879,15 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
             elif self.disc_input_mode == "x0_renoised":
                 with torch.no_grad():
                     x0_pred = (
-                        (self.x_noisy[new_classes_mask] - extract_into_tensor(
-                            self.sqrt_one_minus_alphas_cumprod, t[new_classes_mask], self.x_noisy[new_classes_mask].shape
-                        ) * self.model_pred[new_classes_mask]) /
-                        extract_into_tensor(self.sqrt_alphas_cumprod, t[new_classes_mask], self.x_noisy[new_classes_mask].shape)
+                        self.x_noisy[new_classes_mask]
+                        - extract_into_tensor(
+                            self.sqrt_one_minus_alphas_cumprod,
+                            t[new_classes_mask],
+                            self.x_noisy[new_classes_mask].shape,
+                        )
+                        * self.model_pred[new_classes_mask]
+                    ) / extract_into_tensor(
+                        self.sqrt_alphas_cumprod, t[new_classes_mask], self.x_noisy[new_classes_mask].shape
                     )
                     t_false = self.sample_renoise_timestep(t[new_classes_mask].shape)
                     noise = default(noise, lambda: torch.randn_like(x0_pred))
@@ -908,5 +919,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
                 loss_dict.update({f"{prefix}/disc_mean_logit_true_new": mean_true})
                 loss_dict.update({f"{prefix}/disc_mean_logit_false_new": mean_false})
         loss += self.adv_loss_scale * (loss_new * self.new_samples_weight + loss_old * self.old_samples_weight)
-        loss_dict.update({f'{prefix}/loss_diffusion_adv': loss_new * self.new_samples_weight + loss_old * self.old_samples_weight})
+        loss_dict.update(
+            {f"{prefix}/loss_diffusion_adv": loss_new * self.new_samples_weight + loss_old * self.old_samples_weight}
+        )
         return loss, loss_dict
