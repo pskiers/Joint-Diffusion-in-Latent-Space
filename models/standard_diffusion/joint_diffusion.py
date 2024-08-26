@@ -1,6 +1,5 @@
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
 import numpy as np
-from pytorch_lightning.utilities.types import STEP_OUTPUT
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -572,12 +571,8 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
     ):
         super().__init__(*args, **kwargs)
         self.old_model = old_model
-        if self.old_model is not None:
-            self.old_model.requires_grad_(False)
         self.old_classes = torch.tensor(old_classes, device=self.device)
         self.new_model = new_model
-        if self.new_model is not None:
-            self.new_model.requires_grad_(False)
         self.new_classes = torch.tensor(new_classes, device=self.device)
         self.kd_loss_weight = kd_loss_weight
         self.kl_classification_weight = kl_classification_weight
@@ -719,7 +714,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         classifier_lr: float,
         disc_channel_div: int = 1,
         adv_loss_scale: float = 1.0,
-        disc_input_mode: str = "x0",
+        disc_input_mode: str = "x0_renoised",
         renoiser_mean: float = 1.0,
         renoiser_std: float = 1.0,
         start_from_mean_weights: bool = True,
@@ -750,12 +745,12 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
             self.model_ema = LitEma(self)
             print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
 
-    def sample_renoise_timestep(self, shape: Tuple[int]) -> torch.Tensor:
+    def sample_renoise_timestep(self, shape: torch.Size) -> torch.Tensor:
         norm_samples = self.renoiser_distribution.rsample(shape).to(self.device)
         logitnormal = torch.sigmoid(norm_samples)
         return (logitnormal * self.num_timesteps).long()
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> Tuple[torch.optim.AdamW, torch.optim.AdamW, torch.optim.AdamW]:
         params_diffusion = list(self.model.parameters())
         opt_diffusion = torch.optim.AdamW(params_diffusion, lr=self.learning_rate)
 
@@ -767,7 +762,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
 
         return opt_diffusion, opt_classifier, opt_disc
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch, batch_idx) -> None:
         opt_diffusion, opt_classifier, opt_disc = self.optimizers()
         self.phase = "student" if batch_idx % 2 == 0 else "disc"
         opt_diffusion.zero_grad()
@@ -784,7 +779,92 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
             opt_disc.step()
             opt_classifier.step()
 
-    def p_losses(self, x_start, t, noise=None):
+    def sample_xt_1(self, x: torch.Tensor, t: torch.Tensor, clip_denoised: bool = True) -> torch.Tensor:
+        b, *_, device = *x.shape, x.device
+        model_mean, _, model_log_variance = self.unconditional_p_mean_variance(x=x, t=t, clip_denoised=clip_denoised)
+        noise = noise_like(x.shape, device)
+        # no noise when t == 0
+        nonzero_mask = (1 - (t == 0).float()).reshape(b, *((1,) * (len(x.shape) - 1)))
+        return model_mean + nonzero_mask * (0.5 * model_log_variance).exp() * noise
+
+    def predict_x0(
+        self, x_noisy: torch.Tensor, t: torch.Tensor, pred_noise: torch.Tensor, clip_denoised: bool = False
+    ) -> torch.Tensor:
+        x0_pred = (
+            x_noisy
+            - extract_into_tensor(
+                self.sqrt_one_minus_alphas_cumprod,
+                t,
+                x_noisy.shape,
+            )
+            * pred_noise
+        ) / extract_into_tensor(self.sqrt_alphas_cumprod, t, x_noisy.shape)
+        if clip_denoised:
+            x0_pred.clamp_(-1.0, 1.0)
+        return x0_pred
+
+    def get_adversarial_loss(
+        self,
+        x_noisy: torch.Tensor,
+        t: torch.Tensor,
+        pred_noise: torch.Tensor,
+        x_start: torch.Tensor,
+        unet: AdjustedUNet,
+        disc: nn.Module,
+        loss_dict: dict,
+        prefix: str = "train",
+        suffix: str = "old",
+    ) -> Tuple[torch.Tensor, Dict[str, Any]]:
+        x_false, t_false, x_true, t_true = self.get_adversial_inputs(x_noisy, t, pred_noise, x_start)
+
+        repr_false = unet.just_representations(x_false, timesteps=t_false, pooled=False)
+        out_false = disc(repr_false)
+
+        if self.phase == "student":
+            loss = -out_false.sum(dim=1).mean()
+            loss_dict.update({f"{prefix}/student_loss_{suffix}": loss})
+        elif self.phase == "disc":
+            repr_true = unet.just_representations(x_true, timesteps=t_true, pooled=False)
+            out_true = disc(repr_true)
+            loss = F.relu(1 - out_true).sum(dim=1).mean() + F.relu(1 + out_false).sum(dim=1).mean()
+
+            # logging
+            bs = out_true.shape[0]
+            acc_true = (out_true.view(bs, -1).mean(dim=1) > 0).sum().item() / bs
+            acc_false = (out_false.view(bs, -1).mean(dim=1) < 0).sum().item() / bs
+            mean_true = out_true.mean().item()
+            mean_false = out_false.mean().item()
+            loss_dict.update({f"{prefix}/disc_acc_true_{suffix}": acc_true})
+            loss_dict.update({f"{prefix}/disc_acc_false_{suffix}": acc_false})
+            loss_dict.update({f"{prefix}/disc_mean_logit_true_{suffix}": mean_true})
+            loss_dict.update({f"{prefix}/disc_mean_logit_false_{suffix}": mean_false})
+        return loss, loss_dict
+
+    def get_adversial_inputs(
+        self, x_noisy: torch.Tensor, t: torch.Tensor, pred_noise: torch.Tensor, x_start: torch.Tensor
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        if self.disc_input_mode == "x0":
+            x_false = self.predict_x0(x_noisy, t, pred_noise, clip_denoised=True)
+            t_false = torch.zeros_like(t)
+        elif self.disc_input_mode == "x_t-1":
+            x_false = self.sample_xt_1(x_noisy, t, clip_denoised=True)
+            t_false = t - 1
+        elif self.disc_input_mode == "x0_renoised":
+            x0_pred = self.predict_x0(x_noisy, t, pred_noise, clip_denoised=True)
+            t_false = self.sample_renoise_timestep(t.shape)
+            noise = torch.randn_like(x0_pred)
+            x_false = self.q_sample(x_start=x0_pred, t=t_false, noise=noise)
+
+        if self.disc_input_mode == "x0":
+            x_true = x_start
+            t_true = torch.zeros_like(t)
+        else:
+            t_true = self.sample_renoise_timestep(t.shape)
+            noise = torch.randn_like(x_start)
+            x_true = self.q_sample(x_start=x_start, t=t_true, noise=noise)
+        return x_false, t_false, x_true, t_true
+
+    def p_losses(self, x_start, t, noise=None) -> Tuple[torch.Tensor, Dict[str, Any]]:
         prefix = "train" if self.training else "val"
         loss, loss_dict = super().p_losses(x_start, t, noise)
         old_unet: AdjustedUNet = self.old_model.model.diffusion_model
@@ -793,125 +873,32 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         new_classes_mask = torch.any(self.batch_classes.unsqueeze(-1) == self.new_classes.to(self.device), dim=-1)
 
         # adversarial diffusion distillation
-        loss_old = 0
+        loss_old = torch.tensor(0)
         if old_classes_mask.sum() != 0:
-            if self.disc_input_mode == "x0":
-                x_false = (
-                    self.x_noisy[old_classes_mask]
-                    - extract_into_tensor(
-                        self.sqrt_one_minus_alphas_cumprod,
-                        t[old_classes_mask],
-                        self.x_noisy[old_classes_mask].shape,
-                    )
-                    * self.model_pred[old_classes_mask]
-                ) / extract_into_tensor(
-                    self.sqrt_alphas_cumprod, t[old_classes_mask], self.x_noisy[old_classes_mask].shape
-                )
-                t_false = torch.zeros_like(t[old_classes_mask])
-            elif self.disc_input_mode == "x_t-1":
-                x_false = self.p_sample(self.x_noisy[old_classes_mask], t[old_classes_mask], clip_denoised=False)
-                t_false = t[old_classes_mask] - 1
-            elif self.disc_input_mode == "x0_renoised":
-                x0_pred = (
-                    self.x_noisy[old_classes_mask]
-                    - extract_into_tensor(
-                        self.sqrt_one_minus_alphas_cumprod,
-                        t[old_classes_mask],
-                        self.x_noisy[old_classes_mask].shape,
-                    )
-                    * self.model_pred[old_classes_mask]
-                ) / extract_into_tensor(
-                    self.sqrt_alphas_cumprod, t[old_classes_mask], self.x_noisy[old_classes_mask].shape
-                )
-                t_false = self.sample_renoise_timestep(t[old_classes_mask].shape)
-                noise = torch.randn_like(x0_pred)
-                x_false = self.q_sample(x_start=x0_pred, t=t_false, noise=noise)
-
-            if self.disc_input_mode == "x0":
-                x_true = x_start[old_classes_mask]
-                t_true = torch.zeros_like(t[old_classes_mask])
-            else:
-                t_true = self.sample_renoise_timestep(t[old_classes_mask].shape)
-                noise = torch.randn_like(x_start[old_classes_mask])
-                x_true = self.q_sample(x_start=x_start[old_classes_mask], t=t_true, noise=noise)
-
-            repr_false = old_unet.just_representations(x_false, timesteps=t_false, pooled=False)
-            out_false = self.old_disc(repr_false)
-            if self.phase == "student":
-                loss_old = -out_false.sum(dim=1).mean()
-            elif self.phase == "disc":
-                repr_true = old_unet.just_representations(x_true, timesteps=t_true, pooled=False)
-                out_true = self.old_disc(repr_true)
-                loss_old = F.relu(1 - out_true).sum(dim=1).mean() + F.relu(1 + out_false).sum(dim=1).mean()
-
-                bs = out_true.shape[0]
-                acc_true = (out_true.view(bs, -1).mean(dim=1) > 0).sum().item() / bs
-                acc_false = (out_false.view(bs, -1).mean(dim=1) < 0).sum().item() / bs
-                mean_true = out_true.mean().item()
-                mean_false = out_false.mean().item()
-                loss_dict.update({f"{prefix}/disc_acc_true_old": acc_true})
-                loss_dict.update({f"{prefix}/disc_acc_false_old": acc_false})
-                loss_dict.update({f"{prefix}/disc_mean_logit_true_old": mean_true})
-                loss_dict.update({f"{prefix}/disc_mean_logit_false_old": mean_false})
-        loss_new = 0
+            loss_old, loss_dict = self.get_adversarial_loss(
+                x_noisy=self.x_noisy[old_classes_mask],
+                t=t[old_classes_mask],
+                pred_noise=self.model_pred[old_classes_mask],
+                x_start=x_start[old_classes_mask],
+                unet=old_unet,
+                disc=self.old_disc,
+                loss_dict=loss_dict,
+                prefix=prefix,
+                suffix="old",
+            )
+        loss_new = torch.tensor(0)
         if new_classes_mask.sum() != 0:
-            if self.disc_input_mode == "x0":
-                x_false = (
-                    self.x_noisy[new_classes_mask]
-                    - extract_into_tensor(
-                        self.sqrt_one_minus_alphas_cumprod,
-                        t[new_classes_mask],
-                        self.x_noisy[new_classes_mask].shape,
-                    )
-                    * self.model_pred[new_classes_mask]
-                ) / extract_into_tensor(
-                    self.sqrt_alphas_cumprod, t[new_classes_mask], self.x_noisy[new_classes_mask].shape
-                )
-                t_false = torch.zeros_like(t[new_classes_mask])
-            elif self.disc_input_mode == "x_t-1":
-                x_false = self.p_sample(self.x_noisy[new_classes_mask], t[new_classes_mask], clip_denoised=False)
-                t_false = t[new_classes_mask] - 1
-            elif self.disc_input_mode == "x0_renoised":
-                x0_pred = (
-                    self.x_noisy[new_classes_mask]
-                    - extract_into_tensor(
-                        self.sqrt_one_minus_alphas_cumprod,
-                        t[new_classes_mask],
-                        self.x_noisy[new_classes_mask].shape,
-                    )
-                    * self.model_pred[new_classes_mask]
-                ) / extract_into_tensor(
-                    self.sqrt_alphas_cumprod, t[new_classes_mask], self.x_noisy[new_classes_mask].shape
-                )
-                t_false = self.sample_renoise_timestep(t[new_classes_mask].shape)
-                noise = torch.randn_like(x0_pred)
-                x_false = self.q_sample(x_start=x0_pred, t=t_false, noise=noise)
-            if self.disc_input_mode == "x0":
-                x_true = x_start[new_classes_mask]
-                t_true = torch.zeros_like(t[new_classes_mask])
-            else:
-                t_true = self.sample_renoise_timestep(t[new_classes_mask].shape)
-                noise = torch.randn_like(x_start[new_classes_mask])
-                x_true = self.q_sample(x_start=x_start[new_classes_mask], t=t_true, noise=noise)
-
-            repr_false = new_unet.just_representations(x_false, timesteps=t_false, pooled=False)
-            out_false = self.new_disc(repr_false)
-            if self.phase == "student":
-                loss_new = -out_false.sum(dim=1).mean()
-            elif self.phase == "disc":
-                repr_true = new_unet.just_representations(x_true, timesteps=t_true, pooled=False)
-                out_true = self.new_disc(repr_true)
-                loss_new = F.relu(1 - out_true).sum(dim=1).mean() + F.relu(1 + out_false).sum(dim=1).mean()
-
-                bs = out_true.shape[0]
-                acc_true = (out_true.view(bs, -1).mean(dim=1) > 0).sum().item() / bs
-                acc_false = (out_false.view(bs, -1).mean(dim=1) < 0).sum().item() / bs
-                mean_true = out_true.mean().item()
-                mean_false = out_false.mean().item()
-                loss_dict.update({f"{prefix}/disc_acc_true_new": acc_true})
-                loss_dict.update({f"{prefix}/disc_acc_false_new": acc_false})
-                loss_dict.update({f"{prefix}/disc_mean_logit_true_new": mean_true})
-                loss_dict.update({f"{prefix}/disc_mean_logit_false_new": mean_false})
+            loss_new, loss_dict = self.get_adversarial_loss(
+                x_noisy=self.x_noisy[new_classes_mask],
+                t=t[new_classes_mask],
+                pred_noise=self.model_pred[new_classes_mask],
+                x_start=x_start[new_classes_mask],
+                unet=new_unet,
+                disc=self.new_disc,
+                loss_dict=loss_dict,
+                prefix=prefix,
+                suffix="new",
+            )
         loss += self.adv_loss_scale * (loss_new * self.new_samples_weight + loss_old * self.old_samples_weight)
         loss_dict.update(
             {f"{prefix}/loss_diffusion_adv": loss_new * self.new_samples_weight + loss_old * self.old_samples_weight}
