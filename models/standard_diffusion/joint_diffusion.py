@@ -718,6 +718,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         renoiser_mean: float = 1.0,
         renoiser_std: float = 1.0,
         start_from_mean_weights: bool = True,
+        accumulate_grad_batches: int = 1,
         *args,
         **kwargs,
     ) -> None:
@@ -731,6 +732,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         self.phase = "student"
         assert disc_input_mode in ["x0", "x_t-1", "x0_renoised"]
         self.disc_input_mode = disc_input_mode
+        self.accumulate_grad_batches = accumulate_grad_batches
 
         self.renoiser_mean = renoiser_mean
         self.renoiser_std = renoiser_std
@@ -764,20 +766,21 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
 
     def training_step(self, batch, batch_idx) -> None:
         opt_diffusion, opt_classifier, opt_disc = self.optimizers()
-        self.phase = "student" if batch_idx % 2 == 0 else "disc"
-        opt_diffusion.zero_grad()
-        opt_classifier.zero_grad()
-        opt_disc.zero_grad()
+        self.phase = "student" if (batch_idx // self.accumulate_grad_batches) % 2 == 0 else "disc"
         loss = super().training_step(batch, batch_idx)
         self.manual_backward(loss)
-        if self.phase == "student":
-            opt_disc.zero_grad()
-            opt_diffusion.step()
-            opt_classifier.step()
-        elif self.phase == "disc":
+        if (batch_idx + 1) % self.accumulate_grad_batches == 0:
+            if self.phase == "student":
+                opt_disc.zero_grad()
+                opt_diffusion.step()
+                opt_classifier.step()
+            elif self.phase == "disc":
+                opt_diffusion.zero_grad()
+                opt_disc.step()
+                opt_classifier.step()
             opt_diffusion.zero_grad()
-            opt_disc.step()
-            opt_classifier.step()
+            opt_classifier.zero_grad()
+            opt_disc.zero_grad()
 
     def sample_xt_1(self, x: torch.Tensor, t: torch.Tensor, clip_denoised: bool = True) -> torch.Tensor:
         b, *_, device = *x.shape, x.device
