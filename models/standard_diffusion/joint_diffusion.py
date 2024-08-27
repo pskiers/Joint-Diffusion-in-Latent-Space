@@ -719,6 +719,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         renoiser_std: float = 1.0,
         start_from_mean_weights: bool = True,
         accumulate_grad_batches: int = 1,
+        use_old_and_new: bool = True,
         *args,
         **kwargs,
     ) -> None:
@@ -734,6 +735,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         self.disc_input_mode = disc_input_mode
         self.accumulate_grad_batches = accumulate_grad_batches
 
+        self.use_old_and_new = use_old_and_new
         self.renoiser_mean = renoiser_mean
         self.renoiser_std = renoiser_std
         self.renoiser_distribution = torch.distributions.Normal(renoiser_mean, renoiser_std)
@@ -876,34 +878,51 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         new_classes_mask = torch.any(self.batch_classes.unsqueeze(-1) == self.new_classes.to(self.device), dim=-1)
 
         # adversarial diffusion distillation
-        loss_old = torch.tensor(0)
-        if old_classes_mask.sum() != 0:
-            loss_old, loss_dict = self.get_adversarial_loss(
-                x_noisy=self.x_noisy[old_classes_mask],
-                t=t[old_classes_mask],
-                pred_noise=self.model_pred[old_classes_mask],
-                x_start=x_start[old_classes_mask],
+        if self.use_old_and_new:
+            loss_old = torch.tensor(0)
+            if old_classes_mask.sum() != 0:
+                loss_old, loss_dict = self.get_adversarial_loss(
+                    x_noisy=self.x_noisy[old_classes_mask],
+                    t=t[old_classes_mask],
+                    pred_noise=self.model_pred[old_classes_mask],
+                    x_start=x_start[old_classes_mask],
+                    unet=old_unet,
+                    disc=self.old_disc,
+                    loss_dict=loss_dict,
+                    prefix=prefix,
+                    suffix="old",
+                )
+            loss_new = torch.tensor(0)
+            if new_classes_mask.sum() != 0:
+                loss_new, loss_dict = self.get_adversarial_loss(
+                    x_noisy=self.x_noisy[new_classes_mask],
+                    t=t[new_classes_mask],
+                    pred_noise=self.model_pred[new_classes_mask],
+                    x_start=x_start[new_classes_mask],
+                    unet=new_unet,
+                    disc=self.new_disc,
+                    loss_dict=loss_dict,
+                    prefix=prefix,
+                    suffix="new",
+                )
+            loss += self.adv_loss_scale * (loss_new * self.new_samples_weight + loss_old * self.old_samples_weight)
+            loss_dict.update(
+                {f"{prefix}/loss_diffusion_adv": loss_new * self.new_samples_weight + loss_old * self.old_samples_weight}
+            )
+        else:
+            loss_adv, loss_dict = self.get_adversarial_loss(
+                x_noisy=self.x_noisy,
+                t=t,
+                pred_noise=self.model_pred,
+                x_start=x_start,
                 unet=old_unet,
                 disc=self.old_disc,
                 loss_dict=loss_dict,
                 prefix=prefix,
-                suffix="old",
+                suffix="total",
             )
-        loss_new = torch.tensor(0)
-        if new_classes_mask.sum() != 0:
-            loss_new, loss_dict = self.get_adversarial_loss(
-                x_noisy=self.x_noisy[new_classes_mask],
-                t=t[new_classes_mask],
-                pred_noise=self.model_pred[new_classes_mask],
-                x_start=x_start[new_classes_mask],
-                unet=new_unet,
-                disc=self.new_disc,
-                loss_dict=loss_dict,
-                prefix=prefix,
-                suffix="new",
+            loss += self.adv_loss_scale * (loss_adv * self.old_samples_weight)
+            loss_dict.update(
+                {f"{prefix}/loss_diffusion_adv": loss_adv * self.old_samples_weight}
             )
-        loss += self.adv_loss_scale * (loss_new * self.new_samples_weight + loss_old * self.old_samples_weight)
-        loss_dict.update(
-            {f"{prefix}/loss_diffusion_adv": loss_new * self.new_samples_weight + loss_old * self.old_samples_weight}
-        )
         return loss, loss_dict
