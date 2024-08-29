@@ -1,4 +1,4 @@
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Optional
 import numpy as np
 import torch
 import torch.nn as nn
@@ -709,12 +709,15 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
 class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDistillation):
     def __init__(
         self,
+        num_classes,
         repr_sizes: List[int],
         disc_lr: float,
         classifier_lr: float,
         disc_channel_div: int = 1,
         adv_loss_scale: float = 1.0,
+        renoised_classification_loss_scale: float = 0,
         disc_input_mode: str = "x0_renoised",
+        emb_proj: Optional[int] = None,
         renoiser_mean: float = 1.0,
         renoiser_std: float = 1.0,
         start_from_mean_weights: bool = True,
@@ -723,10 +726,12 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         *args,
         **kwargs,
     ) -> None:
-        super().__init__(*args, **kwargs)
-        self.new_disc = StyleGANDiscriminator(context_dims=repr_sizes, projection_div=disc_channel_div)
-        self.old_disc = StyleGANDiscriminator(context_dims=repr_sizes, projection_div=disc_channel_div)
+        super().__init__(num_classes=num_classes, *args, **kwargs)
+        self.emb_proj = emb_proj
+        self.new_disc = StyleGANDiscriminator(context_dims=repr_sizes, projection_div=disc_channel_div, emb_proj=emb_proj, emb_dim=num_classes)
+        self.old_disc = StyleGANDiscriminator(context_dims=repr_sizes, projection_div=disc_channel_div, emb_proj=emb_proj, emb_dim=num_classes)
         self.adv_loss_scale = adv_loss_scale
+        self.renoised_classification_loss_scale = renoised_classification_loss_scale
         self.disc_lr = disc_lr
         self.classifier_lr = classifier_lr
         self.automatic_optimization = False
@@ -814,23 +819,33 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         t: torch.Tensor,
         pred_noise: torch.Tensor,
         x_start: torch.Tensor,
+        classes: torch.Tensor,
         unet: AdjustedUNet,
         disc: nn.Module,
+        classifier: nn.Module,
         loss_dict: dict,
         prefix: str = "train",
         suffix: str = "old",
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
-        x_false, t_false, x_true, t_true = self.get_adversial_inputs(x_noisy, t, pred_noise, x_start)
+        emb = F.one_hot(classes, self.num_classes).float() if self.emb_proj is not None else None
+        x_false, t_false, x_true, t_true, x0_pred = self.get_adversial_inputs(x_noisy, t, pred_noise, x_start)
 
         repr_false = unet.just_representations(x_false, timesteps=t_false, pooled=False)
-        out_false = disc(repr_false)
+        out_false = disc(repr_false, emb=emb)
 
         if self.phase == "student":
             loss = -out_false.sum(dim=1).mean()
+            if self.renoised_classification_loss_scale > 0:
+                repr = unet.just_representations(x0_pred, timesteps=torch.zeros_like(t_true), pooled=False)
+                repr = self.transform_representations(repr)
+                logits = classifier(repr)
+                loss_renoised_classification = F.cross_entropy(logits, classes)
+                loss += loss_renoised_classification * self.renoised_classification_loss_scale
+                loss_dict.update({f"{prefix}/renoised_classification_loss_{suffix}": loss_renoised_classification})
             loss_dict.update({f"{prefix}/student_loss_{suffix}": loss})
         elif self.phase == "disc":
             repr_true = unet.just_representations(x_true, timesteps=t_true, pooled=False)
-            out_true = disc(repr_true)
+            out_true = disc(repr_true, emb=emb)
             loss = F.relu(1 - out_true).sum(dim=1).mean() + F.relu(1 + out_false).sum(dim=1).mean()
 
             # logging
@@ -847,7 +862,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
 
     def get_adversial_inputs(
         self, x_noisy: torch.Tensor, t: torch.Tensor, pred_noise: torch.Tensor, x_start: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         if self.disc_input_mode == "x0":
             x_false = self.predict_x0(x_noisy, t, pred_noise, clip_denoised=True)
             t_false = torch.zeros_like(t)
@@ -870,7 +885,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
             t_true = self.sample_renoise_timestep(t.shape)
             noise = torch.randn_like(x_start)
             x_true = self.q_sample(x_start=x_start, t=t_true, noise=noise)
-        return x_false, t_false, x_true, t_true
+        return x_false, t_false, x_true, t_true, x0_pred
 
     def p_losses(self, x_start, t, noise=None) -> Tuple[torch.Tensor, Dict[str, Any]]:
         prefix = "train" if self.training else "val"
@@ -889,8 +904,10 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
                     t=t[old_classes_mask],
                     pred_noise=self.model_pred[old_classes_mask],
                     x_start=x_start[old_classes_mask],
+                    classes=self.batch_classes[old_classes_mask],
                     unet=old_unet,
                     disc=self.old_disc,
+                    classifier=self.old_model.classifier,
                     loss_dict=loss_dict,
                     prefix=prefix,
                     suffix="old",
@@ -902,8 +919,10 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
                     t=t[new_classes_mask],
                     pred_noise=self.model_pred[new_classes_mask],
                     x_start=x_start[new_classes_mask],
+                    classes=self.batch_classes[new_classes_mask],
                     unet=new_unet,
                     disc=self.new_disc,
+                    classifier=self.new_model.classifier,
                     loss_dict=loss_dict,
                     prefix=prefix,
                     suffix="new",
@@ -918,8 +937,10 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
                 t=t,
                 pred_noise=self.model_pred,
                 x_start=x_start,
+                classes=self.batch_classes,
                 unet=old_unet,
                 disc=self.old_disc,
+                classifier=self.old_model.classifier,
                 loss_dict=loss_dict,
                 prefix=prefix,
                 suffix="total",

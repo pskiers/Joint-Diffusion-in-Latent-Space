@@ -8,13 +8,14 @@ model:
     beta_schedule: sqrt_linear
     linear_start: 0.001
     linear_end: 0.02
-    log_every_t: 200
+    log_every_t: 201
     timesteps: 1000
 
     monitor: val/accuracy_ema
     first_stage_key: 0
     clip_denoised: True
     augmentations: False
+    accumulate_grad_batches: 2
 
     image_size: 32
     channels: 3
@@ -36,8 +37,10 @@ model:
 
     repr_sizes: [128, 128, 128, 128, 128, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256]
     disc_channel_div: 1
-    adv_loss_scale: 1.0
-    disc_input_mode: "x_t-1"  # "x0", "x_t-1", "x0_renoised"
+    emb_proj: 32
+    adv_loss_scale: 0.0005  
+    renoised_classification_loss_scale: 0
+    disc_input_mode: "x0_renoised"  # "x0", "x_t-1", "x0_renoised"
     start_from_mean_weights: True
 
     old_classes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -68,9 +71,10 @@ cl:
   weight_reinit: "unused classes"
   mean: [0.5, 0.5, 0.5]
   std: [0.5, 0.5, 0.5]
-  # saved_samples: pulled_checkpoints/cifar100_t3_imgs.pt
-  # saved_labels: pulled_checkpoints/cifar100_t3_labels.pt
-
+  # saved_samples: pulled_checkpoints/cifar100_1_2_imgs.pt
+  # saved_labels: pulled_checkpoints/cifar100_1_2_labels.pt
+  saved_samples: data/cl/CL_CIFAR100T10_SUP_TASK1-2_LONG3_imgs.pt
+  saved_labels: data/cl/CL_CIFAR100T10_SUP_TASK1-2_LONG3_labels.pt
 
 dataloaders:
   validation:
@@ -96,7 +100,7 @@ dataloaders:
               root: "data"
               split: "train"
               download: True
-              batch_size: 256
+              batch_size: 128
               num_workers: 16
               sampler: "none"
               shuffle: True
