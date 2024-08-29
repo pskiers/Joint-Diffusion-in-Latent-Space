@@ -852,8 +852,11 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
             x_false = self.predict_x0(x_noisy, t, pred_noise, clip_denoised=True)
             t_false = torch.zeros_like(t)
         elif self.disc_input_mode == "x_t-1":
-            x_false = self.sample_xt_1(x_noisy, t, clip_denoised=True)
-            t_false = t - 1
+            # x_false = self.sample_xt_1(x_noisy, t, clip_denoised=True)
+            x0_pred = self.predict_x0(x_noisy, t, pred_noise, clip_denoised=True)
+            t_false = torch.relu(t - 1) 
+            noise = torch.randn_like(x0_pred)
+            x_false = self.q_sample(x_start=x0_pred, t=t_false, noise=noise)
         elif self.disc_input_mode == "x0_renoised":
             x0_pred = self.predict_x0(x_noisy, t, pred_noise, clip_denoised=True)
             t_false = self.sample_renoise_timestep(t.shape)
