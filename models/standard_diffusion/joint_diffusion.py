@@ -627,6 +627,7 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
         new_unet = None if self.new_model is None else self.new_model.model.diffusion_model
         old_classes_mask = torch.any(self.batch_classes.unsqueeze(-1) == self.old_classes.to(self.device), dim=-1)
         new_classes_mask = torch.any(self.batch_classes.unsqueeze(-1) == self.new_classes.to(self.device), dim=-1)
+        batch = old_classes_mask.sum() + new_classes_mask.sum()
 
         #
         if self.new_model is not None:
@@ -635,7 +636,7 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
             loss, loss_dict = super().p_losses(
                 x_start=x_start[new_classes_mask],
                 t=t[new_classes_mask],
-                noise=None if noise is None else noise[new_classes_mask]
+                noise=None if noise is None else noise[new_classes_mask],
             )
             super().p_losses(x_start, t, noise)
         # diffusion knowledge distillation
@@ -650,10 +651,12 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
                 with torch.no_grad():
                     new_outputs = new_unet.just_reconstruction(self.x_noisy[new_classes_mask], t[new_classes_mask])
                 loss_new = self.get_loss(self.model_pred[new_classes_mask], new_outputs, mean=True)
-            loss += self.kd_loss_weight * (loss_new * self.new_samples_weight + loss_old * self.old_samples_weight)
-            loss_dict.update(
-                {f"{prefix}/loss_diffusion_kl": loss_new * self.new_samples_weight + loss_old * self.old_samples_weight}
+            kd_loss = self.kd_loss_weight * (
+                loss_new * 2 * (new_classes_mask.sum() / batch) * self.new_samples_weight
+                + loss_old * 2 * (old_classes_mask.sum() / batch) * self.old_samples_weight
             )
+            loss += kd_loss
+            loss_dict.update({f"{prefix}/loss_diffusion_kd": kd_loss})
 
         if self.classification_start <= 0 or self.no_wait_kl_classification and self.kl_classification_weight > 0:
             # classifier knowledge distillation
@@ -689,17 +692,16 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
                     new_preds = nn.functional.softmax(new_preds, dim=1).detach()
                 loss_new = nn.functional.cross_entropy(self.batch_class_predictions[new_classes_mask], new_preds)
 
-            loss += (
+            kd_loss = (
                 self.kl_classification_weight
                 * self.kd_loss_weight
-                * (loss_new * self.new_samples_weight + loss_old * self.old_samples_weight)
+                * (
+                    loss_new * 2 * (new_classes_mask.sum() / batch) * self.new_samples_weight
+                    + loss_old * 2 * (old_classes_mask.sum() / batch) * self.old_samples_weight
+                )
             )
-            loss_dict.update(
-                {
-                    f"{prefix}/loss_classifier_kl": loss_new * self.new_samples_weight
-                    + loss_old * self.old_samples_weight
-                }
-            )
+            loss += kd_loss
+            loss_dict.update({f"{prefix}/loss_classifier_kd": kd_loss})
             loss_dict.update({f"{prefix}/loss": loss})
 
         # per class accuracy logging
@@ -740,8 +742,12 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
     ) -> None:
         super().__init__(num_classes=num_classes, *args, **kwargs)
         self.emb_proj = emb_proj
-        self.new_disc = StyleGANDiscriminator(context_dims=repr_sizes, projection_div=disc_channel_div, emb_proj=emb_proj, emb_dim=num_classes)
-        self.old_disc = StyleGANDiscriminator(context_dims=repr_sizes, projection_div=disc_channel_div, emb_proj=emb_proj, emb_dim=num_classes)
+        self.new_disc = StyleGANDiscriminator(
+            context_dims=repr_sizes, projection_div=disc_channel_div, emb_proj=emb_proj, emb_dim=num_classes
+        )
+        self.old_disc = StyleGANDiscriminator(
+            context_dims=repr_sizes, projection_div=disc_channel_div, emb_proj=emb_proj, emb_dim=num_classes
+        )
         self.adv_loss_scale = adv_loss_scale
         self.renoised_classification_loss_scale = renoised_classification_loss_scale
         self.disc_lr = disc_lr
@@ -881,7 +887,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         elif self.disc_input_mode == "x_t-1":
             # x_false = self.sample_xt_1(x_noisy, t, clip_denoised=True)
             x0_pred = self.predict_x0(x_noisy, t, pred_noise, clip_denoised=True)
-            t_false = torch.relu(t - 1) 
+            t_false = torch.relu(t - 1)
             noise = torch.randn_like(x0_pred)
             x_false = self.q_sample(x_start=x0_pred, t=t_false, noise=noise)
         elif self.disc_input_mode == "x0_renoised":
@@ -909,6 +915,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
 
         # adversarial diffusion distillation
         if self.use_old_and_new:
+            assert new_unet is not None
             loss_old = torch.tensor(0)
             if old_classes_mask.sum() != 0:
                 loss_old, loss_dict = self.get_adversarial_loss(
@@ -939,10 +946,13 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
                     prefix=prefix,
                     suffix="new",
                 )
-            loss += self.adv_loss_scale * (loss_new * self.new_samples_weight + loss_old * self.old_samples_weight)
-            loss_dict.update(
-                {f"{prefix}/loss_diffusion_adv": loss_new * self.new_samples_weight + loss_old * self.old_samples_weight}
+            batch = new_classes_mask.sum() + old_classes_mask.sum()
+            adv_loss = self.adv_loss_scale * (
+                loss_new * 2 * (new_classes_mask.sum() / batch) * self.new_samples_weight
+                + loss_old * 2 * (old_classes_mask.sum() / batch) * self.old_samples_weight
             )
+            loss += adv_loss
+            loss_dict.update({f"{prefix}/loss_diffusion_adv": adv_loss})
         else:
             loss_adv, loss_dict = self.get_adversarial_loss(
                 x_noisy=self.x_noisy,
@@ -957,8 +967,6 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
                 prefix=prefix,
                 suffix="total",
             )
-            loss += self.adv_loss_scale * (loss_adv * self.old_samples_weight)
-            loss_dict.update(
-                {f"{prefix}/loss_diffusion_adv": loss_adv * self.old_samples_weight}
-            )
+            loss += self.adv_loss_scale * loss_adv
+            loss_dict.update({f"{prefix}/loss_diffusion_adv": loss_adv})
         return loss, loss_dict
