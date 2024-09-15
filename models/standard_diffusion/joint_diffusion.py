@@ -757,7 +757,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         self.classifier_lr = classifier_lr
         self.automatic_optimization = False
         self.phase = "student"
-        assert disc_input_mode in ["x0", "x_t-1", "x0_renoised"]
+        assert disc_input_mode in ["x0", "x_t-1", "x0_renoised", "x0_no_ladd", "x0_renoised_no_ladd"]
         self.disc_input_mode = disc_input_mode
         self.disc_use_soft_labels = disc_use_soft_labels
         self.accumulate_grad_batches = accumulate_grad_batches
@@ -868,7 +868,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
             emb = classes
         else:
             emb = F.one_hot(classes, self.num_classes).float()
-        x_false, t_false, x_true, t_true, x0_pred = self.get_adversial_inputs(x_noisy, t, pred_noise, x_start)
+        x_false, t_false, x_true, t_true, x0_pred = self.get_adversial_inputs(x_noisy, t, pred_noise, x_start, unet)
 
         repr_false = unet.just_representations(x_false, timesteps=t_false, pooled=False)
         out_false = disc(repr_false, emb=emb)
@@ -909,10 +909,11 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         return loss, loss_dict
 
     def get_adversial_inputs(
-        self, x_noisy: torch.Tensor, t: torch.Tensor, pred_noise: torch.Tensor, x_start: torch.Tensor
+        self, x_noisy: torch.Tensor, t: torch.Tensor, pred_noise: torch.Tensor, x_start: torch.Tensor, old_unet: AdjustedUNet
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        if self.disc_input_mode == "x0":
-            x_false = self.predict_x0(x_noisy, t, pred_noise, clip_denoised=True)
+        if self.disc_input_mode in ["x0", "x0_no_ladd"]:
+            x0_pred = self.predict_x0(x_noisy, t, pred_noise, clip_denoised=True)
+            x_false = x0_pred
             t_false = torch.zeros_like(t)
         elif self.disc_input_mode == "x_t-1":
             # x_false = self.sample_xt_1(x_noisy, t, clip_denoised=True)
@@ -920,7 +921,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
             t_false = torch.relu(t - 1)
             noise = torch.randn_like(x0_pred)
             x_false = self.q_sample(x_start=x0_pred, t=t_false, noise=noise)
-        elif self.disc_input_mode == "x0_renoised":
+        elif self.disc_input_mode in ["x0_renoised", "x0_renoised_no_ladd"]:
             x0_pred = self.predict_x0(x_noisy, t, pred_noise, clip_denoised=True)
             t_false = self.sample_renoise_timestep(t.shape)
             noise = torch.randn_like(x0_pred)
@@ -929,6 +930,18 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         if self.disc_input_mode == "x0":
             x_true = x_start
             t_true = torch.zeros_like(t)
+        elif self.disc_input_mode == "x0_no_ladd":
+            with torch.no_grad():
+                old_noise_pred = old_unet.just_reconstruction(x_noisy, t)
+                x_true = self.predict_x0(x_noisy, t, old_noise_pred, clip_denoised=True)
+            t_true = torch.zeros_like(t)
+        elif self.disc_input_mode == "x0_renoised_no_ladd":
+            with torch.no_grad():
+                old_noise_pred = old_unet.just_reconstruction(x_noisy, t)
+                x_true = self.predict_x0(x_noisy, t, old_noise_pred, clip_denoised=True)
+            t_true = self.sample_renoise_timestep(t.shape)
+            noise = torch.randn_like(x_true)
+            x_true = self.q_sample(x_start=x_true, t=t_true, noise=noise)
         else:
             t_true = self.sample_renoise_timestep(t.shape)
             noise = torch.randn_like(x_start)
