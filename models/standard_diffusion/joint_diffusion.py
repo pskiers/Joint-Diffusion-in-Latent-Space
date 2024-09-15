@@ -732,6 +732,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         renoised_classification_loss_scale: float = 0,
         disc_input_mode: str = "x0_renoised",
         disc_use_soft_labels: bool = False,
+        renoised_classification_threshold: float = 1.0,
         emb_proj: Optional[int] = None,
         renoiser_mean: float = 1.0,
         renoiser_std: float = 1.0,
@@ -751,6 +752,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         )
         self.adv_loss_scale = adv_loss_scale
         self.renoised_classification_loss_scale = renoised_classification_loss_scale
+        self.renoised_classification_threshold = renoised_classification_threshold
         self.disc_lr = disc_lr
         self.classifier_lr = classifier_lr
         self.automatic_optimization = False
@@ -877,7 +879,15 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
                 repr = unet.just_representations(x0_pred, timesteps=torch.zeros_like(t_true), pooled=False)
                 repr = self.transform_representations(repr)
                 logits = classifier(repr)
-                loss_renoised_classification = F.cross_entropy(logits, classes)
+                loss_renoised_classification = F.cross_entropy(logits, classes, reduction="none")
+                if self.renoised_classification_threshold < 1.0:
+                    indices = classes if len(classes.shape) == 1 else classes.argmax(dim=1)
+                    mask = (
+                        torch.gather(F.softmax(logits), dim=1, index=indices.unsqueeze(-1)).squeeze(-1)
+                        > self.renoised_classification_threshold
+                    )
+                    loss_renoised_classification = loss_renoised_classification * mask
+                loss_renoised_classification = loss_renoised_classification.sum()
                 loss += loss_renoised_classification * self.renoised_classification_loss_scale
                 loss_dict.update({f"{prefix}/renoised_classification_loss_{suffix}": loss_renoised_classification})
             loss_dict.update({f"{prefix}/student_loss_{suffix}": loss})
