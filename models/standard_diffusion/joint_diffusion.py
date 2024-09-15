@@ -1,4 +1,4 @@
-from typing import List, Tuple, Dict, Any, Optional
+from typing import List, Tuple, Dict, Any, Optional, Callable
 import numpy as np
 import torch
 import torch.nn as nn
@@ -731,6 +731,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         adv_loss_scale: float = 1.0,
         renoised_classification_loss_scale: float = 0,
         disc_input_mode: str = "x0_renoised",
+        disc_use_soft_labels: bool = False,
         emb_proj: Optional[int] = None,
         renoiser_mean: float = 1.0,
         renoiser_std: float = 1.0,
@@ -756,6 +757,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         self.phase = "student"
         assert disc_input_mode in ["x0", "x_t-1", "x0_renoised"]
         self.disc_input_mode = disc_input_mode
+        self.disc_use_soft_labels = disc_use_soft_labels
         self.accumulate_grad_batches = accumulate_grad_batches
 
         self.use_old_and_new = use_old_and_new
@@ -838,6 +840,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         pred_noise: torch.Tensor,
         x_start: torch.Tensor,
         classes: torch.Tensor,
+        repr_transformer: Callable,
         unet: AdjustedUNet,
         disc: nn.Module,
         classifier: nn.Module,
@@ -845,7 +848,24 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         prefix: str = "train",
         suffix: str = "old",
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
-        emb = F.one_hot(classes, self.num_classes).float() if self.emb_proj is not None else None
+        if self.emb_proj is None:
+            emb = None
+        elif self.disc_use_soft_labels:
+            with torch.no_grad():
+                reprs = unet.just_representations(
+                    x_start,
+                    torch.zeros(x_start.shape[0], device=self.device),
+                    pooled=False,
+                )
+                if isinstance(reprs, list):  # TODO refactor this shit
+                    reprs = repr_transformer(reprs)
+                    classes = classifier(reprs)
+                else:
+                    classes = reprs
+                classes = nn.functional.softmax(classes, dim=1).detach()
+            emb = classes
+        else:
+            emb = F.one_hot(classes, self.num_classes).float()
         x_false, t_false, x_true, t_true, x0_pred = self.get_adversial_inputs(x_noisy, t, pred_noise, x_start)
 
         repr_false = unet.just_representations(x_false, timesteps=t_false, pooled=False)
@@ -924,6 +944,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
                     pred_noise=self.model_pred[old_classes_mask],
                     x_start=x_start[old_classes_mask],
                     classes=self.batch_classes[old_classes_mask],
+                    repr_transformer=self.old_model.transform_representations,
                     unet=old_unet,
                     disc=self.old_disc,
                     classifier=self.old_model.classifier,
@@ -939,6 +960,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
                     pred_noise=self.model_pred[new_classes_mask],
                     x_start=x_start[new_classes_mask],
                     classes=self.batch_classes[new_classes_mask],
+                    repr_transformer=self.new_model.transform_representations,
                     unet=new_unet,
                     disc=self.new_disc,
                     classifier=self.new_model.classifier,
@@ -960,6 +982,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
                 pred_noise=self.model_pred,
                 x_start=x_start,
                 classes=self.batch_classes,
+                repr_transformer=self.old_model.transform_representations,
                 unet=old_unet,
                 disc=self.old_disc,
                 classifier=self.old_model.classifier,
