@@ -711,12 +711,12 @@ class JointDiffusionKnowledgeDistillation(JointDiffusionAugmentations):
             curr_task_acc = torch.sum(
                 torch.argmax(self.batch_class_predictions[task_mask], dim=1) == self.batch_classes[task_mask]
             ) / len(self.batch_classes[task_mask])
-            loss_dict.update({f"{prefix}/task{i}_accuracy": curr_task_acc})
+            loss_dict.update({f"cl_tasks_{prefix}/task{i}_accuracy": curr_task_acc})
         i += 1
         curr_task_acc = torch.sum(
             torch.argmax(self.batch_class_predictions[new_classes_mask], dim=1) == self.batch_classes[new_classes_mask]
         ) / len(self.batch_classes[new_classes_mask])
-        loss_dict.update({f"{prefix}/task{i}_accuracy": curr_task_acc})
+        loss_dict.update({f"cl_tasks_{prefix}/task{i}_accuracy": curr_task_acc})
         return loss, loss_dict
 
 
@@ -923,10 +923,11 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
             acc_false = (out_false.view(bs, -1).mean(dim=1) < 0).sum().item() / bs
             mean_true = out_true.mean().item()
             mean_false = out_false.mean().item()
-            loss_dict.update({f"{prefix}/disc_acc_true_{suffix}": acc_true})
-            loss_dict.update({f"{prefix}/disc_acc_false_{suffix}": acc_false})
-            loss_dict.update({f"{prefix}/disc_mean_logit_true_{suffix}": mean_true})
-            loss_dict.update({f"{prefix}/disc_mean_logit_false_{suffix}": mean_false})
+            loss_dict.update({f"disc_{prefix}/acc_true_{suffix}": acc_true})
+            loss_dict.update({f"disc_{prefix}/acc_false_{suffix}": acc_false})
+            loss_dict.update({f"disc_{prefix}/acc_total_{suffix}": acc_true + acc_false / 2})
+            loss_dict.update({f"disc_{prefix}/mean_logit_true_{suffix}": mean_true})
+            loss_dict.update({f"disc_{prefix}/mean_logit_false_{suffix}": mean_false})
         return loss, loss_dict
 
     def get_adversial_inputs(
