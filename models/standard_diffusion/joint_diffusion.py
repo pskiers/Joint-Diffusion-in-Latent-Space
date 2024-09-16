@@ -739,11 +739,15 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         start_from_mean_weights: bool = True,
         accumulate_grad_batches: int = 1,
         use_old_and_new: bool = True,
+        disc_pass_x_noisy: bool = False,
         *args,
         **kwargs,
     ) -> None:
         super().__init__(num_classes=num_classes, *args, **kwargs)
         self.emb_proj = emb_proj
+        self.disc_pass_x_noisy = disc_pass_x_noisy
+        if self.disc_pass_x_noisy:
+            repr_sizes = [repr_size * 2 for repr_size in repr_sizes]
         self.new_disc = StyleGANDiscriminator(
             context_dims=repr_sizes, projection_div=disc_channel_div, emb_proj=emb_proj, emb_dim=num_classes
         )
@@ -835,6 +839,26 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
             x0_pred.clamp_(-1.0, 1.0)
         return x0_pred
 
+    def discriminate(
+        self,
+        disc: nn.Module,
+        unet: AdjustedUNet,
+        x_B_C_W_H: torch.Tensor,
+        t: torch.Tensor,
+        emb: Optional[torch.Tensor],
+        x_noisy: torch.Tensor,
+    ) -> torch.Tensor:
+        if self.disc_pass_x_noisy:
+            x_in = torch.concat([x_B_C_W_H, x_noisy], dim=0)
+            t_in = torch.concat([t, t], dim=0)
+            repr_in = unet.just_representations(x_in, timesteps=t_in, pooled=False)
+            repr_in = [torch.concat(r.chunk(2), dim=1) for r in repr_in]
+            out = disc(repr_in, emb=emb)
+        else:
+            repr_in = unet.just_representations(x_B_C_W_H, timesteps=t, pooled=False)
+            out = disc(repr_in, emb=emb)
+        return out
+
     def get_adversarial_loss(
         self,
         x_noisy: torch.Tensor,
@@ -869,9 +893,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         else:
             emb = F.one_hot(classes, self.num_classes).float()
         x_false, t_false, x_true, t_true, x0_pred = self.get_adversial_inputs(x_noisy, t, pred_noise, x_start, unet)
-
-        repr_false = unet.just_representations(x_false, timesteps=t_false, pooled=False)
-        out_false = disc(repr_false, emb=emb)
+        out_false = self.discriminate(disc, unet, x_false, t_false, emb, x_noisy)
 
         if self.phase == "student":
             loss = -out_false.sum(dim=1).mean()
@@ -892,8 +914,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
                 loss_dict.update({f"{prefix}/renoised_classification_loss_{suffix}": loss_renoised_classification})
             loss_dict.update({f"{prefix}/student_loss_{suffix}": loss})
         elif self.phase == "disc":
-            repr_true = unet.just_representations(x_true, timesteps=t_true, pooled=False)
-            out_true = disc(repr_true, emb=emb)
+            out_true = self.discriminate(disc, unet, x_true, t_true, emb, x_noisy)
             loss = F.relu(1 - out_true).sum(dim=1).mean() + F.relu(1 + out_false).sum(dim=1).mean()
 
             # logging
@@ -909,7 +930,12 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         return loss, loss_dict
 
     def get_adversial_inputs(
-        self, x_noisy: torch.Tensor, t: torch.Tensor, pred_noise: torch.Tensor, x_start: torch.Tensor, old_unet: AdjustedUNet
+        self,
+        x_noisy: torch.Tensor,
+        t: torch.Tensor,
+        pred_noise: torch.Tensor,
+        x_start: torch.Tensor,
+        old_unet: AdjustedUNet,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         if self.disc_input_mode in ["x0", "x0_no_ladd"]:
             x0_pred = self.predict_x0(x_noisy, t, pred_noise, clip_denoised=True)
