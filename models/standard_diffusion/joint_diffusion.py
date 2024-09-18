@@ -733,6 +733,8 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         disc_input_mode: str = "x0_renoised",
         disc_use_soft_labels: bool = False,
         renoised_classification_threshold: float = 1.0,
+        renoised_classification_min_t: int = 100,
+        renoised_classification_max_t: int = 900,
         emb_proj: Optional[int] = None,
         renoiser_mean: float = 1.0,
         renoiser_std: float = 1.0,
@@ -757,6 +759,8 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         self.adv_loss_scale = adv_loss_scale
         self.renoised_classification_loss_scale = renoised_classification_loss_scale
         self.renoised_classification_threshold = renoised_classification_threshold
+        self.renoised_classification_min_t = renoised_classification_min_t
+        self.renoised_classification_max_t = renoised_classification_max_t
         self.disc_lr = disc_lr
         self.classifier_lr = classifier_lr
         self.automatic_optimization = False
@@ -898,10 +902,12 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         if self.phase == "student":
             loss = -out_false.sum(dim=1).mean()
             if self.renoised_classification_loss_scale > 0:
+                t_mask = (t > self.renoised_classification_min_t) & (t < self.renoised_classification_max_t) 
                 repr = unet.just_representations(x0_pred, timesteps=torch.zeros_like(t_true), pooled=False)
                 repr = self.transform_representations(repr)
                 logits = classifier(repr)
                 loss_renoised_classification = F.cross_entropy(logits, classes, reduction="none")
+                loss_renoised_classification = loss_renoised_classification * t_mask
                 if self.renoised_classification_threshold < 1.0:
                     indices = classes if len(classes.shape) == 1 else classes.argmax(dim=1)
                     mask = (
@@ -909,7 +915,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
                         > self.renoised_classification_threshold
                     )
                     loss_renoised_classification = loss_renoised_classification * mask
-                loss_renoised_classification = loss_renoised_classification.sum()
+                loss_renoised_classification = loss_renoised_classification.mean()
                 loss += loss_renoised_classification * self.renoised_classification_loss_scale
                 loss_dict.update({f"{prefix}/renoised_classification_loss_{suffix}": loss_renoised_classification})
             loss_dict.update({f"{prefix}/student_loss_{suffix}": loss})
@@ -925,7 +931,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
             mean_false = out_false.mean().item()
             loss_dict.update({f"disc_{prefix}/acc_true_{suffix}": acc_true})
             loss_dict.update({f"disc_{prefix}/acc_false_{suffix}": acc_false})
-            loss_dict.update({f"disc_{prefix}/acc_total_{suffix}": acc_true + acc_false / 2})
+            loss_dict.update({f"disc_{prefix}/acc_total_{suffix}": (acc_true + acc_false) / 2})
             loss_dict.update({f"disc_{prefix}/mean_logit_true_{suffix}": mean_true})
             loss_dict.update({f"disc_{prefix}/mean_logit_false_{suffix}": mean_false})
         return loss, loss_dict
