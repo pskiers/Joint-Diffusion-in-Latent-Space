@@ -36,12 +36,15 @@ model:
     # sampling_recurence_steps: 4
 
     repr_sizes: [128, 128, 128, 128, 128, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256]
-    disc_channel_div: 1
+    disc_channel_div: 2
     emb_proj: 32
     adv_loss_scale: 0.0005  
-    renoised_classification_loss_scale: 0
-    disc_input_mode: "x0_renoised"  # "x0", "x_t-1", "x0_renoised"
+    renoised_classification_loss_scale: 0.1
+    # renoised_classification_threshold: 0.75
+    disc_input_mode: "x0_no_ladd"  # "x0", "x_t-1", "x0_renoised", "x0_no_ladd", "x0_renoised_no_ladd"
     start_from_mean_weights: True
+    # disc_use_soft_labels: True
+    disc_pass_x_noisy: True
 
     old_classes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     new_classes: [10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
@@ -73,8 +76,8 @@ cl:
   std: [0.5, 0.5, 0.5]
   # saved_samples: pulled_checkpoints/cifar100_1_2_imgs.pt
   # saved_labels: pulled_checkpoints/cifar100_1_2_labels.pt
-  saved_samples: data/cl/CL_CIFAR100T10_SUP_TASK1-2_LONG3_imgs.pt
-  saved_labels: data/cl/CL_CIFAR100T10_SUP_TASK1-2_LONG3_labels.pt
+  # saved_samples: data/cl/CL_CIFAR100T10_SUP_TASK1-2_LONG3_imgs.pt
+  # saved_labels: data/cl/CL_CIFAR100T10_SUP_TASK1-2_LONG3_labels.pt
 
 dataloaders:
   validation:
@@ -136,7 +139,7 @@ dataloaders:
 lightning:
   trainer:
     benchmark: True
-    checkpoint_callback: True
+    enable_checkpointing: True
     max_steps: 104000
     # accumulate_grad_batches: 2
 

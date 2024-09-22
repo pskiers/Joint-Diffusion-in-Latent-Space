@@ -2,22 +2,23 @@
 
 ## Installing necessary libraries
 
-### A word of caution
-It is recommended highly recommended that one uses the provided installation script. Why? Well, the dependencies inherited from the other repositories are a little problematic to say the least. A **python scrip** ending prematurely with a SEGFAULT, scripts not working when the order of imports in one file is changed - these are just a few problems encountered by the author. However, if you still have not been discouraged then I wish you good luck. To be honest you might need it anyway - even if you use the script - because apparently pytorch changing its version might break it (it did once already, even though an older version of pytorch is supposed to be used). If the installing script does not work then do not hesitate to reach out to me and I will try to solve the problem as soon as possible.
-
 ### Requirements of the installation script
 Required components before you start the installation:
-* Anaconda (or Miniconda)
 * GPU drivers required to run pytorch models on GPU
+* Anaconda (or Miniconda) (recommended, but other things like `venv` should work too)
 
-Also you should also make sure that Anaconda sees all necessary drivers and libraries, because more often than not it does not and you need to add them manually. For more information see troubleshooting section down bellow.
+Make sure that Anaconda sees all necessary drivers and libraries, because more often than not it does not and you need to add them manually. For more information see troubleshooting section down bellow.
 
 ### Installation
 This project was configured in Anaconda. To create environment run:
 ```
-make_env.sh
+conda env create -f environment.yml 
+conda activate jdcl
 ```
-and pray to God it does not fail.
+or if you are using other python environment manager make sure you are using python 3.12 or newer and run:
+```
+pip install -r requirements.txt
+```
 
 ## Project structure
 Project contains 3 main folders:

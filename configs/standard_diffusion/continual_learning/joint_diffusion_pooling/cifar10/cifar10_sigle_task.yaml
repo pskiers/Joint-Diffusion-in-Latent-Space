@@ -111,7 +111,7 @@ dataloaders:
 lightning:
   trainer:
     benchmark: True
-    checkpoint_callback: True
+    enable_checkpointing: True
     max_steps: 65000
     # accumulate_grad_batches: 2
 

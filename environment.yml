@@ -1,0 +1,35 @@
+name: jdcl
+channels:
+  - defaults
+  - conda-forge
+  - pytorch
+
+dependencies:
+  - python=3.12
+  - pip
+  - numpy
+  
+  - pandas=2.2.3
+  - scikit-learn=1.5.2
+  - imageio=2.35.1
+  - omegaconf=2.3.0
+  - einops=0.8.0
+  - transformers=4.44.2
+  - kornia=0.7.3
+  
+  # PyTorch packages
+  - pytorch=2.4.1
+  - torchaudio=2.4.1
+  - torchvision=0.19.1
+
+  - pip:
+      - albumentations==1.4.15
+      - opencv-python==4.10.0.84
+      - pytorch-lightning==2.4.0
+      - torch-fidelity==0.3.0
+      - pytorch-fid==0.3.0
+      - wandb==0.18.1
+
+      - -e git+https://github.com/CompVis/taming-transformers.git@master#egg=taming-transformers
+      - -e git+https://github.com/openai/CLIP.git@main#egg=clip
+      - -e git+https://github.com/pskiers/latent-diffusion.git@main#egg=latent_diffusion&subdirectory=../../latent-diffusion

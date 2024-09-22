@@ -1,6 +1,7 @@
 from omegaconf import OmegaConf
 import argparse
 import torch
+from typing import Any
 from torchvision import transforms
 from pytorch_lightning import seed_everything
 import torch.utils.data as data
@@ -56,8 +57,8 @@ if __name__ == "__main__":
     lightning_config = config.pop("lightning", OmegaConf.create())
 
     trainer_config = lightning_config.get("trainer", OmegaConf.create())
-    trainer_config["gpus"] = 1
-    trainer_opt = argparse.Namespace(**trainer_config)
+    trainer_config["devices"] = -1
+    trainer_opt = trainer_config
     lightning_config.trainer = trainer_config
 
     dl_config_orig = config.pop("dataloaders")
@@ -115,7 +116,7 @@ if __name__ == "__main__":
     ckptdir = path.join(logdir, "checkpoints")
     cfgdir = path.join(logdir, "configs")
 
-    trainer_kwargs = dict()
+    trainer_kwargs: dict[str, Any] = dict()
     try:
         per_class = f'{dl_config["train"][0]["cl_split"]["datasets"][0]["ssl_split"]["num_labeled"]} per class'
     except Exception:
@@ -129,7 +130,9 @@ if __name__ == "__main__":
             f"learned tasks {tasks_learned}",
         ]
     )
-    trainer_kwargs["logger"] = pl.loggers.WandbLogger(name=nowname, id=nowname, tags=tags)
+    trainer_kwargs["logger"] = pl.loggers.WandbLogger(
+        name=nowname, id=nowname, tags=tags, project="Joint-Diffusion-in-Latent-Space"
+    )
 
     # modelcheckpoint - use TrainResult/EvalResult(checkpoint_on=metric) to
     # specify which metric is used to determine best models
@@ -285,8 +288,7 @@ if __name__ == "__main__":
             if old_generator != model:
                 del old_generator
 
-            trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
-            trainer.logdir = logdir
+            trainer = pl.Trainer(**trainer_opt, **trainer_kwargs)
 
             weight_reinit = cl_config.get("weight_reinit", "none")
             if weight_reinit == "none":

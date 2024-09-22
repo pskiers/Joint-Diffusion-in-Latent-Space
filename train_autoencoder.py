@@ -24,7 +24,7 @@ if __name__ == "__main__":
     lightning_config = config.pop("lightning", OmegaConf.create())
 
     trainer_config = lightning_config.get("trainer", OmegaConf.create())
-    trainer_config["gpus"] = 1
+    trainer_config["devices"] = -1
     trainer_opt = argparse.Namespace(**trainer_config)
     lightning_config.trainer = trainer_config
 
@@ -85,7 +85,6 @@ if __name__ == "__main__":
         trainer_kwargs["callbacks"].append(ImageLogger(**img_logger_cfg))
 
     trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
-    trainer.logdir = logdir
 
     trainer.fit(
         model=model,
