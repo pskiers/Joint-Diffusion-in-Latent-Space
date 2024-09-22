@@ -1,6 +1,3 @@
 [submodule "latent-diffusion"]
 	path = latent-diffusion
 	url = https://github.com/CompVis/latent-diffusion.git
-[submodule "pytorch-fid"]
-	path = pytorch-fid
-	url = https://github.com/mseitzer/pytorch-fid.git
