@@ -808,13 +808,13 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         self.manual_backward(loss)
         if (batch_idx + 1) % self.accumulate_grad_batches == 0:
             if self.phase == "student":
-                opt_disc.zero_grad()
+                opt_disc.zero_grad(set_to_none=True)
+                opt_classifier.zero_grad(set_to_none=True)
                 opt_diffusion.step()
-                opt_classifier.step()
             elif self.phase == "disc":
-                opt_diffusion.zero_grad()
                 opt_disc.step()
                 opt_classifier.step()
+                opt_diffusion.zero_grad(set_to_none=True)
             opt_diffusion.zero_grad()
             opt_classifier.zero_grad()
             opt_disc.zero_grad()
