@@ -780,6 +780,19 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
                 self.parameters(), self.old_model.parameters(), self.new_model.parameters()
             ):
                 param.data = (param_old.data + param_new.data) / 2.0
+            for param, param_old, param_new in zip(
+                self.classifier[-1].parameters(),
+                self.old_model.classifier[-1].parameters(),
+                self.new_model.classifier[-1].parameters(),
+            ):
+                param.data[: len(self.old_classes)] = param_old.data[: len(self.old_classes)]
+                param.data[len(self.old_classes) : len(self.old_classes) + len(self.new_classes)] = param_new.data[
+                    len(self.old_classes) : len(self.old_classes) + len(self.new_classes)
+                ]
+                param.data[len(self.old_classes) + len(self.new_classes) :] = param_old.data[
+                    len(self.old_classes) + len(self.new_classes) :
+                ]
+
         if self.use_ema:
             self.model_ema = LitEma(self)
             print(f"Keeping EMAs of {len(list(self.model_ema.buffers()))}.")
@@ -902,7 +915,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         if self.phase == "student":
             loss = -out_false.sum(dim=1).mean()
             if self.renoised_classification_loss_scale > 0:
-                t_mask = (t > self.renoised_classification_min_t) & (t < self.renoised_classification_max_t) 
+                t_mask = (t > self.renoised_classification_min_t) & (t < self.renoised_classification_max_t)
                 repr = unet.just_representations(x0_pred, timesteps=torch.zeros_like(t_true), pooled=False)
                 repr = self.transform_representations(repr)
                 logits = classifier(repr)
