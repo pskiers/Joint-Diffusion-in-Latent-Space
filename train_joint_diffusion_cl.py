@@ -1,6 +1,7 @@
 from omegaconf import OmegaConf
 import argparse
 import torch
+from time import time
 from typing import Any
 from torchvision import transforms
 from pytorch_lightning import seed_everything
@@ -270,6 +271,7 @@ if __name__ == "__main__":
             if new_generator is not None:
                 new_generator.to(torch.device("cuda"))
             (labeled_ds, unlabeled_ds) = datasets if len(datasets) == 2 else (datasets[0], None)
+            start_sampling_time = time()
             train_dls = reply_buff.get_data_for_task(
                 sup_ds=labeled_ds,
                 unsup_ds=unlabeled_ds,
@@ -284,6 +286,7 @@ if __name__ == "__main__":
                 saved_samples=cl_config.get("saved_samples", None),
                 saved_labels=cl_config.get("saved_labels", None),
             )
+            print(f"SAMPLING TIME: {time() - start_sampling_time} s")
             if new_generator is not None:
                 del new_generator
             if old_generator != model:
