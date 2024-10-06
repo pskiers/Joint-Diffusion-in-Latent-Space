@@ -61,12 +61,8 @@ class FIDScoreLogger(Callback):
         if (mean is not None) and (std is not None):
             self.denormalize = torchvision.transforms.Compose(
                 [
-                    torchvision.transforms.Normalize(
-                        mean=[0.0, 0.0, 0.0], std=[1 / s for s in std]
-                    ),
-                    torchvision.transforms.Normalize(
-                        mean=[-m for m in mean], std=[1.0, 1.0, 1.0]
-                    ),
+                    torchvision.transforms.Normalize(mean=[0.0, 0.0, 0.0], std=[1 / s for s in std]),
+                    torchvision.transforms.Normalize(mean=[-m for m in mean], std=[1.0, 1.0, 1.0]),
                 ]
             )
         else:
@@ -75,11 +71,7 @@ class FIDScoreLogger(Callback):
     def on_train_start(self, trainer, pl_module):
         if self.test_mu is None or self.test_sigma is None:
             real_img_dl = self.real_dl
-            img_key = (
-                pl_module.first_stage_key
-                if hasattr(pl_module, "first_stage_key")
-                else 0
-            )
+            img_key = pl_module.first_stage_key if hasattr(pl_module, "first_stage_key") else 0
 
             self.get_model_statistics(real_img_dl, img_key)
 
@@ -149,11 +141,7 @@ class FIDScoreLogger(Callback):
                 pl_module.eval()
 
             real_img_dl = self.real_dl
-            img_key = (
-                pl_module.first_stage_key
-                if hasattr(pl_module, "first_stage_key")
-                else 0
-            )
+            img_key = pl_module.first_stage_key if hasattr(pl_module, "first_stage_key") else 0
 
             m1, s1 = self.get_model_statistics(real_img_dl, img_key)
             # np.save(file="svhn_mean", arr=m1)
@@ -162,9 +150,7 @@ class FIDScoreLogger(Callback):
 
             score = calculate_frechet_distance(m1, s1, m2, s2)
 
-            logger_log_images = self.logger_log_fid.get(
-                logger, lambda *args, **kwargs: None
-            )
+            logger_log_images = self.logger_log_fid.get(logger, lambda *args, **kwargs: None)
             logger_log_images(pl_module, score)
 
             if is_train:
@@ -173,8 +159,7 @@ class FIDScoreLogger(Callback):
     def get_samples_statistics(self, samples_generator):
         pred_arr = np.empty(
             (
-                int(self.samples_amount / self.metrics_batch_size)
-                * self.metrics_batch_size,
+                int(self.samples_amount / self.metrics_batch_size) * self.metrics_batch_size,
                 self.dims,
             )
         )
@@ -185,9 +170,7 @@ class FIDScoreLogger(Callback):
             range(int(self.samples_amount / self.metrics_batch_size)),
             desc="Computing FID Score",
         ):
-            pred_arr, start_idx = self.get_samples_activations(
-                samples_generator, pred_arr, start_idx
-            )
+            pred_arr, start_idx = self.get_samples_activations(samples_generator, pred_arr, start_idx)
         mu = np.mean(pred_arr, axis=0)
         sigma = np.cov(pred_arr, rowvar=False)
         return mu, sigma
@@ -196,9 +179,7 @@ class FIDScoreLogger(Callback):
     def get_samples_activations(self, samples_generator, pred_arr, start_idx):
         with samples_generator.ema_scope("Sampling"):
             if self.cond:
-                samples_generator.sample_classes = torch.randint(
-                    0, 10, [self.metrics_batch_size]
-                ).to(self.device)
+                samples_generator.sample_classes = torch.randint(0, 10, [self.metrics_batch_size]).to(self.device)
             if self.latent:
                 samples, _ = samples_generator.sample_log(
                     cond=None,
@@ -208,9 +189,7 @@ class FIDScoreLogger(Callback):
                     eta=1,
                 )
             else:
-                samples = samples_generator.sample(
-                    batch_size=self.metrics_batch_size, return_intermediates=False
-                )
+                samples = samples_generator.sample(batch_size=self.metrics_batch_size, return_intermediates=False)
         if self.latent:
             x_samples = samples_generator.decode_first_stage(samples)
         else:
@@ -237,15 +216,11 @@ class FIDScoreLogger(Callback):
         start_idx = start_idx + np_pred.shape[0]
         return pred_arr, start_idx
 
-    def on_train_batch_end(
-        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx
-    ):
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
         if pl_module.global_step > 0:
             self.log_fid(pl_module, batch_idx, trainer)
 
-    def on_validation_batch_end(
-        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx
-    ):
+    def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
         if pl_module.global_step > 0:
             self.log_fid(pl_module, batch_idx, trainer)
 
@@ -285,12 +260,8 @@ class ImageLogger(Callback):
         if (mean is not None) and (std is not None):
             self.denormalize = torchvision.transforms.Compose(
                 [
-                    torchvision.transforms.Normalize(
-                        mean=[0.0, 0.0, 0.0], std=[1 / s for s in std]
-                    ),
-                    torchvision.transforms.Normalize(
-                        mean=[-m for m in mean], std=[1.0, 1.0, 1.0]
-                    ),
+                    torchvision.transforms.Normalize(mean=[0.0, 0.0, 0.0], std=[1 / s for s in std]),
+                    torchvision.transforms.Normalize(mean=[-m for m in mean], std=[1.0, 1.0, 1.0]),
                 ]
             )
         else:
@@ -315,9 +286,7 @@ class ImageLogger(Callback):
             grid = grid.transpose(0, 1).transpose(1, 2).squeeze(-1)
             grid = grid.numpy()
             grid = (grid * 255).astype(np.uint8)
-            filename = "{}_gs-{:06}_e-{:06}_b-{:06}.png".format(
-                k, global_step, current_epoch, batch_idx
-            )
+            filename = "{}_gs-{:06}_e-{:06}_b-{:06}.png".format(k, global_step, current_epoch, batch_idx)
             path = os.path.join(root, filename)
             os.makedirs(os.path.split(path)[0], exist_ok=True)
             Image.fromarray(grid).save(path)
@@ -337,9 +306,7 @@ class ImageLogger(Callback):
                 pl_module.eval()
 
             with torch.no_grad():
-                images = pl_module.log_images(
-                    batch, split=split, **self.log_images_kwargs
-                )
+                images = pl_module.log_images(batch, split=split, **self.log_images_kwargs)
 
             for k in images:
                 N = min(images[k].shape[0], self.max_images)
@@ -361,9 +328,7 @@ class ImageLogger(Callback):
                     batch_idx,
                 )
 
-            logger_log_images = self.logger_log_images.get(
-                logger, lambda *args, **kwargs: None
-            )
+            logger_log_images = self.logger_log_images.get(logger, lambda *args, **kwargs: None)
             logger_log_images(pl_module, images, pl_module.global_step, split)
 
             if is_train:
@@ -381,21 +346,15 @@ class ImageLogger(Callback):
             return True
         return False
 
-    def on_train_batch_end(
-        self, trainer, pl_module, outputs, batch, batch_idx
-    ):
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         if not self.disabled and (pl_module.global_step > 0 or self.log_first_step):
             self.log_img(pl_module, batch, batch_idx, split="train")
 
-    def on_validation_batch_end(
-        self, trainer, pl_module, outputs, batch, batch_idx
-    ):
+    def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         if not self.disabled and pl_module.global_step > 0:
             self.log_img(pl_module, batch, batch_idx, split="val")
         if hasattr(pl_module, "calibrate_grad_norm"):
-            if (
-                pl_module.calibrate_grad_norm and batch_idx % 25 == 0
-            ) and batch_idx > 0:
+            if (pl_module.calibrate_grad_norm and batch_idx % 25 == 0) and batch_idx > 0:
                 self.log_gradients(trainer, pl_module, batch_idx=batch_idx)
 
 
@@ -415,16 +374,13 @@ class PerTaskImageLogger(ImageLogger):
                 pl_module.eval()
 
             with torch.no_grad():
-                images = pl_module.log_images(
-                    batch, split=split, **self.log_images_kwargs
-                )
+                images = pl_module.log_images(batch, split=split, **self.log_images_kwargs)
                 samples = images["samples_grad_scale=0"]
                 unet: AdjustedUNet = pl_module.model.diffusion_model
                 emb = unet.get_timestep_embedding(samples, torch.zeros(len(samples), device=samples.device), None)
                 representations = unet.forward_input_blocks(samples, None, emb)
                 pooled_representations = pl_module.transform_representations(representations)
                 classes = pl_module.classifier(pooled_representations).argmax(dim=-1)
-
 
             for k in images:
                 N = min(images[k].shape[0], self.max_images)
@@ -437,7 +393,9 @@ class PerTaskImageLogger(ImageLogger):
                         images[k] = torch.clamp(images[k], -1.0, 1.0)
             if hasattr(pl_module, "classes_per_task"):
                 for i in range(len(pl_module.old_classes) // pl_module.classes_per_task):
-                    task_classes = pl_module.old_classes[i * pl_module.classes_per_task : (i + 1) * pl_module.classes_per_task]
+                    task_classes = pl_module.old_classes[
+                        i * pl_module.classes_per_task : (i + 1) * pl_module.classes_per_task
+                    ]
                     task_mask = torch.any(classes.unsqueeze(-1) == task_classes.to(pl_module.device), dim=-1)
                     if task_mask.sum() == 0:
                         continue
@@ -464,9 +422,7 @@ class PerTaskImageLogger(ImageLogger):
                     batch_idx,
                 )
 
-            logger_log_images = self.logger_log_images.get(
-                logger, lambda *args, **kwargs: None
-            )
+            logger_log_images = self.logger_log_images.get(logger, lambda *args, **kwargs: None)
             logger_log_images(pl_module, images, pl_module.global_step, split)
 
             if is_train:
@@ -527,10 +483,7 @@ class SetupCallback(Callback):
             os.makedirs(self.cfgdir, exist_ok=True)
 
             if "callbacks" in self.lightning_config:
-                if (
-                    "metrics_over_trainsteps_checkpoint"
-                    in self.lightning_config["callbacks"]
-                ):
+                if "metrics_over_trainsteps_checkpoint" in self.lightning_config["callbacks"]:
                     os.makedirs(
                         os.path.join(self.ckptdir, "trainstep_checkpoints"),
                         exist_ok=True,
