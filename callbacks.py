@@ -17,6 +17,7 @@ import wandb
 from pytorch_fid.inception import InceptionV3
 from pytorch_fid.fid_score import calculate_frechet_distance, adaptive_avg_pool2d
 from tqdm import tqdm
+from models.adjusted_unet import AdjustedUNet
 
 
 class FIDScoreLogger(Callback):
@@ -396,6 +397,80 @@ class ImageLogger(Callback):
                 pl_module.calibrate_grad_norm and batch_idx % 25 == 0
             ) and batch_idx > 0:
                 self.log_gradients(trainer, pl_module, batch_idx=batch_idx)
+
+
+class PerTaskImageLogger(ImageLogger):
+    def log_img(self, pl_module, batch, batch_idx, split="train"):
+        check_idx = batch_idx if self.log_on_batch_idx else pl_module.global_step
+        if (
+            self.check_frequency(check_idx)
+            and hasattr(pl_module, "log_images")  # batch_idx % self.batch_freq == 0
+            and callable(pl_module.log_images)
+            and self.max_images > 0
+        ):
+            logger = type(pl_module.logger)
+
+            is_train = pl_module.training
+            if is_train:
+                pl_module.eval()
+
+            with torch.no_grad():
+                images = pl_module.log_images(
+                    batch, split=split, **self.log_images_kwargs
+                )
+                samples = images["samples_grad_scale=0"]
+                unet: AdjustedUNet = pl_module.model.diffusion_model
+                emb = unet.get_timestep_embedding(samples, torch.zeros(len(samples), device=samples.device), None)
+                representations = unet.forward_input_blocks(samples, None, emb)
+                pooled_representations = pl_module.transform_representations(representations)
+                classes = pl_module.classifier(pooled_representations).argmax(dim=-1)
+
+
+            for k in images:
+                N = min(images[k].shape[0], self.max_images)
+                images[k] = images[k][:N]
+                if isinstance(images[k], torch.Tensor):
+                    if self.denormalize is not None:
+                        images[k] = self.denormalize(images[k])
+                    images[k] = images[k].detach().cpu()
+                    if self.clamp:
+                        images[k] = torch.clamp(images[k], -1.0, 1.0)
+            if hasattr(pl_module, "classes_per_task"):
+                for i in range(len(pl_module.old_classes) // pl_module.classes_per_task):
+                    task_classes = pl_module.old_classes[i * pl_module.classes_per_task : (i + 1) * pl_module.classes_per_task]
+                    task_mask = torch.any(classes.unsqueeze(-1) == task_classes.to(pl_module.device), dim=-1)
+                    if task_mask.sum() == 0:
+                        continue
+                    task_imgs = samples[task_mask]
+                    if self.denormalize is not None:
+                        task_imgs = self.denormalize(task_imgs)
+                    task_imgs = task_imgs.detach().cpu()
+                    images[f"task{i}"] = task_imgs
+                i += 1
+                task_mask = torch.any(classes.unsqueeze(-1) == pl_module.new_classes.to(pl_module.device), dim=-1)
+                if task_mask.sum() > 0:
+                    if self.denormalize is not None:
+                        task_imgs = self.denormalize(task_imgs)
+                    task_imgs = task_imgs.detach().cpu()
+                    images[f"task{i}"] = task_imgs
+
+            if self.log_locally:
+                self.log_local(
+                    pl_module.logger.save_dir,
+                    split,
+                    images,
+                    pl_module.global_step,
+                    pl_module.current_epoch,
+                    batch_idx,
+                )
+
+            logger_log_images = self.logger_log_images.get(
+                logger, lambda *args, **kwargs: None
+            )
+            logger_log_images(pl_module, images, pl_module.global_step, split)
+
+            if is_train:
+                pl_module.train()
 
 
 class CUDACallback(Callback):

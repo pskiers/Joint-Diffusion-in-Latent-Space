@@ -17,6 +17,7 @@ from callbacks import (
     SetupCallback,
     FIDScoreLogger,
     CheckpointEveryNSteps,
+    PerTaskImageLogger,
 )
 from cl_methods.generative_replay import get_replay
 
@@ -167,7 +168,7 @@ if __name__ == "__main__":
         CheckpointEveryNSteps(10000, prefix="ckpt_"),
     ]
     if (img_logger_cfg := callback_cfg.get("img_logger", None)) is not None:
-        trainer_kwargs["callbacks"].append(ImageLogger(**img_logger_cfg))
+        trainer_kwargs["callbacks"].append(PerTaskImageLogger(**img_logger_cfg))
 
     if (fid_cfg := callback_cfg.get("fid_logger", None)) is not None:
         fid_cfg = dict(fid_cfg)
