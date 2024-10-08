@@ -742,6 +742,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         accumulate_grad_batches: int = 1,
         use_old_and_new: bool = True,
         disc_pass_x_noisy: bool = False,
+        grad_clip_val: float = 0.5,
         *args,
         **kwargs,
     ) -> None:
@@ -764,6 +765,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         self.disc_lr = disc_lr
         self.classifier_lr = classifier_lr
         self.automatic_optimization = False
+        self.grad_clip_val = grad_clip_val
         self.phase = "student"
         assert disc_input_mode in ["x0", "x_t-1", "x0_renoised", "x0_no_ladd", "x0_renoised_no_ladd"]
         self.disc_input_mode = disc_input_mode
@@ -819,6 +821,7 @@ class JointDiffusionAdversarialKnowledgeDistillation(JointDiffusionKnowledgeDist
         self.phase = "student" if (batch_idx // self.accumulate_grad_batches) % 2 == 0 else "disc"
         loss = super().training_step(batch, batch_idx)
         self.manual_backward(loss)
+        torch.nn.utils.clip_grad_norm_(self.parameters(), self.grad_clip_val)
         if (batch_idx + 1) % self.accumulate_grad_batches == 0:
             if self.phase == "student":
                 opt_disc.zero_grad(set_to_none=True)
