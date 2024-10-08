@@ -382,15 +382,6 @@ class PerTaskImageLogger(ImageLogger):
                 pooled_representations = pl_module.transform_representations(representations)
                 classes = pl_module.classifier(pooled_representations).argmax(dim=-1)
 
-            for k in images:
-                N = min(images[k].shape[0], self.max_images)
-                images[k] = images[k][:N]
-                if isinstance(images[k], torch.Tensor):
-                    if self.denormalize is not None:
-                        images[k] = self.denormalize(images[k])
-                    images[k] = images[k].detach().cpu()
-                    if self.clamp:
-                        images[k] = torch.clamp(images[k], -1.0, 1.0)
             if hasattr(pl_module, "classes_per_task"):
                 for i in range(len(pl_module.old_classes) // pl_module.classes_per_task):
                     task_classes = pl_module.old_classes[
@@ -400,17 +391,21 @@ class PerTaskImageLogger(ImageLogger):
                     if task_mask.sum() == 0:
                         continue
                     task_imgs = samples[task_mask]
-                    if self.denormalize is not None:
-                        task_imgs = self.denormalize(task_imgs)
-                    task_imgs = task_imgs.detach().cpu()
                     images[f"task{i}"] = task_imgs
                 i += 1
                 task_mask = torch.any(classes.unsqueeze(-1) == pl_module.new_classes.to(pl_module.device), dim=-1)
                 if task_mask.sum() > 0:
-                    if self.denormalize is not None:
-                        task_imgs = self.denormalize(task_imgs)
-                    task_imgs = task_imgs.detach().cpu()
+                    task_imgs = samples[task_mask]
                     images[f"task{i}"] = task_imgs
+            for k in images:
+                N = min(images[k].shape[0], self.max_images)
+                images[k] = images[k][:N]
+                if isinstance(images[k], torch.Tensor):
+                    if self.denormalize is not None:
+                        images[k] = self.denormalize(images[k])
+                    images[k] = images[k].detach().cpu()
+                    if self.clamp:
+                        images[k] = torch.clamp(images[k], -1.0, 1.0)
 
             if self.log_locally:
                 self.log_local(
