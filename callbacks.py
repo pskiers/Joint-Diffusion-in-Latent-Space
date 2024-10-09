@@ -350,13 +350,6 @@ class ImageLogger(Callback):
         if not self.disabled and (pl_module.global_step > 0 or self.log_first_step):
             self.log_img(pl_module, batch, batch_idx, split="train")
 
-    def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
-        if not self.disabled and pl_module.global_step > 0:
-            self.log_img(pl_module, batch, batch_idx, split="val")
-        if hasattr(pl_module, "calibrate_grad_norm"):
-            if (pl_module.calibrate_grad_norm and batch_idx % 25 == 0) and batch_idx > 0:
-                self.log_gradients(trainer, pl_module, batch_idx=batch_idx)
-
 
 class PerTaskImageLogger(ImageLogger):
     def log_img(self, pl_module, batch, batch_idx, split="train"):
@@ -539,11 +532,11 @@ class CheckpointEveryNSteps(pl.Callback):
         self.prefix = prefix
         self.use_modelcheckpoint_filename = use_modelcheckpoint_filename
 
-    def on_batch_end(self, trainer: pl.Trainer, _):
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         """Check if we should save a checkpoint after every train batch"""
         epoch = trainer.current_epoch
         global_step = trainer.global_step
-        if global_step % self.save_step_frequency == 0:
+        if global_step % self.save_step_frequency == 0 and global_step > 0:
             if self.use_modelcheckpoint_filename:
                 filename = trainer.checkpoint_callback.filename
             else:
