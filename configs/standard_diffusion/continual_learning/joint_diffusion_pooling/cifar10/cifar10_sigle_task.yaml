@@ -112,7 +112,7 @@ lightning:
   trainer:
     benchmark: True
     enable_checkpointing: True
-    max_steps: 65000
+    max_steps: 50000
     # accumulate_grad_batches: 2
 
   callbacks:
@@ -127,7 +127,7 @@ lightning:
 
     img_logger:
       batch_frequency: 10000
-      max_images: 64
+      max_images: 256
       clamp: True
       increase_log_steps: False
       log_images_kwargs: {

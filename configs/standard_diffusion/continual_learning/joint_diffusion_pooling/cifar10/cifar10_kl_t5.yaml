@@ -118,7 +118,7 @@ lightning:
   trainer:
     benchmark: True
     enable_checkpointing: True
-    max_steps: 35000
+    max_steps: 30000
     # accumulate_grad_batches: 2
 
   callbacks:
