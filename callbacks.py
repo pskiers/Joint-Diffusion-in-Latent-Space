@@ -543,3 +543,7 @@ class CheckpointEveryNSteps(pl.Callback):
                 filename = f"{self.prefix}_{epoch=}_{global_step=}.ckpt"
             ckpt_path = os.path.join(trainer.checkpoint_callback.dirpath, filename)
             trainer.save_checkpoint(ckpt_path)
+
+    def on_train_end(self, trainer, pl_module):
+        ckpt_path = os.path.join(trainer.checkpoint_callback.dirpath, "last.ckpt")
+        trainer.save_checkpoint(ckpt_path)

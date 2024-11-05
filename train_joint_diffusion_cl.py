@@ -143,8 +143,10 @@ if __name__ == "__main__":
             "dirpath": ckptdir,
             "filename": "{epoch:06}",
             "verbose": True,
-            "save_last": True,
+            "save_last": False,
             "mode": "max",
+            "save_top_k": 0,
+            "every_n_train_steps": 100000000
         }
     }
     if hasattr(model, "monitor"):
@@ -165,17 +167,17 @@ if __name__ == "__main__":
             lightning_config=lightning_config,
             dl_config=dl_config_orig,
         ),
-        CUDACallback(),
-        CheckpointEveryNSteps(10000, prefix="ckpt_"),
+        # CUDACallback(),
+        CheckpointEveryNSteps(100000000, prefix="ckpt_"),
     ]
-    if (img_logger_cfg := callback_cfg.get("img_logger", None)) is not None:
-        trainer_kwargs["callbacks"].append(PerTaskImageLogger(**img_logger_cfg))
+    # if (img_logger_cfg := callback_cfg.get("img_logger", None)) is not None:
+    #     trainer_kwargs["callbacks"].append(PerTaskImageLogger(**img_logger_cfg))
 
-    if (fid_cfg := callback_cfg.get("fid_logger", None)) is not None:
-        fid_cfg = dict(fid_cfg)
-        fid_cfg["real_dl"] = test_dl
-        fid_cfg["device"] = torch.device("cuda")
-        trainer_kwargs["callbacks"].append(FIDScoreLogger(**fid_cfg))
+    # if (fid_cfg := callback_cfg.get("fid_logger", None)) is not None:
+    #     fid_cfg = dict(fid_cfg)
+    #     fid_cfg["real_dl"] = test_dl
+    #     fid_cfg["device"] = torch.device("cuda")
+    #     trainer_kwargs["callbacks"].append(FIDScoreLogger(**fid_cfg))
 
     def get_generator(generator):
         def generate_samples(batch, labels):
