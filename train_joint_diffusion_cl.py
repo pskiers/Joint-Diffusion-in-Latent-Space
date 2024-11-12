@@ -267,9 +267,9 @@ if __name__ == "__main__":
     for i, (datasets, task) in enumerate(zip(tasks_datasets, tasks)):
         if i == current_task:
             if old_generator is not None:
-                old_generator.to(torch.device("cuda"))
+                old_generator.to(dtype=torch.bfloat16).to(torch.device("cuda"))
             if new_generator is not None:
-                new_generator.to(torch.device("cuda"))
+                new_generator.to(dtype=torch.bfloat16).to(torch.device("cuda"))
             (labeled_ds, unlabeled_ds) = datasets if len(datasets) == 2 else (datasets[0], None)
             start_sampling_time = time()
             train_dls = reply_buff.get_data_for_task(
@@ -313,7 +313,7 @@ if __name__ == "__main__":
                 model.classifier[-1].weight.register_hook(zero_grad_old_tasks)
                 model.classifier[-1].bias.register_hook(zero_grad_old_tasks)
             trainer.fit(
-                model,
+                model.to(dtype=torch.bfloat16),
                 train_dataloaders=train_dls,
                 val_dataloaders=test_dl,
             )

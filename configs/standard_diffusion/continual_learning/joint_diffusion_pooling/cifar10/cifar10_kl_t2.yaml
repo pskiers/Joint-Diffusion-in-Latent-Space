@@ -31,6 +31,7 @@ model:
     unet_config:
       target: models.AdjustedUNet
       params:
+        use_fp16: True
         image_size: 32
         in_channels: 3
         out_channels: 3
@@ -53,8 +54,8 @@ cl:
   weight_reinit: "unused classes"
   mean: [0.5, 0.5, 0.5]
   std: [0.5, 0.5, 0.5]
-  # saved_samples: data/cl/JointDiffusionKnowledgeDistillation_2024-05-05T04-35-04_imgs.pt
-  # saved_labels: data/cl/JointDiffusionKnowledgeDistillation_2024-05-05T04-35-04_labels.pt
+#  saved_samples: data/cl/CL_CIFAR10_SUP_TASK1-2_TIME_bs_128_imgs.pt
+#  saved_labels: data/cl/CL_CIFAR10_SUP_TASK1-2_TIME_bs_128_labels.pt
 
 
 dataloaders:
@@ -63,7 +64,7 @@ dataloaders:
       root: "data"
       split: "test"
       download: True
-      batch_size: 256
+      batch_size: 192
       num_workers: 16
       sampler: "none"
       shuffle: False
@@ -81,7 +82,7 @@ dataloaders:
               root: "data"
               split: "train"
               download: True
-              batch_size: 256
+              batch_size: 192
               num_workers: 16
               sampler: "none"
               shuffle: True
@@ -116,6 +117,7 @@ dataloaders:
 
 lightning:
   trainer:
+    precision: "bf16-true"
     benchmark: True
     enable_checkpointing: True
     max_steps: 30000
@@ -132,7 +134,7 @@ lightning:
     #   std: [0.2471, 0.2435, 0.2616]
 
     img_logger:
-      batch_frequency: 10000
+      batch_frequency: 10000000
       max_images: 512
       clamp: True
       increase_log_steps: False

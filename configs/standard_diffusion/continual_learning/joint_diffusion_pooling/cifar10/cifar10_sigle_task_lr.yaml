@@ -26,6 +26,7 @@ model:
     unet_config:
       target: models.AdjustedUNet
       params:
+        use_fp16: True
         image_size: 32
         in_channels: 3
         out_channels: 3
@@ -39,6 +40,8 @@ model:
         pool_size: 10000
 
 cl:
+  # reszta configa
+  use_ema: False
   reply_type: "one_supervised_task"
   grad_scale: 0
   # ddim_steps: 250
@@ -57,7 +60,7 @@ dataloaders:
       root: "data"
       split: "test"
       download: True
-      batch_size: 256
+      batch_size: 192
       num_workers: 16
       sampler: "none"
       shuffle: False
@@ -75,7 +78,7 @@ dataloaders:
               root: "data"
               split: "train"
               download: True
-              batch_size: 256
+              batch_size: 192
               num_workers: 16
               sampler: "none"
               shuffle: True
@@ -126,7 +129,7 @@ lightning:
     #   std: [0.2471, 0.2435, 0.2616]
 
     img_logger:
-      batch_frequency: 10000
+      batch_frequency: 1000000
       max_images: 256
       clamp: True
       increase_log_steps: False

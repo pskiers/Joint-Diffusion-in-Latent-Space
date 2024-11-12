@@ -13,7 +13,7 @@ model:
     channels: 3
     monitor: val/accuracy_ema
     classification_loss_scale: 0.001
-    classifier_in_features: 3712
+    classifier_in_features: 2784
     classifier_hidden: 1024
     num_classes: 10
     dropout: 0.1
@@ -29,7 +29,7 @@ model:
         image_size: 32
         in_channels: 3
         out_channels: 3
-        model_channels: 128
+        model_channels: 96
         attention_resolutions: [ 2, 4 ]
         num_res_blocks: 3
         channel_mult: [ 1, 2, 2, 2 ]
