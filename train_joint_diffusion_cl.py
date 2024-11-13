@@ -271,6 +271,10 @@ if __name__ == "__main__":
             if new_generator is not None:
                 new_generator.to(dtype=torch.bfloat16).to(torch.device("cuda"))
             (labeled_ds, unlabeled_ds) = datasets if len(datasets) == 2 else (datasets[0], None)
+            old_generator.to(dtype=torch.float32)
+            old_generator.model.diffusion_model.dtype = torch.float32
+            new_generator.to(dtype=torch.float32)
+            new_generator.model.diffusion_model.dtype = torch.float32
             start_sampling_time = time()
             train_dls = reply_buff.get_data_for_task(
                 sup_ds=labeled_ds,
@@ -286,6 +290,10 @@ if __name__ == "__main__":
                 saved_samples=cl_config.get("saved_samples", None),
                 saved_labels=cl_config.get("saved_labels", None),
             )
+            old_generator.to(dtype=torch.bfloat16)
+            old_generator.model.diffusion_model.dtype = torch.bfloat16
+            new_generator.to(dtype=torch.bfloat16)
+            new_generator.model.diffusion_model.dtype = torch.bfloat16
             print(f"SAMPLING TIME: {time() - start_sampling_time} s")
             if new_generator is not None:
                 del new_generator

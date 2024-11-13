@@ -136,7 +136,7 @@ class AdjustedUNet(UNetModel):
         assert (y is not None) == (
             self.num_classes is not None
         ), "must specify y if and only if the model is class-conditional"
-        t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False).to(dtype=th.bfloat16)
+        t_emb = timestep_embedding(timesteps, self.model_channels, repeat_only=False).to(dtype=self.dtype)
         emb = self.time_embed(t_emb)
 
         if self.num_classes is not None:
