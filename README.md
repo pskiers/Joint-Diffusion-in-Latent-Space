@@ -58,6 +58,10 @@ bash cifar100_10t_5%.sh
 ```
 bash cifar100_10t_08%.sh
 ```
+* ImageNet 5 tasks 
+```
+bash imagenet100.sh
+```
 
 ### Training part of JDCL from scratch
 It is recommended to have a wandb account created. If you do not then it is recommended to create one. To train a model run:

@@ -118,7 +118,7 @@ lightning:
   trainer:
     benchmark: True
     enable_checkpointing: True
-    max_steps: 100000
+    max_steps: 90000
     strategy: "ddp"
     check_val_every_n_epoch: 5
 
