@@ -9,12 +9,12 @@ model:
     log_every_t: 200
     timesteps: 1000
     first_stage_key: 0
-    image_size: 32
+    image_size: 64
     channels: 3
     monitor: val/accuracy_ema
     classification_loss_scale: 0.001
-    classifier_in_features: 3712
-    classifier_hidden: 1024
+    classifier_in_features: 5568
+    classifier_hidden: 2048
     num_classes: 100
     dropout: 0.1
     classification_start: 0
@@ -29,11 +29,12 @@ model:
         image_size: 64
         in_channels: 3
         out_channels: 3
-        model_channels: 128
-        attention_resolutions: [ 2, 4 ]
+        model_channels: 192
+        attention_resolutions: [ 32, 16, 8 ]
         num_res_blocks: 3
         channel_mult: [ 1, 2, 2, 2 ]
-        num_heads: 4
+        # num_heads: 4
+        num_head_channels: 64
         dropout: 0.1
         use_scale_shift_norm: True
         pool_size: 10000
@@ -58,15 +59,10 @@ dataloaders:
       split: "test"
       download: True
       batch_size: 64
-      num_workers: 16
+      num_workers: 64
       sampler: "none"
       shuffle: False
       transforms:
-        - Resize:
-            size: [76, 76]
-        - CenterCrop:
-            size: [64, 64]
-        - ToTensor:
         - Normalize:
             mean: [0.5, 0.5, 0.5]
             std: [0.5, 0.5, 0.5]
@@ -80,16 +76,13 @@ dataloaders:
               split: "train"
               download: True
               batch_size: 64
-              num_workers: 16
-              sampler: "none"
+              num_workers: 64
+              sampler: "random"
               shuffle: True
               transforms:
                 - ParallelTransforms:
                   -
-                    - Resize:
-                        size: [76, 76]
-                    - CenterCrop:
-                        size: [64, 64]
+                    - ToPILImage:
                     - RandomHorizontalFlip:
                     - RandomResizedCrop:
                         size: 64
@@ -100,10 +93,7 @@ dataloaders:
                         mean: [0.5, 0.5, 0.5]
                         std: [0.5, 0.5, 0.5]
                   -
-                    - Resize:
-                        size: [76, 76]
-                    - CenterCrop:
-                        size: [64, 64]
+                    - ToPILImage:
                     - RandomHorizontalFlip:
                     - RandomCrop:
                         size: 64
@@ -122,8 +112,9 @@ lightning:
   trainer:
     benchmark: True
     enable_checkpointing: True
-    max_steps: 103000
-    accumulate_grad_batches: 4
+    max_steps: 100000
+    strategy: "ddp"
+    check_val_every_n_epoch: 5
 
   callbacks:
     # fid_logger:
@@ -137,11 +128,11 @@ lightning:
 
     img_logger:
       batch_frequency: 10000
-      max_images: 64
+      max_images: 512
       clamp: True
       increase_log_steps: False
       log_images_kwargs: {
-          "N": 64,
+          "N": 512,
           "inpaint": False,
           "sample_classes": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
           "use_ema": False,
