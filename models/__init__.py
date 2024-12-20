@@ -1,4 +1,5 @@
 from .adjusted_unet import AdjustedUNet
+from .dummy_net import TwoLayerNet
 from .representation_transformer import RepresentationTransformer
 from .ddim import DDIMSamplerGradGuided
 from .baselines import *

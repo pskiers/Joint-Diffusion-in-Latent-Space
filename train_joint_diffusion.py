@@ -30,7 +30,7 @@ if __name__ == "__main__":
 
     trainer_config = lightning_config.get("trainer", OmegaConf.create())
     trainer_config["devices"] = -1
-    trainer_opt = argparse.Namespace(**trainer_config)
+    trainer_opt = trainer_config
     lightning_config.trainer = trainer_config
 
     dl_config_orig = config.pop("dataloaders")
@@ -66,7 +66,7 @@ if __name__ == "__main__":
         config.model.get("model_type"),
     ]
     trainer_kwargs["logger"] = pl.loggers.WandbLogger(
-        name=nowname, id=nowname, tags=tags
+        name=nowname, id=nowname, tags=tags, project="Joint-Diffusion-in-Latent-Space"
     )
 
     # modelcheckpoint - use TrainResult/EvalResult(checkpoint_on=metric) to
@@ -99,10 +99,10 @@ if __name__ == "__main__":
         ),
         CUDACallback(),
     ]
-    if (img_logger_cfg := callback_cfg.get("img_logger", None)) is not None:
+    if callback_cfg is not None and (img_logger_cfg := callback_cfg.get("img_logger", None)) is not None:
         trainer_kwargs["callbacks"].append(ImageLogger(**img_logger_cfg))
 
-    if (fid_cfg := callback_cfg.get("fid_logger", None)) is not None:
+    if callback_cfg is not None and (fid_cfg := callback_cfg.get("fid_logger", None)) is not None:
         fid_cfg = dict(fid_cfg)
         fid_cfg["real_dl"] = (
             train_dls[1] if type(train_dls) in (tuple, list) else train_dls
@@ -110,7 +110,7 @@ if __name__ == "__main__":
         fid_cfg["device"] = torch.device("cuda")
         trainer_kwargs["callbacks"].append(FIDScoreLogger(**fid_cfg))
 
-    trainer = pl.Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
+    trainer = pl.Trainer(**trainer_opt, **trainer_kwargs)
 
     trainer.fit(
         model,

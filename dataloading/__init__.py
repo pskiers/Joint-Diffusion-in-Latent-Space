@@ -142,7 +142,8 @@ def get_dataloaders(
         download=val.pop("download", True),
         **kwargs
     )
-    val_transforms = get_transform(val["transforms"])
+    if (val_transforms := val.get("transforms")) is not None:
+        val_transforms = get_transform(val_transforms)
     val_ds.set_transforms(val_transforms)
     val_dataloader = make_dataloader(
         dataset=val_ds,
@@ -159,7 +160,8 @@ def get_dataloaders(
 
 
 def _get_dataset(kwargs):
-    ds_transforms = get_transform(kwargs.pop("transforms"))
+    if (ds_transforms := kwargs.pop("transforms", None)) is not None:
+        ds_transforms = get_transform(ds_transforms) 
     ds = get_dataset_cls(kwargs.get("name"))(
         root=kwargs.pop("root", "data"),
         split=str_to_split(kwargs.pop("split", Split.TRAIN)),

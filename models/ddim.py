@@ -4,7 +4,7 @@ from ldm.modules.diffusionmodules.util import noise_like
 
 
 class DDIMSamplerGradGuided(DDIMSampler):
-    @torch.no_grad()
+    # @torch.no_grad()
     def p_sample_ddim(
         self,
         x,

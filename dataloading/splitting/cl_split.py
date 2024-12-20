@@ -20,7 +20,7 @@ def cl_dataset_split(
         task_datasets: List[BaseDataset] = []
         for dataset in datasets:
             task_ds = deepcopy(dataset)
-            indices = get_cl_indices(task_ds.get_targets(), task)
+            indices = get_cl_indices(task_ds.get_targets(), task)[:10] * 400
             task_ds.set_data(task_ds.get_data()[indices])
             task_ds.set_targets(task_ds.get_targets()[indices])
             task_datasets.append(task_ds)

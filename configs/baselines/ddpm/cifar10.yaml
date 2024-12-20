@@ -28,10 +28,14 @@ model:
         use_scale_shift_norm: True
 
 cl:
-  grad_scale: 15
+  reply_type: "unconditional_replay_and_new_dataset"
+  grad_scale: 0
+  ddim_steps: 250
   samples_per_class: 5000
-  sampling_method: "conditional_to_x"
+  sampling_method: "unconditional"
   weight_reinit: "none"
+  mean: [0.5, 0.5, 0.5]
+  std: [0.5, 0.5, 0.5]
 
 dataloaders:
   validation:  

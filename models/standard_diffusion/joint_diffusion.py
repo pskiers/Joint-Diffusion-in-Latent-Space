@@ -414,15 +414,27 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
                 return {key: log[key] for key in return_keys}
         return log
 
-    @torch.no_grad()
+    # @torch.no_grad()
     def p_sample_loop(self, shape, return_intermediates=False, x_start=None, t_start=None):
         device = self.betas.device
         b = shape[0]
-        img = torch.randn(shape, device=device) if x_start is None else x_start.clone().to(device)
+        self.lyapunov_stuff = []
+        img = torch.randn(shape, device=device, requires_grad=True) if x_start is None else x_start.clone().to(device)
+        # img = torch.randn(shape, device=device) if x_start is None else x_start.clone().to(device)
         num_timesteps = self.num_timesteps if t_start is None else t_start
-        intermediates = [img]
+        intermediates = [img.detach()]
         for i in tqdm(reversed(range(0, num_timesteps)), desc="Sampling t", total=num_timesteps):
             t = torch.full((b,), i, device=device, dtype=torch.long)
+            if i % 1 == 0:
+                with torch.no_grad():
+                    def single_forward(x_):
+                        return self.p_sample(x_, t, clip_denoised=self.clip_denoised)
+
+                    jacobian = torch.autograd.functional.jacobian(single_forward, img)
+                    # jacobian = torch.func.jacrev(single_forward)(img)  # Jacobian as a matrix
+                    det = torch.det(jacobian.reshape(2, 2)) 
+                    # det = torch.log(torch.linalg.matrix_norm(jacobian.reshape(3*32*32, 3*32*32), ord=2))
+                self.lyapunov_stuff.append(det.detach())
             for _ in range(self.sampling_recurence_steps - 1):
                 z_t_minus_1 = self.p_sample(
                     img,
@@ -442,13 +454,32 @@ class JointDiffusion(JointDiffusionNoisyClassifier):
                 t,
                 clip_denoised=self.clip_denoised,
             )
+            # lyap_img = img * 128
+            # lyap_img.retain_grad()
+            # img_2 = self.p_sample(
+            #     lyap_img / 128,
+            #     t,
+            #     clip_denoised=self.clip_denoised,
+            # )
+            # torch.sum(img_2 * 128).backward()
+            # self.lyapunov_stuff.append(torch.log(torch.sqrt(torch.sum(lyap_img.grad**2, dim=(1, 2, 3)))).detach())
+
+            # v = torch.randn_like(img_2)
+            # vjp = torch.autograd.grad(
+            #     outputs=img_2,
+            #     inputs=img,
+            #     grad_outputs=v,
+            #     create_graph=True,
+            # )[0]
+            # self.lyapunov_stuff.append(torch.log(torch.sqrt(torch.sum(vjp**2, dim=(1, 2, 3)))).detach())
+            img = img.detach().requires_grad_(True)
             if i % self.log_every_t == 0 or i == self.num_timesteps - 1:
                 intermediates.append(img)
         if return_intermediates:
             return img, intermediates
         return img
 
-    @torch.no_grad()
+    # @torch.no_grad()
     def sample(self, batch_size=16, return_intermediates=False, x_start=None, t_start=None):
         image_size = self.image_size
         channels = self.channels

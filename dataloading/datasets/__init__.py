@@ -7,6 +7,7 @@ from .stl10 import STL10Dataset
 from .svhn import SVHNDataset
 from .isic2019 import ISIC2019Dataset
 from .imagenet100 import Imagenet100
+from .distributions import NormalDistribution, SomePointsDistribution
 
 
 def str_to_split(string: str) -> Split:
@@ -37,5 +38,9 @@ def get_dataset_cls(name: str):
         return ISIC2019Dataset
     elif name == "imagenet100":
         return Imagenet100
+    elif name == "normal_distribution":
+        return NormalDistribution
+    elif name == "some_points":
+        return SomePointsDistribution
     else:
         raise ValueError("Dataset not implemented")
